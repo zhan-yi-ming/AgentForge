@@ -29,6 +29,11 @@ class UserRepositoryAdapter implements UserRepository {
     }
 
     @Override
+    public Optional<User> findByEmail(String email) {
+        return repository.findByEmail(email);
+    }
+
+    @Override
     public boolean existsByEmail(String email) {
         return repository.existsByEmail(email);
     }
@@ -37,4 +42,6 @@ class UserRepositoryAdapter implements UserRepository {
 interface SpringDataUserRepository extends JpaRepository<User, UUID> {
 
     boolean existsByEmail(String email);
+
+    Optional<User> findByEmail(String email);
 }

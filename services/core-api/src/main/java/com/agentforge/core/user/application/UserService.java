@@ -12,11 +12,13 @@ import org.springframework.transaction.annotation.Transactional;
 import com.agentforge.core.shared.error.ConflictException;
 import com.agentforge.core.shared.error.ResourceNotFoundException;
 import com.agentforge.core.user.UserDirectory;
+import com.agentforge.core.user.UserAccount;
+import com.agentforge.core.user.UserAccountDirectory;
 import com.agentforge.core.user.domain.User;
 import com.agentforge.core.user.domain.UserRepository;
 
 @Service
-public class UserService implements UserDirectory {
+public class UserService implements UserDirectory, UserAccountDirectory {
 
     private final UserRepository userRepository;
     private final Clock clock;
@@ -27,7 +29,8 @@ public class UserService implements UserDirectory {
     }
 
     @Transactional
-    public UserView createUser(String email, String displayName) {
+    @Override
+    public UserAccount register(String email, String displayName, String passwordHash) {
         String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
         String normalizedDisplayName = displayName.trim();
 
@@ -35,9 +38,13 @@ public class UserService implements UserDirectory {
             throw new ConflictException("A user with this email already exists.");
         }
 
-        User user = User.create(normalizedEmail, normalizedDisplayName, Instant.now(clock));
+        User user = User.register(
+                normalizedEmail,
+                normalizedDisplayName,
+                passwordHash,
+                Instant.now(clock));
         try {
-            return UserView.from(userRepository.save(user));
+            return toAccount(userRepository.save(user));
         }
         catch (DataIntegrityViolationException exception) {
             throw new ConflictException("A user with this email already exists.");
@@ -51,6 +58,13 @@ public class UserService implements UserDirectory {
 
     @Override
     @Transactional(readOnly = true)
+    public java.util.Optional<UserAccount> findByEmail(String email) {
+        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+        return userRepository.findByEmail(normalizedEmail).map(this::toAccount);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public void requireUserExists(UUID userId) {
         findUser(userId);
     }
@@ -58,5 +72,16 @@ public class UserService implements UserDirectory {
     private User findUser(UUID userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+    }
+
+    private UserAccount toAccount(User user) {
+        return new UserAccount(
+                user.getId(),
+                user.getEmail(),
+                user.getDisplayName(),
+                user.getPasswordHash(),
+                user.getRole(),
+                user.getCreatedAt(),
+                user.getUpdatedAt());
     }
 }

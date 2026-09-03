@@ -4,14 +4,15 @@
 
 ## 当前功能
 
-- `user-and-project.md`：Day 1 用户与项目基础，已实现；真实 PostgreSQL 集成测试会在 Docker 环境可用时运行。
+- `user-and-project.md`：Day 1 用户与项目基础及 Day 2 安全迁移，已实现并通过真实 PostgreSQL 集成测试。
+- `authentication-and-authorization.md`：Day 2 注册、登录、JWT 和基础 RBAC，已实现。
+- `wiki.md`：Day 2 项目 Wiki Page CRUD，已实现。
+- `task.md`：Day 2 项目 Task CRUD，已实现。
 
 ## 后续计划
 
 以下文档尚未创建，表示功能也不应开始实现：
 
-- 登录鉴权与基础 RBAC（Day 2）
-- Wiki 与 Task（Day 2）
 - AI Chat 与 Java/Python 边界（Day 3）
 - RAG 检索（Day 4）
 - Tool Calling 与人工确认（Day 5）

@@ -20,8 +20,9 @@
 - `documentation-first-policy.md`：文档先行的强制规则、什么情况需要改哪些文档。
 - `change-workflow.md`：从接收需求到交付检查点的标准流程。
 - `definition-of-done.md`：一项变更何时才算真正完成。
+- `public-repository-security.md`：公开仓库中的密钥边界、扫描与泄漏处置。
 
-每个阶段由 AI 完成 Git 提交；提交后立即进入用户确认检查点。用户确认下一阶段计划之前，不开始新的实现。
+每个阶段由 AI 完成 Git 提交并推送到已确认的远程分支；提交与推送之间不得再改文件，远程核验后立即进入用户确认检查点。
 
 ### `01-product/`：做什么与何时做
 
@@ -60,11 +61,17 @@
 - `README.md`：变更记录的规则和索引。
 - 每次改动一份日期加主题命名的记录；小的同主题修正可以更新同一份记录。
 
+### `08-reviews/`：代码审查中心
+
+- `README.md`：Pi Agent (DeepSeek) 审查与 Codex 修复评估的闭环规范。
+- 保存各阶段交付物的结构化代码审查报告（`YYYY-MM-DD-review-day-<X>.md`）。
+
 ### `templates/`：写文档时复用
 
 - `change-record-template.md`：变更记录模板。
 - `feature-template.md`：功能文档模板。
 - `adr-template.md`：架构决策模板。
+- `review-record-template.md`：代码审查报告模板。
 
 ## 文档状态约定
 

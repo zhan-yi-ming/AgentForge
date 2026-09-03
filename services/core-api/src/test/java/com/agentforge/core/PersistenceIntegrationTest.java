@@ -12,10 +12,19 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.agentforge.core.project.application.ProjectService;
-import com.agentforge.core.user.application.UserService;
+import com.agentforge.core.security.AuthenticatedActor;
+import com.agentforge.core.security.application.AuthenticationService;
+import com.agentforge.core.task.application.TaskService;
+import com.agentforge.core.wiki.application.WikiPageService;
 
 @Testcontainers(disabledWithoutDocker = true)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.MOCK,
+        properties = {
+            "agentforge.security.jwt.secret=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+            "agentforge.security.jwt.issuer=https://agentforge.test/core-api",
+            "agentforge.security.jwt.ttl=PT30M"
+        })
 class PersistenceIntegrationTest {
 
     @Container
@@ -23,22 +32,39 @@ class PersistenceIntegrationTest {
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
 
     @Autowired
-    private UserService userService;
+    private AuthenticationService authenticationService;
 
     @Autowired
     private ProjectService projectService;
 
     @Autowired
+    private WikiPageService wikiPageService;
+
+    @Autowired
+    private TaskService taskService;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void flywayCreatesSchemaAndJpaPersistsUserAndProject() {
-        var user = userService.createUser("integration@example.com", "Integration User");
-        var project = projectService.createProject(user.id(), "Integration Project", null);
+    void flywayCreatesSchemaAndJpaPersistsAuthenticatedProjectResources() {
+        var authentication = authenticationService.register(
+                "integration@example.com",
+                "Integration User",
+                "integration-password");
+        var actor = new AuthenticatedActor(authentication.user().id(), false);
+        var project = projectService.createProject(actor, "Integration Project", null);
+        var wikiPage = wikiPageService.create(project.id(), actor, "Architecture", "# Core API");
+        var task = taskService.create(project.id(), actor, "Verify migration", null, null, null);
 
-        assertThat(projectService.getProject(project.id()).ownerId()).isEqualTo(user.id());
+        assertThat(projectService.getProject(project.id(), actor).ownerId())
+                .isEqualTo(authentication.user().id());
+        assertThat(wikiPageService.get(project.id(), wikiPage.id(), actor).title())
+                .isEqualTo("Architecture");
+        assertThat(taskService.get(project.id(), task.id(), actor).title())
+                .isEqualTo("Verify migration");
         assertThat(jdbcTemplate.queryForObject(
                 "select count(*) from flyway_schema_history where success = true",
-                Integer.class)).isPositive();
+                Integer.class)).isGreaterThanOrEqualTo(2);
     }
 }

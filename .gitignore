@@ -30,3 +30,6 @@ Thumbs.db
 # Local runtime data
 .data/
 coverage/
+scripts/agent-bridge/.bridge-state.json
+.codex-quota-exhausted
+.codex-resume-signal.md

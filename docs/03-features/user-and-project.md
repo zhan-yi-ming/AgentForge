@@ -1,8 +1,8 @@
 # 用户与项目基础
 
-- 状态：Implemented
-- 所属阶段：V1 / Day 1
-- 相关 ADR：ADR-0003、ADR-0004
+- 状态：Implemented（Day 1 基础与 Day 2 安全迁移均已完成）
+- 所属阶段：V1 / Day 1–2
+- 相关 ADR：ADR-0003、ADR-0004、ADR-0005
 
 ## 用户价值与场景
 
@@ -16,25 +16,24 @@
 - 按 ID 查询项目。
 - 按 owner 查询项目列表。
 
-## 非目标
+## Day 2 安全迁移
 
-- 没有密码、登录、JWT、角色或成员管理。
-- 没有更新/删除接口；在权限模型建立前避免产生含糊写操作。
-- 没有 workspace、多租户或项目成员；Day 1 只有 owner。
+- 用户创建迁移到 `POST /api/v1/auth/register`，必须提供密码；原 `POST /api/v1/users` 移除，避免创建不可登录账号。
+- 用户读取收敛为 `GET /api/v1/users/me`，不再允许匿名按任意 ID 查询。
+- 创建项目不再接收 `ownerId`；owner 取自 token `sub`。
+- `GET /api/v1/projects` 只列出当前 owner 的项目；具体项目仅 owner 或 ADMIN 可读。
+- 仍不实现项目更新/删除、workspace、成员或分页。
 
 ## 关键流程
 
 ### 创建用户
 
-1. Controller 校验 email 与 displayName 格式。
-2. UserService 规范化邮箱并检查明显重复。
-3. Repository 保存 Entity；数据库唯一约束处理并发重复。
-4. 返回不含内部持久化细节的 UserResponse，HTTP 201。
+创建用户的 Day 1 流程由注册流程取代，见 `authentication-and-authorization.md`。
 
 ### 创建项目
 
-1. Controller 校验 ownerId、name 与 description。
-2. ProjectService 通过用户模块稳定入口确认 owner 存在。
+1. Spring Security 验证 JWT，Controller 取得 actor userId。
+2. Controller 校验 name 与 description，ProjectService 以 actor userId 作为 owner。
 3. 检查同一 owner 下名称是否重复。
 4. 保存仅包含 `ownerId` 的 Project Entity，数据库外键提供最终引用完整性。
 5. 返回 ProjectResponse，HTTP 201。
@@ -43,11 +42,11 @@
 
 完整字段与错误见 `docs/04-api/core-api.md`：
 
-- `POST /api/v1/users`
-- `GET /api/v1/users/{id}`
+- `POST /api/v1/auth/register`
+- `GET /api/v1/users/me`
 - `POST /api/v1/projects`
 - `GET /api/v1/projects/{id}`
-- `GET /api/v1/projects?ownerId={uuid}`
+- `GET /api/v1/projects`
 
 ## 数据与约束
 
@@ -55,7 +54,7 @@
 
 ## 权限与安全
 
-Day 1 尚无认证，因此这些接口只能用于本地开发环境，不能作为生产安全能力。Day 2 必须先完成登录鉴权功能文档，再保护这些接口并增加 owner/member 权限校验。
+Day 2 业务接口默认要求 JWT。ProjectService 使用认证 actor 并在服务端校验 owner 或 ADMIN；客户端不能声明或切换 owner。
 
 ## 失败与排查
 

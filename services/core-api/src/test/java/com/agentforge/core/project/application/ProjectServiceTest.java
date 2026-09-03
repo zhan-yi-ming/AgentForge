@@ -21,7 +21,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.agentforge.core.project.domain.Project;
 import com.agentforge.core.project.domain.ProjectRepository;
+import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.shared.error.ConflictException;
+import com.agentforge.core.shared.error.ForbiddenException;
 import com.agentforge.core.shared.error.ResourceNotFoundException;
 import com.agentforge.core.user.UserDirectory;
 
@@ -47,31 +49,49 @@ class ProjectServiceTest {
     }
 
     @Test
-    void createProjectChecksOwnerAndNormalizesInput() {
-        UUID ownerId = UUID.randomUUID();
-        when(projectRepository.existsByOwnerIdAndName(ownerId, "AgentForge")).thenReturn(false);
+    void createProjectUsesAuthenticatedUserAsOwner() {
+        UUID userId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(userId, false);
+        when(projectRepository.existsByOwnerIdAndName(userId, "AgentForge")).thenReturn(false);
         when(projectRepository.save(any(Project.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        ProjectView result = projectService.createProject(
-                ownerId,
-                "  AgentForge  ",
-                "  AI workspace  ");
+        ProjectView result = projectService.createProject(actor, "  AgentForge  ", "  AI workspace  ");
 
-        assertThat(result.ownerId()).isEqualTo(ownerId);
+        assertThat(result.ownerId()).isEqualTo(userId);
         assertThat(result.name()).isEqualTo("AgentForge");
         assertThat(result.description()).isEqualTo("AI workspace");
-        assertThat(result.createdAt()).isEqualTo(NOW);
-        verify(userDirectory).requireUserExists(ownerId);
+        verify(userDirectory).requireUserExists(userId);
     }
 
     @Test
     void createProjectRejectsDuplicateNameForOwner() {
-        UUID ownerId = UUID.randomUUID();
-        when(projectRepository.existsByOwnerIdAndName(ownerId, "AgentForge")).thenReturn(true);
+        UUID userId = UUID.randomUUID();
+        when(projectRepository.existsByOwnerIdAndName(userId, "AgentForge")).thenReturn(true);
 
-        assertThatThrownBy(() -> projectService.createProject(ownerId, "AgentForge", null))
+        assertThatThrownBy(() -> projectService.createProject(
+                new AuthenticatedActor(userId, false),
+                "AgentForge",
+                null))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("name");
+    }
+
+    @Test
+    void getProjectRejectsCrossUserButAllowsAdmin() {
+        UUID ownerId = UUID.randomUUID();
+        UUID projectId = UUID.randomUUID();
+        Project project = Project.create(ownerId, "AgentForge", null, NOW);
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+
+        assertThatThrownBy(() -> projectService.getProject(
+                projectId,
+                new AuthenticatedActor(UUID.randomUUID(), false)))
+                .isInstanceOf(ForbiddenException.class);
+
+        assertThat(projectService.getProject(
+                projectId,
+                new AuthenticatedActor(UUID.randomUUID(), true)).ownerId())
+                .isEqualTo(ownerId);
     }
 
     @Test
@@ -79,17 +99,20 @@ class ProjectServiceTest {
         UUID projectId = UUID.randomUUID();
         when(projectRepository.findById(projectId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> projectService.getProject(projectId))
+        assertThatThrownBy(() -> projectService.getProject(
+                projectId,
+                new AuthenticatedActor(UUID.randomUUID(), false)))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining(projectId.toString());
     }
 
     @Test
-    void listProjectsChecksOwnerBoundary() {
-        UUID ownerId = UUID.randomUUID();
-        when(projectRepository.findAllByOwnerIdOrderByCreatedAtDesc(ownerId)).thenReturn(List.of());
+    void listProjectsIsAlwaysScopedToAuthenticatedUser() {
+        UUID userId = UUID.randomUUID();
+        when(projectRepository.findAllByOwnerIdOrderByCreatedAtDesc(userId)).thenReturn(List.of());
 
-        assertThat(projectService.listProjects(ownerId)).isEmpty();
-        verify(userDirectory).requireUserExists(ownerId);
+        assertThat(projectService.listProjects(new AuthenticatedActor(userId, true))).isEmpty();
+        verify(userDirectory).requireUserExists(userId);
+        verify(projectRepository).findAllByOwnerIdOrderByCreatedAtDesc(userId);
     }
 }

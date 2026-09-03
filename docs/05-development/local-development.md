@@ -19,6 +19,17 @@ Maven Wrapper 3.3.4 已固定使用 Maven 3.9.11，因此无需全局安装 Mave
 - `AGENTFORGE_DB_USERNAME`
 - `AGENTFORGE_DB_PASSWORD`
 - `AGENTFORGE_SERVER_PORT`
+- `AGENTFORGE_JWT_SECRET`：必填，至少 32 随机字节的 Base64；各环境不同，禁止提交真实值。
+- `AGENTFORGE_JWT_ISSUER`：可选，必须是 URI，默认 `https://agentforge.local/core-api`；它只是 V1 本地签发者标识，不要求该域名可访问。
+- `AGENTFORGE_JWT_TTL`：可选 ISO-8601 Duration，默认 `PT30M`。
+
+生成本地 JWT secret：
+
+```powershell
+[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+```
+
+把输出只写入被忽略的 `.env`。`.env.example` 中的 `REPLACE_...` 不是可用密钥，服务对缺失、无法 Base64 解码或短于 32 字节的配置快速失败。规则见 `../00-governance/public-repository-security.md`。
 
 ## 预期启动顺序
 
@@ -33,6 +44,8 @@ Maven Wrapper 3.3.4 已固定使用 Maven 3.9.11，因此无需全局安装 Mave
 - 数据库连接失败：运行 `docker compose ... ps`，检查 5432 端口和 `.env`。
 - Flyway 校验失败：检查是否修改了已执行迁移；不要使用 `ddl-auto=update` 绕过。
 - API 错误：记录响应的 `X-Request-Id`，在 Core API 日志中搜索相同值。
+- JWT 配置错误：检查 secret 是否已经替换、是否为 Base64、解码后是否至少 32 字节；不要把值贴入 Issue 或日志。
+- Bearer 请求 401：检查 token 是否过期、issuer 与系统时间；登录重新获取 token，不要关闭签名校验。
 
 ## 当前验证状态
 

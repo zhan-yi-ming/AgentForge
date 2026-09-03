@@ -1,49 +1,81 @@
 # Core API 契约
 
-- 状态：Implemented
+- 状态：Implemented（Day 1–2）
 - 基础路径：`/api/v1`
 - 内容类型：`application/json`
 
 ## 通用约定
 
-- UUID 使用标准字符串格式。
-- 时间使用 ISO-8601 UTC 表示。
-- 成功响应使用资源 DTO，不暴露 JPA 内部字段。
-- 错误使用 `application/problem+json`，至少包含 `type`、`title`、`status`、`detail`、`instance`；字段校验错误额外包含 `errors`。
+- UUID 使用标准字符串，时间使用 ISO-8601 UTC。
+- 除注册、登录和 `GET /actuator/health` 外，接口必须发送 `Authorization: Bearer <accessToken>`。
+- 成功响应使用 DTO，不暴露 JPA Entity、`passwordHash` 或安全配置。
+- 错误使用 `application/problem+json`，至少包含 `type`、`title`、`status`、`detail`、`instance`、`requestId`；字段校验错误额外包含 `errors`。
 - 每个响应返回 `X-Request-Id`。请求可提供该头，缺失或格式不可接受时由服务生成。
+- 集合按 `updatedAt` 降序（Project 保留按 `createdAt` 降序）；Day 2 不分页。
+
+## 身份与错误语义
+
+| 情况 | 状态 | 说明 |
+| --- | --- | --- |
+| JSON / 字段格式无效 | 400 | Bean Validation 或枚举解析失败 |
+| 未提供、过期、签名或 issuer 无效的 token | 401 | 不返回 token 验证内部细节 |
+| 登录邮箱或密码不匹配 | 401 | 统一文案，避免枚举账号 |
+| 已认证但不是 owner / ADMIN | 403 | 不返回资源内容 |
+| 项目或项目内资源不存在 | 404 | 嵌套路由必须同时匹配 projectId 与资源 ID |
+| 唯一约束或乐观锁冲突 | 409 | 重新读取资源再决定是否重试 |
+
+## Auth
+
+### `POST /api/v1/auth/register`
+
+无需认证。请求：
+
+```json
+{
+  "email": "owner@example.com",
+  "displayName": "Project Owner",
+  "password": "correct-horse-battery"
+}
+```
+
+约束：email 合法且不超过 320；displayName 去除首尾空白后 1–100；password 8–72 字符。成功返回 201、`Location: /api/v1/users/me` 和 AuthResponse。重复邮箱返回 409。
+
+### `POST /api/v1/auth/login`
+
+无需认证。请求：
+
+```json
+{
+  "email": "owner@example.com",
+  "password": "correct-horse-battery"
+}
+```
+
+成功返回 200 AuthResponse；邮箱不存在、passwordless 遗留账号或密码不匹配统一返回 401。
+
+### AuthResponse
+
+```json
+{
+  "accessToken": "eyJ...",
+  "tokenType": "Bearer",
+  "expiresIn": 1800,
+  "user": {
+    "id": "uuid",
+    "email": "owner@example.com",
+    "displayName": "Project Owner",
+    "role": "USER",
+    "createdAt": "2026-09-03T12:00:00Z",
+    "updatedAt": "2026-09-03T12:00:00Z"
+  }
+}
+```
 
 ## User
 
-### `POST /api/v1/users`
+### `GET /api/v1/users/me`
 
-请求：
-
-```json
-{
-  "email": "owner@example.com",
-  "displayName": "Project Owner"
-}
-```
-
-约束：email 必须合法且不超过 320 字符；displayName 去除首尾空白后长度为 1–100。成功返回 201 和 `Location`。
-
-响应：
-
-```json
-{
-  "id": "uuid",
-  "email": "owner@example.com",
-  "displayName": "Project Owner",
-  "createdAt": "2026-09-03T12:00:00Z",
-  "updatedAt": "2026-09-03T12:00:00Z"
-}
-```
-
-错误：400 输入无效；409 邮箱已存在。
-
-### `GET /api/v1/users/{id}`
-
-成功返回 200 UserResponse；不存在返回 404。
+返回当前 token `sub` 对应的 UserResponse。用户已删除或不存在时返回 401。Day 1 的 `POST /users` 与 `GET /users/{id}` 被注册和当前用户接口取代。
 
 ## Project
 
@@ -53,15 +85,14 @@
 
 ```json
 {
-  "ownerId": "uuid",
   "name": "AgentForge",
   "description": "AI-assisted engineering workspace"
 }
 ```
 
-约束：name 去除首尾空白后长度为 1–120；description 可空，最大 2000。成功返回 201 和 `Location`。
+owner 固定为当前 token 用户，客户端不能提供 ownerId。name 1–120；description 可空，最大 2000。成功返回 201 和 `Location`；同一 owner 下项目名重复返回 409。
 
-响应：
+### ProjectResponse
 
 ```json
 {
@@ -74,20 +105,130 @@
 }
 ```
 
-错误：400 输入无效；404 owner 不存在；409 同一 owner 下项目名已存在。
+### `GET /api/v1/projects/{projectId}`
 
-### `GET /api/v1/projects/{id}`
+owner 或 ADMIN 返回 200；不存在 404；其他用户 403。
 
-成功返回 200 ProjectResponse；不存在返回 404。
+### `GET /api/v1/projects`
 
-### `GET /api/v1/projects?ownerId={uuid}`
+USER 返回自己拥有的项目数组；ADMIN 仍只返回自己拥有的项目，避免无边界全表读取。原 `ownerId` 查询参数不再接受。
 
-成功返回 200 JSON 数组，按 `createdAt` 降序。owner 不存在返回 404。Day 1 暂不分页。
+## Wiki Page
+
+基础路径：`/api/v1/projects/{projectId}/wiki-pages`。
+
+### `POST /api/v1/projects/{projectId}/wiki-pages`
+
+```json
+{
+  "title": "Architecture",
+  "content": "# System\n\nCore API owns writes."
+}
+```
+
+title 去除首尾空白后 1–200；content 0–100,000。同项目标题重复返回 409。成功返回 201 和资源 `Location`。
+
+### `GET /api/v1/projects/{projectId}/wiki-pages`
+
+返回项目内页面数组，按 `updatedAt` 降序。
+
+### `GET /api/v1/projects/{projectId}/wiki-pages/{wikiPageId}`
+
+路径项目与页面所属项目必须同时匹配，否则 404。
+
+### `PUT /api/v1/projects/{projectId}/wiki-pages/{wikiPageId}`
+
+```json
+{
+  "title": "Architecture",
+  "content": "# Updated system",
+  "version": 0
+}
+```
+
+请求提交完整可变字段和当前 version。成功返回更新后的 WikiPageResponse；版本或标题冲突返回 409。
+
+### `DELETE /api/v1/projects/{projectId}/wiki-pages/{wikiPageId}?version=0`
+
+成功返回 204；version 必填且必须与当前版本一致，冲突返回 409。
+
+### WikiPageResponse
+
+```json
+{
+  "id": "uuid",
+  "projectId": "uuid",
+  "title": "Architecture",
+  "content": "# Updated system",
+  "version": 1,
+  "createdAt": "2026-09-03T12:00:00Z",
+  "updatedAt": "2026-09-03T12:10:00Z"
+}
+```
+
+## Task
+
+基础路径：`/api/v1/projects/{projectId}/tasks`。
+
+### `POST /api/v1/projects/{projectId}/tasks`
+
+```json
+{
+  "title": "Add login",
+  "description": "Implement JWT login",
+  "status": "TODO",
+  "priority": "HIGH"
+}
+```
+
+title 1–200；description 可空且最大 10,000。status 可省略，默认 `TODO`；priority 可省略，默认 `MEDIUM`。成功返回 201 和 `Location`。
+
+### `GET /api/v1/projects/{projectId}/tasks`
+
+返回按 `updatedAt` 降序的 TaskResponse 数组。
+
+### `GET /api/v1/projects/{projectId}/tasks/{taskId}`
+
+路径项目与 Task 所属项目必须同时匹配，否则 404。
+
+### `PUT /api/v1/projects/{projectId}/tasks/{taskId}`
+
+```json
+{
+  "title": "Add login",
+  "description": "JWT implemented",
+  "status": "DONE",
+  "priority": "HIGH",
+  "version": 0
+}
+```
+
+提交完整可变字段和当前 version。成功返回更新后的 TaskResponse；版本冲突返回 409。
+
+### `DELETE /api/v1/projects/{projectId}/tasks/{taskId}?version=0`
+
+成功返回 204；version 必填且必须与当前版本一致。
+
+### TaskResponse
+
+```json
+{
+  "id": "uuid",
+  "projectId": "uuid",
+  "title": "Add login",
+  "description": "JWT implemented",
+  "status": "DONE",
+  "priority": "HIGH",
+  "version": 1,
+  "createdAt": "2026-09-03T12:00:00Z",
+  "updatedAt": "2026-09-03T12:10:00Z"
+}
+```
 
 ## 健康检查
 
-`GET /actuator/health` 用于本地和容器健康检查。默认只暴露 health 和 info，不暴露环境变量、堆信息等敏感端点。
+`GET /actuator/health` 无需认证，用于本地和容器健康检查。默认只暴露 health 和 info，不暴露环境变量、堆信息或配置密钥。
 
 ## 兼容性
 
-新增可选响应字段视为兼容；删除或重命名字段、改变含义或状态码属于破坏性变化，必须先更新功能/API 文档并写 ADR 或迁移说明。
+Day 2 在首个可用版本形成前有意替换了 Day 1 匿名 User / Project 契约，迁移理由记录在 ADR-0005 和当前变更记录。后续新增可选响应字段视为兼容；删除或重命名字段、改变含义或状态码属于破坏性变化，必须先更新功能/API 文档并写 ADR 或迁移说明。

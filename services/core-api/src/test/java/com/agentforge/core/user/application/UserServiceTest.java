@@ -20,6 +20,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.agentforge.core.shared.error.ConflictException;
 import com.agentforge.core.shared.error.ResourceNotFoundException;
+import com.agentforge.core.user.UserAccount;
+import com.agentforge.core.user.UserRole;
 import com.agentforge.core.user.domain.User;
 import com.agentforge.core.user.domain.UserRepository;
 
@@ -39,25 +41,44 @@ class UserServiceTest {
     }
 
     @Test
-    void createUserNormalizesInputAndReturnsSavedUser() {
+    void registerNormalizesInputAndKeepsOnlyPasswordHash() {
         when(userRepository.existsByEmail("owner@example.com")).thenReturn(false);
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        UserView result = userService.createUser("  Owner@Example.COM ", "  Project Owner  ");
+        UserAccount result = userService.register(
+                "  Owner@Example.COM ",
+                "  Project Owner  ",
+                "{bcrypt}encoded-value");
 
         assertThat(result.email()).isEqualTo("owner@example.com");
         assertThat(result.displayName()).isEqualTo("Project Owner");
+        assertThat(result.passwordHash()).isEqualTo("{bcrypt}encoded-value");
+        assertThat(result.role()).isEqualTo(UserRole.USER);
         assertThat(result.createdAt()).isEqualTo(NOW);
         verify(userRepository).existsByEmail("owner@example.com");
     }
 
     @Test
-    void createUserRejectsDuplicateEmail() {
+    void registerRejectsDuplicateEmail() {
         when(userRepository.existsByEmail("owner@example.com")).thenReturn(true);
 
-        assertThatThrownBy(() -> userService.createUser("owner@example.com", "Owner"))
+        assertThatThrownBy(() -> userService.register(
+                "owner@example.com",
+                "Owner",
+                "{bcrypt}encoded-value"))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("email");
+    }
+
+    @Test
+    void findByEmailNormalizesLookup() {
+        User user = User.register("owner@example.com", "Owner", "{bcrypt}encoded-value", NOW);
+        when(userRepository.findByEmail("owner@example.com")).thenReturn(Optional.of(user));
+
+        assertThat(userService.findByEmail(" Owner@Example.com "))
+                .get()
+                .extracting(UserAccount::email)
+                .isEqualTo("owner@example.com");
     }
 
     @Test

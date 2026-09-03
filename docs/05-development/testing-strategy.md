@@ -9,13 +9,17 @@
 - Repository 集成测试：使用真实 PostgreSQL/Testcontainers 验证 SQL、约束和查询；Day 1 若环境不可用需明确记录未运行。
 - 端到端测试：跨 Web、Java、Python 的关键闭环，进入对应天次后建立。
 
-## Day 1 质量门槛
+## Day 2 质量门槛
 
 - Java 编译通过。
 - Service 的成功与主要失败分支有测试。
 - HTTP 契约的创建、查询、400、404、409 有代表性测试。
 - Flyway 迁移在 PostgreSQL 上成功，JPA `validate` 通过。
 - 不以 H2 成功替代 PostgreSQL 特有行为验证。
+- 注册保存 BCrypt 哈希，登录成功 / 失败和 JWT 签名、issuer、时效有测试。
+- 匿名请求 401、跨用户请求 403、owner 与 ADMIN 成功路径有测试。
+- Wiki / Task CRUD、默认值、嵌套项目匹配和乐观锁冲突有测试。
+- 密钥、token 与 passwordHash 不出现在 HTTP 响应、测试快照或提交内容中。
 
 ## 命令
 

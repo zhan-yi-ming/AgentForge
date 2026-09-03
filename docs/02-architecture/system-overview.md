@@ -1,7 +1,7 @@
 # 系统架构总览
 
 - 状态：Accepted
-- 当前实现范围：仓库骨架与 Core API Day 1
+- 当前实现范围：仓库骨架、Core API Day 1–2；安全、Wiki 与 Task 已实现
 
 ## 系统组件
 
@@ -49,7 +49,8 @@ Redis：V1 后续用于短期会话/状态辅助，不作为业务事实来源�
 
 - 查询：Web → Core API；需要 AI 时由 Core API 或明确受控的 Web 路径调用 Agent，具体在 Day 3 ADR 确定。
 - 修改：Agent 只能返回 Tool 意图；Web 展示确认；Java 再鉴权、校验、执行并落库。
-- 数据隔离：所有项目资源最终按 workspace/project 维度校验；Day 1 先建立 owner 边界，后续演进为 membership。
+- 数据隔离：Day 2 所有项目资源按已认证 user + project owner 校验，ADMIN 仅作为受控运维角色；后续演进为 membership。
+- 身份：Core API 签发短期 JWT，所有业务入口默认认证；JWT secret 只通过运行环境注入。
 - 可观测：所有跨服务请求逐步携带 `request_id`；V1 使用结构化日志，V2 接入完整 Trace。
 
 ## 部署策略

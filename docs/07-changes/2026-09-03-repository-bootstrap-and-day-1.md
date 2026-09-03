@@ -1,7 +1,7 @@
 # 仓库初始化与 Day 1 Java 基础
 
 - 日期：2026-09-03
-- 状态：Implemented（真实 PostgreSQL 集成验证待可用 Docker 环境补跑）
+- 状态：Implemented
 - 阶段：V1 / Day 1
 
 ## 背景
@@ -74,7 +74,7 @@
 
 ## 待补验证
 
-在 Docker Desktop 服务可用的环境运行 `services/core-api/mvnw.cmd verify`，确认 PostgreSQL 容器启动、Flyway schema history、JPA validate 和 User → Project 真实持久化链路。该用例已存在，会在 Docker 可用时自动执行。
+已于 2026-09-04 在 Day 2 完整验证中补跑：Testcontainers 成功启动 PostgreSQL 17.11，Flyway 依次应用 V1、V2，JPA `ddl-auto=validate` 通过，User → Project 以及新增 Wiki / Task 的真实持久化链路均通过。Day 1 不再有待补验证项。
 
 ## 回滚思路
 

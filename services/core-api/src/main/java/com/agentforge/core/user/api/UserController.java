@@ -1,19 +1,13 @@
 package com.agentforge.core.user.api;
 
-import java.net.URI;
-import java.util.UUID;
-
-import jakarta.validation.Valid;
-
-import org.springframework.http.ResponseEntity;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.agentforge.core.user.application.UserService;
+import com.agentforge.core.security.AuthenticatedActor;
 
 @RestController
 @RequestMapping("/api/v1/users")
@@ -25,17 +19,8 @@ public class UserController {
         this.userService = userService;
     }
 
-    @PostMapping
-    ResponseEntity<UserResponse> createUser(@Valid @RequestBody CreateUserRequest request) {
-        UserResponse response = UserResponse.from(
-                userService.createUser(request.email(), request.displayName()));
-        return ResponseEntity
-                .created(URI.create("/api/v1/users/" + response.id()))
-                .body(response);
-    }
-
-    @GetMapping("/{userId}")
-    UserResponse getUser(@PathVariable UUID userId) {
-        return UserResponse.from(userService.getUser(userId));
+    @GetMapping("/me")
+    UserResponse getCurrentUser(@AuthenticationPrincipal Jwt jwt) {
+        return UserResponse.from(userService.getUser(AuthenticatedActor.from(jwt).userId()));
     }
 }

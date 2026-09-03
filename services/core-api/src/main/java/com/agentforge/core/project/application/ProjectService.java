@@ -11,12 +11,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.agentforge.core.project.domain.Project;
 import com.agentforge.core.project.domain.ProjectRepository;
+import com.agentforge.core.project.ProjectAccess;
+import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.shared.error.ConflictException;
+import com.agentforge.core.shared.error.ForbiddenException;
 import com.agentforge.core.shared.error.ResourceNotFoundException;
 import com.agentforge.core.user.UserDirectory;
 
 @Service
-public class ProjectService {
+public class ProjectService implements ProjectAccess {
 
     private final ProjectRepository projectRepository;
     private final UserDirectory userDirectory;
@@ -29,7 +32,8 @@ public class ProjectService {
     }
 
     @Transactional
-    public ProjectView createProject(UUID ownerId, String name, String description) {
+    public ProjectView createProject(AuthenticatedActor actor, String name, String description) {
+        UUID ownerId = actor.userId();
         userDirectory.requireUserExists(ownerId);
         String normalizedName = name.trim();
         String normalizedDescription = normalizeDescription(description);
@@ -52,18 +56,36 @@ public class ProjectService {
     }
 
     @Transactional(readOnly = true)
-    public ProjectView getProject(UUID projectId) {
-        return ProjectView.from(projectRepository.findById(projectId)
-                .orElseThrow(() -> new ResourceNotFoundException("Project not found: " + projectId)));
+    public ProjectView getProject(UUID projectId, AuthenticatedActor actor) {
+        Project project = findProject(projectId);
+        requireOwnerOrAdmin(project, actor);
+        return ProjectView.from(project);
     }
 
     @Transactional(readOnly = true)
-    public List<ProjectView> listProjects(UUID ownerId) {
-        userDirectory.requireUserExists(ownerId);
-        return projectRepository.findAllByOwnerIdOrderByCreatedAtDesc(ownerId)
+    public List<ProjectView> listProjects(AuthenticatedActor actor) {
+        userDirectory.requireUserExists(actor.userId());
+        return projectRepository.findAllByOwnerIdOrderByCreatedAtDesc(actor.userId())
                 .stream()
                 .map(ProjectView::from)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public void requireAccess(UUID projectId, AuthenticatedActor actor) {
+        requireOwnerOrAdmin(findProject(projectId), actor);
+    }
+
+    private Project findProject(UUID projectId) {
+        return projectRepository.findById(projectId)
+                .orElseThrow(() -> new ResourceNotFoundException("Project not found: " + projectId));
+    }
+
+    private void requireOwnerOrAdmin(Project project, AuthenticatedActor actor) {
+        if (!actor.admin() && !project.getOwnerId().equals(actor.userId())) {
+            throw new ForbiddenException("The authenticated user cannot access this project.");
+        }
     }
 
     private String normalizeDescription(String description) {

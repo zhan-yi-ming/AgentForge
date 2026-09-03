@@ -32,10 +32,18 @@
 - 不提前引入路线图后续阶段的组件。V1 不引入 Neo4j、Langfuse、LiteLLM 或 MCP。
 - 新技术第一次引入时，相关文档必须解释：为什么需要、位于请求链路哪里、失败时如何排查。
 - 每次交付前运行与改动相称的测试，并把命令和结果写入本次变更记录。
+- 本仓库公开展示，禁止提交真实密钥、令牌、密码、私钥、生产连接串或敏感日志；具体执行 `docs/00-governance/public-repository-security.md`。
 - 每个阶段完成并验证后，由 AI 创建一个真实、可读的 Git 提交；提交前必须确认变更记录已经回填。
-- **Git 提交成功后必须立即中断当前阶段，不得继续修改文件、运行下一阶段命令或提前开发。**
-- 提交后的最终汇报必须依次说明：本阶段已完成事项、验证与已知限制、用户可介入事项（明确标注是否必需）、下一阶段计划。
+- **Git 提交成功后不得继续修改文件或运行下一阶段命令；唯一允许的交付动作是推送并核验该提交。推送完成后必须立即中断。**
+- 推送后的最终汇报必须依次说明：本阶段已完成事项、验证与已知限制、用户可介入事项（明确标注是否必需）、下一阶段计划。
 - 下一阶段计划必须等待用户明确确认；没有确认时只能回答问题或调整计划，不能开始实现。
+
+## 双 Agent 开发与审查分工 (Codex 与 Pi Agent)
+
+依据产品路线规划，项目采用“主开发 (Codex) + 独立审查员 (Pi Agent)”协同模式：
+- **Codex (GPT)**：主开发 Agent。负责架构、编码、测试、修复及阶段 Git 提交与推送。完成交付后中断，并读取审查报告决定是否修复。
+- **Pi Agent (DeepSeek V4-pro)**：独立代码审查员。审查模型固定为 `deepseek/deepseek-v4-pro`，禁止使用或降级到 Flash。强制只读审查模式，严禁直接修改业务代码。重点审查 Bug、权限绕过、API 契约不一致、并发/幂等问题与测试缺失。审查结果输出至 `docs/08-reviews/`。
+- **异步交接**：双方通过 `docs/08-reviews/` 标准文档交接；Codex 恢复后评估修复，不盲目照改。遇到 5 小时限额时由调度器进入自动等待倒计时并在重置后自动续跑。
 
 ## 文档入口
 
@@ -43,4 +51,6 @@
 - 文档制度：`docs/00-governance/documentation-first-policy.md`
 - 变更流程：`docs/00-governance/change-workflow.md`
 - 完成标准：`docs/00-governance/definition-of-done.md`
-- 当前变更：`docs/07-changes/2026-09-03-repository-bootstrap-and-day-1.md`
+- 公开仓库安全：`docs/00-governance/public-repository-security.md`
+- 代码审查中心：`docs/08-reviews/README.md`
+- 当前变更：`docs/07-changes/2026-09-03-codex-pi-bridge-and-code-review.md`
