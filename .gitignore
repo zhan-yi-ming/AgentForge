@@ -1,0 +1,32 @@
+# Secrets and local environment
+.env
+.env.local
+*.pem
+*.key
+
+# Java
+**/target/
+*.class
+*.log
+
+# JavaScript
+**/node_modules/
+**/dist/
+**/.vite/
+
+# Python
+**/__pycache__/
+**/.pytest_cache/
+**/.venv/
+*.py[cod]
+
+# IDE and OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Local runtime data
+.data/
+coverage/

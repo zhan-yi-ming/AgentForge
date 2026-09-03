@@ -1,0 +1,33 @@
+# 测试策略
+
+- 状态：Accepted
+
+## 测试分层
+
+- 领域/Service 单元测试：快速覆盖业务规则、规范化、重复和不存在分支。
+- Web 切片测试：验证路由、Bean Validation、状态码、DTO 和统一错误。
+- Repository 集成测试：使用真实 PostgreSQL/Testcontainers 验证 SQL、约束和查询；Day 1 若环境不可用需明确记录未运行。
+- 端到端测试：跨 Web、Java、Python 的关键闭环，进入对应天次后建立。
+
+## Day 1 质量门槛
+
+- Java 编译通过。
+- Service 的成功与主要失败分支有测试。
+- HTTP 契约的创建、查询、400、404、409 有代表性测试。
+- Flyway 迁移在 PostgreSQL 上成功，JPA `validate` 通过。
+- 不以 H2 成功替代 PostgreSQL 特有行为验证。
+
+## 命令
+
+在 `services/core-api`：
+
+```text
+mvnw.cmd test
+mvnw.cmd verify
+```
+
+构建和数据库验证的实际结果写入 `docs/07-changes/` 当前记录。若环境缺少 Java 21 或容器不可用，记录为“未运行”和具体原因。
+
+## 测试命名
+
+测试名描述场景与结果，如 `createUser_normalizesEmail`、`createProject_rejectsMissingOwner`。测试应验证公共行为，避免绑定无意义的实现细节。

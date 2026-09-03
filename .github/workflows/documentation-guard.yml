@@ -1,0 +1,15 @@
+name: Documentation guard
+
+on:
+  pull_request:
+
+jobs:
+  docs-first:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require a change record for implementation changes
+        shell: pwsh
+        run: ./scripts/verify-docs-first.ps1 -BaseRef "origin/${{ github.base_ref }}"
