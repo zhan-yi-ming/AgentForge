@@ -36,4 +36,4 @@ docs/                       项目长期记忆与变更证据
 
 需要 Java 21 与 Docker Desktop。复制 `.env.example` 为 `.env`，生成独立的本地 JWT secret，再按 [本地开发文档](docs/05-development/local-development.md) 启动依赖和 Core API。任何真实密钥都不能进入本公开仓库。
 
-> 当前机器的默认 Java 是 8，不能用于本项目；必须让 `java -version` 指向 Java 21。
+> 必须让 `java -version` 指向 Java 21。Day 1–Day 3 的完整启动和接口体验步骤见本地开发文档。
