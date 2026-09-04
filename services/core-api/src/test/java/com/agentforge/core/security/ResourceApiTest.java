@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -95,6 +96,24 @@ class ResourceApiTest {
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value("The Wiki page version is stale."));
+    }
+
+    @Test
+    void wikiUpdateMapsDatabaseOptimisticLockToConflict() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID pageId = UUID.randomUUID();
+        when(wikiPageService.update(eq(projectId), eq(pageId), any(), anyString(), anyString(), eq(3L)))
+                .thenThrow(new OptimisticLockingFailureException("concurrent commit"));
+
+        mockMvc.perform(put("/api/v1/projects/{projectId}/wiki-pages/{pageId}", projectId, pageId)
+                        .with(userJwt(UUID.randomUUID()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Architecture","content":"new","version":3}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("https://agentforge.local/problems/resource-conflict"))
+                .andExpect(jsonPath("$.detail").value("The resource was changed by another request."));
     }
 
     @Test

@@ -28,6 +28,7 @@
 
 - create、list、get、update、delete 必须在任何仓库访问前校验项目访问权；测试覆盖正向调用和拒绝后不查询仓库。
 - 更新依赖 JPA `@Version` 和 flush 时的原子乐观锁；PostgreSQL 集成测试证明两个旧快照中后提交者失败。
+- 若并发冲突直到事务 flush/commit 才由 Spring 抛出 `OptimisticLockingFailureException`，统一异常处理器仍返回 HTTP 409，而不是泄漏为 500。
 
 - 未认证 401；跨用户 403。
 - 项目或 Task 不存在、路径不匹配 404。

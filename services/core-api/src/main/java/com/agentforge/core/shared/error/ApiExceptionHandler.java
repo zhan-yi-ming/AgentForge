@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -50,6 +51,17 @@ public class ApiExceptionHandler {
             ConflictException exception,
             HttpServletRequest request) {
         return response(HttpStatus.CONFLICT, "resource-conflict", exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    ResponseEntity<ProblemDetail> handleOptimisticLockingFailure(
+            OptimisticLockingFailureException exception,
+            HttpServletRequest request) {
+        return response(
+                HttpStatus.CONFLICT,
+                "resource-conflict",
+                "The resource was changed by another request.",
+                request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

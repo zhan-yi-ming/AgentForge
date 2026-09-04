@@ -41,6 +41,12 @@ try {
     $passAgain = ConvertTo-ReviewOutcome -Stage $stage -Result PASS -Attempt 3 -MaximumAttempts 3 -TargetCommit "abc123" -ReportPath "r.md"
     Assert-True (($pass | ConvertTo-Json -Compress) -eq ($passAgain | ConvertTo-Json -Compress)) "PASS 迁移不是确定性的。"
 
+    $stateOnlyStages = @{ "auto-stage" = @{ id="auto-stage"; displayName="Auto Stage"; initialBaseRef="base"; deliveryCommit="delivery" } }
+    $withExplicitStateStage = @(Add-ExplicitStateStageDefinitions -Definitions @() -StateStages $stateOnlyStages -ExplicitStageIds @("auto-stage"))
+    Assert-True ($withExplicitStateStage.Count -eq 1 -and $withExplicitStateStage[0].id -eq "auto-stage") "显式 state-only 阶段未加入调度定义。"
+    $withoutExplicitStateStage = @(Add-ExplicitStateStageDefinitions -Definitions @() -StateStages $stateOnlyStages -ExplicitStageIds @())
+    Assert-True ($withoutExplicitStateStage.Count -eq 0) "未引用的 state-only 阶段不应加入调度定义。"
+
     $busyState = Join-Path $testRoot "busy-state.json"
     [System.IO.File]::WriteAllText($busyState, '{"schemaVersion":1,"stages":{"v1-day-1":{"id":"v1-day-1","attempts":1,"status":"WAITING_FOR_CODEX_FIX","deliveryCommit":"0000"}},"nextStageReady":null}', [System.Text.UTF8Encoding]::new($false))
     $heldLock = [System.IO.File]::Open("$busyState.lock", [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
@@ -71,7 +77,7 @@ try {
         Assert-True ($stalled.overallStatus -eq "STALLED" -and $stalled.lock.held) "STALLED 判断失败。"
     } finally { $heldStatusLock.Dispose() }
 
-    [PSCustomObject]@{ Passed = $true; ProjectRoot = $projectRoot; Checks = 12 }
+    [PSCustomObject]@{ Passed = $true; ProjectRoot = $projectRoot; Checks = 14 }
 } finally {
     Set-Location $originalLocation
     if (Test-Path -LiteralPath $testRoot) { Remove-Item -LiteralPath $testRoot -Recurse -Force }

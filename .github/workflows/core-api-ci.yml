@@ -27,9 +27,12 @@ jobs:
         working-directory: services/core-api
         shell: python
         run: |
+          from pathlib import Path
           import xml.etree.ElementTree as ET
-          report = ET.parse("target/surefire-reports/TEST-com.agentforge.core.PersistenceIntegrationTest.xml").getroot()
-          assert int(report.attrib["tests"]) == 2, report.attrib
+          reports = list(Path("target/surefire-reports").glob("TEST-*.PersistenceIntegrationTest.xml"))
+          assert len(reports) == 1, f"expected one PersistenceIntegrationTest report, found: {reports}"
+          report = ET.parse(reports[0]).getroot()
+          assert int(report.attrib["tests"]) >= 2, report.attrib
           assert int(report.attrib["skipped"]) == 0, report.attrib
           assert int(report.attrib["errors"]) == 0, report.attrib
           assert int(report.attrib["failures"]) == 0, report.attrib

@@ -240,6 +240,7 @@ foreach ($fixStageId in $reviewFixStageIds) {
         $state.stages.ContainsKey($fixStageId) -or ($changeRecordStageIds -contains $fixStageId)
     if (-not $knownStage) { throw "Review-Fixes 引用了未知阶段：$fixStageId" }
 }
+$definitions = @(Add-ExplicitStateStageDefinitions -Definitions $definitions -StateStages $state.stages -ExplicitStageIds $reviewFixStageIds)
 
 $actions = @()
 foreach ($definition in $definitions) {

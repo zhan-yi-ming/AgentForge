@@ -37,6 +37,7 @@
 - Git 提交成功后当前执行回合只允许推送并核验；自主 heartbeat 可在后续独立回合消费 Pi 报告、继续同阶段修复或在 Pi 通过后推进下一阶段。
 - 推送后的最终汇报必须依次说明：本阶段已完成事项、验证与已知限制、用户可介入事项（明确标注是否必需）、下一阶段计划。
 - 用户已授权自主交付循环：Pi 通过后可自动推进下一路线图阶段；第三次审查仍有问题时必须等待用户人工决定。
+- 审查与修复按大交付批次进行：同一阶段的非阻断问题一次性收集、一次性文档化与实现，再由 Pi 统一审查测试；禁止为轻微单项问题反复走完整提交循环。
 
 ## 审查循环触发规则
 
@@ -60,4 +61,4 @@
 - 完成标准：`docs/00-governance/definition-of-done.md`
 - 公开仓库安全：`docs/00-governance/public-repository-security.md`
 - 代码审查中心：`docs/08-reviews/README.md`
-- 当前变更：`docs/07-changes/2026-09-03-codex-pi-bridge-and-code-review.md`
+- 当前变更：`docs/07-changes/2026-09-04-review-state-only-stage-resume.md`

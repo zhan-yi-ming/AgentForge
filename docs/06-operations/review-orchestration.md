@@ -74,3 +74,5 @@ fix(review): release orchestration lock after failures
 
 Review-Fixes: review-orchestration-loop
 ```
+
+自动发现的阶段可能只存在于 `.review-loop-state.json`。后续修复提交使用同名 `Review-Fixes` trailer 时，循环会恢复并调度该阶段；如果 trailer 拼写与注册表、变更记录和运行时状态均不匹配，循环必须报错而不是静默创建阶段。
