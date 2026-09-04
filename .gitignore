@@ -34,6 +34,7 @@ scripts/agent-bridge/.bridge-state.json
 scripts/agent-bridge/.review-loop-state.json
 scripts/agent-bridge/.review-loop-state.json.lock
 scripts/agent-bridge/.review-loop-state.json.*.tmp
+scripts/agent-bridge/.review-loop-state.json.bak
 scripts/agent-bridge/.bridge-monitor.pid
 scripts/agent-bridge/.bridge-monitor.log
 scripts/agent-bridge/.bridge-monitor.error.log

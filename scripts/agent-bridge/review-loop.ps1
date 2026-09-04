@@ -23,10 +23,10 @@ $RunReviewScript = Join-Path $PSScriptRoot "run-review.ps1"
 if ([string]::IsNullOrWhiteSpace($StatePath)) {
     $StatePath = Join-Path $PSScriptRoot ".review-loop-state.json"
 }
-$StateLock = $null
+$script:StateLock = $null
 if (-not $DryRun) {
     try {
-        $StateLock = [System.IO.File]::Open("$StatePath.lock", [System.IO.FileMode]::OpenOrCreate,
+        $script:StateLock = [System.IO.File]::Open("$StatePath.lock", [System.IO.FileMode]::OpenOrCreate,
             [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
     } catch [System.IO.IOException] {
         [PSCustomObject]@{ OverallStatus = "BUSY"; StatePath = $StatePath; Actions = @() }
@@ -82,10 +82,13 @@ function Save-State($State) {
             ($State | ConvertTo-Json -Depth 8),
             [System.Text.UTF8Encoding]::new($false))
         if (Test-Path -LiteralPath $StatePath) {
-            [System.IO.File]::Replace($temporaryStatePath, $StatePath, $null)
+            [System.IO.File]::Replace($temporaryStatePath, $StatePath, "$StatePath.bak")
         } else {
             Move-Item -LiteralPath $temporaryStatePath -Destination $StatePath
         }
+    } catch {
+        if ($null -ne $script:StateLock) { $script:StateLock.Dispose(); $script:StateLock = $null }
+        throw
     } finally {
         if (Test-Path -LiteralPath $temporaryStatePath) {
             Remove-Item -LiteralPath $temporaryStatePath -Force -ErrorAction SilentlyContinue
@@ -302,5 +305,5 @@ $finalResult = [PSCustomObject]@{
     Actions = $actions
     NextStageReady = $state.nextStageReady
 }
-if ($null -ne $StateLock) { $StateLock.Dispose() }
+if ($null -ne $script:StateLock) { $script:StateLock.Dispose(); $script:StateLock = $null }
 $finalResult
