@@ -15,6 +15,8 @@ Codex 每次收到用户消息也会调用 `review-loop.ps1 -OnCodexWake`；这�
 - `docs/08-reviews/*.md`：Pi 的独立审查报告，应在后续修复或归档提交中保留。
 - `.pi-review-status.json` 与 `.pi-live-output.log`：本机可见性状态和 Pi 输出镜像，不提交。运行 `Show-ReviewStatus.ps1` 可查看 monitor 存活、当前阶段/轮次、模型、PID 和日志尾部；用 `Start-BridgeMonitor.ps1 -Visible` 打开实时 monitor 窗口。
 
+所有 bridge 脚本以 UTF-8 BOM 保存，因此可从 Windows PowerShell 5 或 PowerShell 7 直接运行；不要用编辑器把它们保存为无 BOM 的 UTF-8。
+
 Pi 以无会话、无项目上下文自动加载、无工具的非交互模式运行；审查提示词包含完整文件清单、diff 统计和有界的首中尾证据采样。这样既能定位大提交的范围，又避免将无界 diff 送入模型导致会话锁或超时。
 
 包装器以 Pi 的 `minimal` 推理档请求最多十项确定、可操作的发现；这不是模型降级，审查模型仍固定为 DeepSeek V4-pro。若该有界审查无法完成，脚本会保留失败诊断而不消耗审查轮次。

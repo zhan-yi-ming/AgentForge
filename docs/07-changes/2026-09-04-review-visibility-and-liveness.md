@@ -28,3 +28,9 @@
 - `Start-BridgeMonitor.ps1 -Visible` 支持打开 monitor 窗口；默认仍为隐藏后台模式。
 - 启动器固定使用 `pwsh.exe`，避免 Windows PowerShell 5 对无 BOM UTF-8 中文脚本解码损坏后立即退出。
 - 全部 bridge 脚本 PowerShell AST 通过；`bridge-monitor.ps1 -Once` 返回 `WAITING_FOR_CODEX_FIX`。
+
+## Windows PowerShell 兼容性修复
+
+用户会直接在 Windows PowerShell 5 中运行状态与可见 monitor 命令，因此所有 bridge `.ps1` 必须以 UTF-8 BOM 保存；这使 Windows PowerShell 正确解码中文字符串，并与 `pwsh.exe` 保持一致。验证必须同时使用 `powershell.exe -File` 和 `pwsh.exe -File` 解析与运行只读状态命令。
+
+已使用 `powershell.exe -NoProfile -File scripts/agent-bridge/Show-ReviewStatus.ps1` 成功显示状态，并用 Windows PowerShell AST 解析 `Start-BridgeMonitor.ps1` 通过。

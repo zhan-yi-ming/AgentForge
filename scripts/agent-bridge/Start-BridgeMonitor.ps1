@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     在当前开发工作树中隐藏启动 bridge-monitor，并避免重复启动。
 #>

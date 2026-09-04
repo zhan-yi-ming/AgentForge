@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     使用 DeepSeek V4-pro 对一个 Git 交付范围执行有超时保护的只读审查。
 .DESCRIPTION

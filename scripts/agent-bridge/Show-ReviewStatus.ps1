@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([ValidateRange(1, 200)][int]$Tail = 30)
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
