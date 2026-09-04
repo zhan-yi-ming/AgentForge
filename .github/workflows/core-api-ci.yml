@@ -22,4 +22,15 @@ jobs:
           cache: maven
       - name: Verify Core API
         working-directory: services/core-api
-        run: mvn --batch-mode --no-transfer-progress verify
+        run: ./mvnw --batch-mode --no-transfer-progress verify
+      - name: Assert PostgreSQL integration tests ran
+        working-directory: services/core-api
+        shell: python
+        run: |
+          import xml.etree.ElementTree as ET
+          report = ET.parse("target/surefire-reports/TEST-com.agentforge.core.PersistenceIntegrationTest.xml").getroot()
+          assert int(report.attrib["tests"]) == 2, report.attrib
+          assert int(report.attrib["skipped"]) == 0, report.attrib
+          assert int(report.attrib["errors"]) == 0, report.attrib
+          assert int(report.attrib["failures"]) == 0, report.attrib
+          print("PersistenceIntegrationTest ran:", report.attrib)

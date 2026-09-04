@@ -4,7 +4,8 @@ param(
     [switch]$Json,
     [switch]$Watch,
     [ValidateRange(1, 60)][int]$RefreshSeconds = 2,
-    [ValidateRange(30, 3600)][int]$StallThresholdSeconds = 120
+    [ValidateRange(30, 3600)][int]$StallThresholdSeconds = 120,
+    [string]$StateDirectory
 )
 
 Set-StrictMode -Version Latest
@@ -23,14 +24,15 @@ function Get-FileInfo([string]$Path) {
 }
 
 function Get-Snapshot {
-    $pidFile = Join-Path $PSScriptRoot ".bridge-monitor.pid"
-    $stateFile = Join-Path $PSScriptRoot ".review-loop-state.json"
+    $runtimeDirectory = if ([string]::IsNullOrWhiteSpace($StateDirectory)) { $PSScriptRoot } else { $StateDirectory }
+    $pidFile = Join-Path $runtimeDirectory ".bridge-monitor.pid"
+    $stateFile = Join-Path $runtimeDirectory ".review-loop-state.json"
     $lockFile = "$stateFile.lock"
-    $statusFile = Join-Path $PSScriptRoot ".pi-review-status.json"
-    $liveLog = Join-Path $PSScriptRoot ".pi-live-output.log"
-    $errorLog = Join-Path $PSScriptRoot ".pi-live-error.log"
-    $monitorLog = Join-Path $PSScriptRoot ".bridge-monitor.log"
-    $monitorErrorLog = Join-Path $PSScriptRoot ".bridge-monitor.error.log"
+    $statusFile = Join-Path $runtimeDirectory ".pi-review-status.json"
+    $liveLog = Join-Path $runtimeDirectory ".pi-live-output.log"
+    $errorLog = Join-Path $runtimeDirectory ".pi-live-error.log"
+    $monitorLog = Join-Path $runtimeDirectory ".bridge-monitor.log"
+    $monitorErrorLog = Join-Path $runtimeDirectory ".bridge-monitor.error.log"
 
     $monitorPid = $null
     if (Test-Path -LiteralPath $pidFile) {

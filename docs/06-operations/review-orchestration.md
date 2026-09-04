@@ -55,6 +55,18 @@ Pi 以无会话、无项目上下文自动加载、无工具的非交互模式�
 5. 检查报告是否包含 `REVIEW_RESULT:`；缺失时视为待修复并交由 Codex 研判。
 6. 第三次报告仍为 `NEEDS_FIX` 时查看人类介入记录，等待用户决定，不要强行第四次循环。
 
+用户明确授权定向修复后，第三轮上限仍不得重置或触发第四次自动审查。修复完成后必须由 Pi 的独立验证会话给出 `VALIDATION_RESULT: PASS`，Codex 将授权决定和报告路径回填人工介入记录，再把本机 `.review-loop-state.json` 中对应阶段同步为 `PASS`。该同步只关闭已经人工处置的历史阶段，不增加 attempt；报告是可审计依据，运行时状态文件不提交。
+
+## Pi 受限验证模式
+
+验证命令固定使用 `deepseek/deepseek-v4-pro`，启用 `read,grep,find,ls,powershell`。Pi 负责执行 Prompt 明确列出的项目测试，并只清理由该次测试明确创建的临时目录、构建测试数据或 Testcontainers 资源。禁止 `edit`、`write`、业务文件写入、Git 写操作、生产环境访问、敏感信息输出和 Flash。Codex 不执行测试，只根据 Pi 报告修改文档、实现或测试代码。执行过程持续写 `.pi-review-status.json` 和实时日志，便于 `Show-ReviewStatus.ps1 -Watch` 查看。
+
+入口为 `run-validation.ps1 -StageName <name> -PromptFile <path>`。Prompt 必须逐条列出允许执行的测试命令和清理范围；不得授予任意源码、文档或 Git 写入权限。
+
+Pi 的版本化职责与模式边界定义在 `scripts/agent-bridge/pi/AGENTS.md`。由于启动器使用 `--no-context-files` 防止环境提示词污染，`run-review.ps1` 与 `run-validation.ps1` 必须显式把该文件注入临时 Prompt；不得依赖 Pi 自动发现仓库指令。
+
+Pi 启动器从 `AGENTFORGE_PI_CMD` 读取；未设置时使用 PATH 中的 `pi.cmd`。个人绝对路径不得写入公开仓库。
+
 修复提交必须包含 trailer，例如：
 
 ```text

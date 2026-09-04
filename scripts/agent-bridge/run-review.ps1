@@ -25,11 +25,13 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $ProjectRoot
-$PiCmd = "C:\Users\86134\Documents\Codex\2026-09-03\bang\outputs\pi.cmd"
-if (-not (Test-Path -LiteralPath $PiCmd)) {
+$PiCmd = $env:AGENTFORGE_PI_CMD
+if ([string]::IsNullOrWhiteSpace($PiCmd) -or -not (Test-Path -LiteralPath $PiCmd)) {
     $PiInPath = Get-Command pi.cmd -ErrorAction SilentlyContinue
     if ($null -eq $PiInPath) {
         throw "未找到 Pi Agent 启动器 pi.cmd。"
@@ -117,8 +119,10 @@ if ([string]::IsNullOrWhiteSpace($OutputFile)) {
 }
 
 $TemplateFile = Join-Path $PSScriptRoot "prompts\stage-review-system.md"
+$PiInstructionsFile = Join-Path $PSScriptRoot "pi\AGENTS.md"
+$PiInstructions = Get-Content -Raw -LiteralPath $PiInstructionsFile -Encoding UTF8
 $TemplateRaw = Get-Content -Raw -LiteralPath $TemplateFile -Encoding UTF8
-$PromptContent = $TemplateRaw.Replace("{{STAGE_NAME}}", $StageName)
+$PromptContent = ($PiInstructions + "`n`n当前模式：REVIEW`n`n" + $TemplateRaw).Replace("{{STAGE_NAME}}", $StageName)
 $PromptContent = $PromptContent.Replace("{{ATTEMPT}}", $Attempt.ToString())
 $PromptContent = $PromptContent.Replace("{{HEAD_COMMIT}}", $TargetCommit)
 $PromptContent = $PromptContent.Replace("{{BASE_REF}}", $BaseCommit)

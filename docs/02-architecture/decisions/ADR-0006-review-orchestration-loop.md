@@ -12,7 +12,8 @@
 - 采用版本化阶段注册表保存已知历史交付的审查边界，采用本机 `.review-loop-state.json` 保存运行时状态。
 - 审查报告是项目证据，保存并归档到 `docs/08-reviews/`；运行时状态、PID、日志和恢复信号不提交。
 - `review-loop.ps1` 是 Codex 唤醒和 monitor 共用的唯一状态机；最多三次 `NEEDS_FIX`，第三次后进入 `HUMAN_REQUIRED`。
-- Pi 只读审查，Codex 负责判断和实现；不允许脚本自动套用 LLM 补丁。
+- Pi 负责独立审查与测试，Codex 负责判断、文档、实现和修复；不允许脚本自动套用 LLM 补丁。审查会话完全只读，验证会话仅启用 `read/grep/find/ls/powershell`，始终禁止 edit/write、业务文件写入和 Git 写操作。
+- Pi 可提出测试用例建议，由 Codex 在文档先行后落盘；随后由 Pi 执行测试和清理由该次测试明确创建的数据。测试命令、结果和清理动作进入变更记录与审查报告。
 
 ## 后果
 

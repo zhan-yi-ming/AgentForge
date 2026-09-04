@@ -20,6 +20,7 @@ $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $ProjectRoot
 $StagesFile = Join-Path $PSScriptRoot "review-stages.json"
 $RunReviewScript = Join-Path $PSScriptRoot "run-review.ps1"
+. (Join-Path $PSScriptRoot "review-state.ps1")
 if ([string]::IsNullOrWhiteSpace($StatePath)) {
     $StatePath = Join-Path $PSScriptRoot ".review-loop-state.json"
 }
@@ -231,8 +232,12 @@ $definitions = @($stageRegistry.historicalStages)
 $reviewFixStageIds = @(Get-ReviewFixStageIds $currentCommit)
 $automatic = if ($reviewFixStageIds.Count -eq 0) { Find-AutomaticStageDefinition $state $definitions $currentCommit } else { $null }
 if ($null -ne $automatic) { $definitions += [pscustomobject]$automatic }
+$changeRecordStageIds = @(Get-ChildItem -LiteralPath (Join-Path $ProjectRoot "docs\07-changes") -Filter "*.md" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^\d{4}-\d{2}-\d{2}-.+\.md$' } |
+    ForEach-Object { [System.IO.Path]::GetFileNameWithoutExtension($_.Name) -replace '^\d{4}-\d{2}-\d{2}-', '' })
 foreach ($fixStageId in $reviewFixStageIds) {
-    $knownStage = @($definitions | Where-Object { [string]$_.id -eq $fixStageId }).Count -gt 0 -or $state.stages.ContainsKey($fixStageId)
+    $knownStage = @($definitions | Where-Object { [string]$_.id -eq $fixStageId }).Count -gt 0 -or
+        $state.stages.ContainsKey($fixStageId) -or ($changeRecordStageIds -contains $fixStageId)
     if (-not $knownStage) { throw "Review-Fixes 引用了未知阶段：$fixStageId" }
 }
 
@@ -281,19 +286,18 @@ foreach ($definition in $definitions) {
         if ($null -eq $review -or [string]::IsNullOrWhiteSpace($review.ReportPath)) {
             throw "run-review 没有返回报告元数据。"
         }
-        $stage.attempts = $nextAttempt
-        $stage.lastReviewedCommit = $review.TargetCommit
-        $stage.lastReportPath = $review.ReportPath
-        $stage.lastFailure = $null
+        $outcome = ConvertTo-ReviewOutcome -Stage $stage -Result $review.Result -Attempt $nextAttempt `
+            -MaximumAttempts $maximumAttempts -TargetCommit $review.TargetCommit -ReportPath $review.ReportPath
+        $stage.attempts = $outcome.Attempts
+        $stage.lastReviewedCommit = $outcome.LastReviewedCommit
+        $stage.lastReportPath = $outcome.LastReportPath
+        $stage.lastFailure = $outcome.LastFailure
+        $stage.status = $outcome.Status
         $stage.updatedAt = (Get-Date).ToString("o")
-        if ($review.Result -eq "PASS") {
-            $stage.status = "RESOLVED"
-            $state.nextStageReady = $stage.id
-        } elseif ($nextAttempt -ge $maximumAttempts) {
-            $stage.status = "HUMAN_REQUIRED"
+        if (-not [string]::IsNullOrWhiteSpace($outcome.NextStageReady)) {
+            $state.nextStageReady = $outcome.NextStageReady
+        } elseif ($outcome.HumanIntervention) {
             $stage.humanInterventionPath = Write-HumanInterventionRecord $stage $maximumAttempts
-        } else {
-            $stage.status = "WAITING_FOR_CODEX_FIX"
         }
         Save-State $state
     } catch {
