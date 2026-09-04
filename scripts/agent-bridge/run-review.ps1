@@ -67,6 +67,18 @@ if ($ChangedFiles.Count -eq 0) {
     throw "审查范围没有文件变化：$BaseCommit .. $TargetCommit"
 }
 
+$SensitivePatterns = @{
+    "private-key" = '-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----'
+    "github-token" = '\bgh[pousr]_[A-Za-z0-9_]{20,}\b'
+    "aws-access-key" = '\bAKIA[0-9A-Z]{16}\b'
+    "openai-key" = '\bsk-[A-Za-z0-9]{20,}\b'
+}
+foreach ($patternName in $SensitivePatterns.Keys) {
+    if ([regex]::IsMatch($DiffText, $SensitivePatterns[$patternName])) {
+        throw "本地敏感信息扫描命中规则 $patternName；已拒绝将差异发送给 Pi。"
+    }
+}
+
 # 大型阶段提交会包含大量文档和脚手架。无界 diff 会让审查本身超时；保留首、中、尾
 # 三段证据，可覆盖不同目录的变更，同时完整文件清单与统计仍保留在提示词中。
 $MaximumDiffCharacters = 24000

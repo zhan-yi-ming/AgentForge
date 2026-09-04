@@ -23,6 +23,16 @@ $RunReviewScript = Join-Path $PSScriptRoot "run-review.ps1"
 if ([string]::IsNullOrWhiteSpace($StatePath)) {
     $StatePath = Join-Path $PSScriptRoot ".review-loop-state.json"
 }
+$StateLock = $null
+if (-not $DryRun) {
+    try {
+        $StateLock = [System.IO.File]::Open("$StatePath.lock", [System.IO.FileMode]::OpenOrCreate,
+            [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+    } catch [System.IO.IOException] {
+        [PSCustomObject]@{ OverallStatus = "BUSY"; StatePath = $StatePath; Actions = @() }
+        return
+    }
+}
 
 function ConvertTo-Hashtable($Value) {
     if ($null -eq $Value) { return $null }
@@ -64,10 +74,12 @@ function Save-State($State) {
     if (-not (Test-Path -LiteralPath $parent)) {
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
     }
+    $temporaryStatePath = "$StatePath.$PID.tmp"
     [System.IO.File]::WriteAllText(
-        $StatePath,
+        $temporaryStatePath,
         ($State | ConvertTo-Json -Depth 8),
         [System.Text.UTF8Encoding]::new($false))
+    Move-Item -LiteralPath $temporaryStatePath -Destination $StatePath -Force
 }
 
 function Ensure-Stage($State, $Definition) {
@@ -204,6 +216,8 @@ foreach ($definition in $definitions) {
     $baseRef = $null
     $isOtherRegisteredDelivery = @($definitions | Where-Object {
             ([string]$_.id -ne [string]$stage.id) -and ([string]$_.deliveryCommit -eq $currentCommit)
+        }).Count -gt 0 -or @($state.stages.Values | Where-Object {
+            ([string]$_.id -ne [string]$stage.id) -and ([string]$_.deliveryCommit -eq $currentCommit)
         }).Count -gt 0
     if ($stage.status -eq "PENDING_REVIEW") {
         $targetRef = $stage.deliveryCommit
@@ -267,8 +281,10 @@ if ($DryRun) {
     $overallStatus = "REVIEW_COMPLETED"
 }
 
-[PSCustomObject]@{
+$finalResult = [PSCustomObject]@{
     OverallStatus = $overallStatus
     StatePath = $StatePath
     Actions = $actions
 }
+if ($null -ne $StateLock) { $StateLock.Dispose() }
+$finalResult

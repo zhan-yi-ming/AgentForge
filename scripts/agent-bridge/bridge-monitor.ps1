@@ -9,8 +9,10 @@ param(
     [int]$PollIntervalSeconds = 15,
     [ValidateRange(60, 1800)]
     [int]$ReviewTimeoutSeconds = 300,
+    [ValidateRange(0.01, 720)]
     [double]$QuotaHours = 5.0,
     [switch]$TriggerQuotaWait,
+    [ValidateRange(0, 1440)]
     [double]$SimulationMinutes = 0,
     [switch]$Once
 )
@@ -43,21 +45,25 @@ function Handle-QuotaWait {
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
     $reportPath = if ($null -eq $latestReport) { "无" } else { "docs/08-reviews/$($latestReport.Name)" }
-    $content = @"
-# Codex 额度恢复与审查续跑指令
-
-- 恢复时间：$((Get-Date).ToString("o"))
-- 最新审查报告：$reportPath
-
-1. 运行 `scripts/agent-bridge/review-loop.ps1 -OnCodexWake`；
-2. 若状态为 `WAITING_FOR_CODEX_FIX`，读取报告、文档先行修复并测试；
-3. 若状态为 `HUMAN_REQUIRED`，停止并请求用户决定。
-"@
+    $content = @(
+        "# Codex 额度恢复与审查续跑指令"
+        ""
+        "- 恢复时间：$((Get-Date).ToString('o'))"
+        "- 最新审查报告：$reportPath"
+        ""
+        "1. 运行 review-loop.ps1 -OnCodexWake。"
+        "2. 若状态为 WAITING_FOR_CODEX_FIX，读取报告、文档先行修复并测试。"
+        "3. 若状态为 HUMAN_REQUIRED，停止并请求用户决定。"
+    ) -join [Environment]::NewLine
     [System.IO.File]::WriteAllText($ResumeSignalFile, $content, [System.Text.UTF8Encoding]::new($false))
 }
 
 function Invoke-ReviewLoop {
     $result = & $ReviewLoopScript -OnMonitorWake -TimeoutSeconds $ReviewTimeoutSeconds
+    if ($LASTEXITCODE -ne 0 -or $null -eq $result -or
+            [string]::IsNullOrWhiteSpace([string]$result.OverallStatus) -or $null -eq $result.Actions) {
+        throw "review-loop 未返回有效结果。"
+    }
     Write-Host "[review-loop] $($result.OverallStatus)" -ForegroundColor Cyan
     foreach ($action in $result.Actions) {
         Write-Host "  - $($action.Stage): $($action.Action)" -ForegroundColor Gray
