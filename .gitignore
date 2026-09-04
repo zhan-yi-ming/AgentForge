@@ -33,8 +33,12 @@ coverage/
 scripts/agent-bridge/.bridge-state.json
 scripts/agent-bridge/.review-loop-state.json
 scripts/agent-bridge/.review-loop-state.json.lock
+scripts/agent-bridge/.review-loop-state.json.*.tmp
 scripts/agent-bridge/.bridge-monitor.pid
 scripts/agent-bridge/.bridge-monitor.log
 scripts/agent-bridge/.bridge-monitor.error.log
+scripts/agent-bridge/.pi-review-status.json
+scripts/agent-bridge/.pi-live-output.log
+scripts/agent-bridge/.pi-live-error.log
 .codex-quota-exhausted
 .codex-resume-signal.md

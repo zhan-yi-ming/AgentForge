@@ -58,11 +58,12 @@ function ConvertTo-Hashtable($Value) {
 
 function Get-State {
     if (-not (Test-Path -LiteralPath $StatePath)) {
-        return @{ schemaVersion = 1; stages = @{} }
+        return @{ schemaVersion = 1; stages = @{}; nextStageReady = $null }
     }
     try {
         $state = ConvertTo-Hashtable (Get-Content -Raw -LiteralPath $StatePath | ConvertFrom-Json)
         if ($null -eq $state.stages) { $state.stages = @{} }
+        if (-not $state.ContainsKey("nextStageReady")) { $state.nextStageReady = $null }
         return $state
     } catch {
         throw "无法读取审查循环状态 $StatePath：$($_.Exception.Message)"
@@ -74,12 +75,22 @@ function Save-State($State) {
     if (-not (Test-Path -LiteralPath $parent)) {
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
     }
-    $temporaryStatePath = "$StatePath.$PID.tmp"
-    [System.IO.File]::WriteAllText(
-        $temporaryStatePath,
-        ($State | ConvertTo-Json -Depth 8),
-        [System.Text.UTF8Encoding]::new($false))
-    Move-Item -LiteralPath $temporaryStatePath -Destination $StatePath -Force
+    $temporaryStatePath = "$StatePath.$PID.$([guid]::NewGuid().ToString('N')).tmp"
+    try {
+        [System.IO.File]::WriteAllText(
+            $temporaryStatePath,
+            ($State | ConvertTo-Json -Depth 8),
+            [System.Text.UTF8Encoding]::new($false))
+        if (Test-Path -LiteralPath $StatePath) {
+            [System.IO.File]::Replace($temporaryStatePath, $StatePath, $null)
+        } else {
+            Move-Item -LiteralPath $temporaryStatePath -Destination $StatePath
+        }
+    } finally {
+        if (Test-Path -LiteralPath $temporaryStatePath) {
+            Remove-Item -LiteralPath $temporaryStatePath -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 function Ensure-Stage($State, $Definition) {
@@ -253,6 +264,7 @@ foreach ($definition in $definitions) {
         $stage.updatedAt = (Get-Date).ToString("o")
         if ($review.Result -eq "PASS") {
             $stage.status = "RESOLVED"
+            $state.nextStageReady = $stage.id
         } elseif ($nextAttempt -ge $maximumAttempts) {
             $stage.status = "HUMAN_REQUIRED"
             $stage.humanInterventionPath = Write-HumanInterventionRecord $stage $maximumAttempts
@@ -280,11 +292,15 @@ if ($DryRun) {
 } elseif ($actions | Where-Object { $_.Action -eq "REVIEW" }) {
     $overallStatus = "REVIEW_COMPLETED"
 }
+if (-not [string]::IsNullOrWhiteSpace([string]$state.nextStageReady)) {
+    $overallStatus = "NEXT_STAGE_READY"
+}
 
 $finalResult = [PSCustomObject]@{
     OverallStatus = $overallStatus
     StatePath = $StatePath
     Actions = $actions
+    NextStageReady = $state.nextStageReady
 }
 if ($null -ne $StateLock) { $StateLock.Dispose() }
 $finalResult

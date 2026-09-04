@@ -72,6 +72,8 @@ $SensitivePatterns = @{
     "github-token" = '\bgh[pousr]_[A-Za-z0-9_]{20,}\b'
     "aws-access-key" = '\bAKIA[0-9A-Z]{16}\b'
     "openai-key" = '\bsk-[A-Za-z0-9]{20,}\b'
+    "jwt" = '\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b'
+    "bearer-token" = '\bBearer\s+[A-Za-z0-9._~+/-]{16,}={0,2}\b'
 }
 foreach ($patternName in $SensitivePatterns.Keys) {
     if ([regex]::IsMatch($DiffText, $SensitivePatterns[$patternName])) {
@@ -128,27 +130,33 @@ $PromptContent = $PromptContent.Replace("{{PRIOR_REPORT}}", $PriorReportExcerpt)
 $PromptContent = $PromptContent.Replace("{{GIT_DIFF}}", $DiffText)
 
 $TempPromptFile = [System.IO.Path]::GetTempFileName() + ".md"
-$TempOutputFile = [System.IO.Path]::GetTempFileName() + ".out"
-$TempErrorFile = [System.IO.Path]::GetTempFileName() + ".err"
+$LiveOutputFile = Join-Path $PSScriptRoot ".pi-live-output.log"
+$LiveErrorFile = Join-Path $PSScriptRoot ".pi-live-error.log"
+$StatusFile = Join-Path $PSScriptRoot ".pi-review-status.json"
+$process = $null
+$finalStatus = "FAILED"
 
 try {
     [System.IO.File]::WriteAllText($TempPromptFile, $PromptContent, [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($LiveOutputFile, "", [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::WriteAllText($LiveErrorFile, "", [System.Text.UTF8Encoding]::new($false))
     $FileArg = "@$TempPromptFile"
     $process = Start-Process -FilePath $PiCmd `
         -ArgumentList @("--no-session", "--no-context-files", "--no-tools", "--thinking", "minimal", "--model", $Model, "-p", $FileArg) `
         -WorkingDirectory $ProjectRoot `
-        -RedirectStandardOutput $TempOutputFile `
-        -RedirectStandardError $TempErrorFile `
+        -RedirectStandardOutput $LiveOutputFile `
+        -RedirectStandardError $LiveErrorFile `
         -NoNewWindow `
         -PassThru
+    [System.IO.File]::WriteAllText($StatusFile, (([PSCustomObject]@{ status="RUNNING"; stage=$StageName; attempt=$Attempt; model=$Model; processId=$process.Id; startedAt=(Get-Date).ToString("o") }) | ConvertTo-Json), [System.Text.UTF8Encoding]::new($false))
 
     if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
         throw "Pi 审查在 $TimeoutSeconds 秒内未完成，已停止该次进程。"
     }
 
-    $PiOutput = Get-Content -Raw -LiteralPath $TempOutputFile -ErrorAction SilentlyContinue
-    $PiError = Get-Content -Raw -LiteralPath $TempErrorFile -ErrorAction SilentlyContinue
+    $PiOutput = Get-Content -Raw -LiteralPath $LiveOutputFile -ErrorAction SilentlyContinue
+    $PiError = Get-Content -Raw -LiteralPath $LiveErrorFile -ErrorAction SilentlyContinue
     if ($process.ExitCode -ne 0) {
         throw "Pi Agent 以退出码 $($process.ExitCode) 结束：$PiError"
     }
@@ -176,6 +184,7 @@ try {
 $PiOutput
 "@
     [System.IO.File]::WriteAllText($OutputFile, $Report, [System.Text.UTF8Encoding]::new($false))
+    $finalStatus = "COMPLETED"
     [PSCustomObject]@{
         StageName = $StageName
         Attempt = $Attempt
@@ -185,7 +194,8 @@ $PiOutput
         ReportPath = $OutputFile
     }
 } finally {
-    foreach ($temporaryFile in @($TempPromptFile, $TempOutputFile, $TempErrorFile)) {
+    [System.IO.File]::WriteAllText($StatusFile, (([PSCustomObject]@{ status=$finalStatus; stage=$StageName; attempt=$Attempt; model=$Model; processId=$(if($null -eq $process){$null}else{$process.Id}); finishedAt=(Get-Date).ToString("o") }) | ConvertTo-Json), [System.Text.UTF8Encoding]::new($false))
+    foreach ($temporaryFile in @($TempPromptFile)) {
         if (Test-Path -LiteralPath $temporaryFile) {
             Remove-Item -LiteralPath $temporaryFile -Force -ErrorAction SilentlyContinue
         }

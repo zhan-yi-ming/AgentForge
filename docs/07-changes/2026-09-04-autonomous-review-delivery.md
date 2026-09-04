@@ -31,3 +31,10 @@
 - 修复 bridge-monitor 的 here-string 解析错误，单次模式成功返回 `WAITING_FOR_CODEX_FIX`。
 - review-loop 使用独占锁和临时文件原子替换状态；DryRun 不会错误消耗历史 Day 1/Day 2 轮次。
 - run-review 在调用 Pi 前执行高信噪比敏感信息扫描；未改用 Flash。
+
+## Attempt 1 审查修复计划
+
+- 采纳 R-01/R-04：同卷状态更新改为 .NET `File.Replace`（首次创建使用 Move），临时文件使用 GUID 且 finally 清理；忽略全部状态临时文件。
+- 采纳 R-02：新增可重复的 PowerShell 回归测试，至少覆盖锁占用、状态写入、三次上限与敏感信息拒绝路径。
+- 采纳 R-03：增加权威的 `NEXT_STAGE_READY` 状态并由 heartbeat 消费；路线图实际实现仍只在当前阶段 PASS 后开始。
+- 采纳 R-05/R-06：恢复信号引用状态机结果而非 mtime；扫描补充 JWT 与 Bearer。
