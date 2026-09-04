@@ -17,3 +17,4 @@
 - `2026-09-03-repository-bootstrap-and-day-1.md`：项目治理、整体仓库骨架与 Day 1 Java 基础。
 - `2026-09-03-day-2-security-wiki-task.md`：公开仓库安全、JWT / RBAC、Wiki 与 Task。
 - `2026-09-03-codex-pi-bridge-and-code-review.md`：Codex 与 Pi Agent 代码审查桥接机制与 5 小时限额调度。
+- `2026-09-04-review-orchestration-loop.md`：Pi 审查自动触发、历史补审、修复复审与三次人工接管。

@@ -9,3 +9,4 @@ ADR 保存影响长期结构的决定。编号只增不减，Accepted 记录不�
 - `ADR-0003-java-modular-monolith.md`：Java 采用按业务能力分包的模块化单体。
 - `ADR-0004-versioned-database-migrations.md`：PostgreSQL schema 由 Flyway 版本化迁移管理。
 - `ADR-0005-security-jwt-and-passwords.md`：V1 使用 Spring Security、短期 HS256 JWT、BCrypt 与服务端所有权校验。
+- `ADR-0006-review-orchestration-loop.md`：Pi 审查循环使用本机状态、Git 报告和三次人工接管。

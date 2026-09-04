@@ -4,11 +4,14 @@
 
 ## 目录文件说明
 
-- `run-review.ps1`：执行代码审查的核心脚本。调用 Pi Agent (DeepSeek) 对指定 Git 提交或工作区改动进行**只读审查**，将标准报告写入 `docs/08-reviews/`。
-- `bridge-monitor.ps1`：常驻后台守护监控脚本。自动感知 Codex 提交阶段代码，自动拉起 Pi 审查；当 Codex 额度耗尽时自动进入 5 小时倒计时休眠，并在恢复后生成续跑指令。
+- `run-review.ps1`：执行单次、带超时的 Pi V4-pro 只读审查，输出独立报告。
+- `review-loop.ps1`：唯一的阶段状态机入口；负责历史补审、修复后复审、三次上限和人工接管。
+- `bridge-monitor.ps1`：常驻后台守护脚本，周期性调用 `review-loop.ps1`；当 Codex 额度耗尽时自动进入 5 小时倒计时休眠，并在恢复后生成续跑指令。
+- `Start-BridgeMonitor.ps1`：在当前开发工作树中隐藏启动并复用 monitor。
+- `review-stages.json`：Day 1、Day 2 的版本化历史审查边界。
 - `prompts/stage-review-system.md`：审查提示词与审查标准定义。
 
-守护进程生成的 `.bridge-state.json`、根目录 `.codex-quota-exhausted` 与
+守护进程生成的 `.review-loop-state.json`、`.bridge-monitor.pid`、`.bridge-monitor.log`、`.bridge-monitor.error.log`、根目录 `.codex-quota-exhausted` 与
 `.codex-resume-signal.md` 都属于本机运行时状态，已由 `.gitignore` 排除，不得提交到公开仓库。
 
 ## 审查模型硬约束
@@ -17,25 +20,24 @@
 
 ## 常见使用场景
 
-### 场景一：单次手动触发代码审查
-若想立即对当前代码改动或某个提交进行审查：
+### 场景一：Codex 消息唤醒或手动处理待审阶段
+
+Codex 每个新消息会调用以下命令。它补审 Day 1/Day 2，或处理当前阶段的下一次复审：
 
 ```powershell
-# 对当前最新一次提交进行审查（对比 HEAD~1 .. HEAD）
-.\scripts\agent-bridge\run-review.ps1
-
-# 对特定提交或特定阶段进行审查
-.\scripts\agent-bridge\run-review.ps1 -StageName "Day-2" -BaseRef "17b43f4" -TargetRef "HEAD"
+.\scripts\agent-bridge\review-loop.ps1 -OnCodexWake
+.\scripts\agent-bridge\review-loop.ps1 -DryRun
 ```
 
 ### 场景二：启动后台监听守护进程
-让桥接器在后台运行，自动监控 Codex 的开发节奏：
+
+在实际创建提交的工作树中运行一次：
 
 ```powershell
-.\scripts\agent-bridge\bridge-monitor.ps1
+.\scripts\agent-bridge\Start-BridgeMonitor.ps1
 ```
-- 当 Codex 在完成阶段开发并执行 `git commit` 后，监控器自动检测到新提交，立即调用 Pi Agent 生成报告，无需人工操作。
-- 报告自动落盘于 `docs/08-reviews/YYYY-MM-DD-review-<stage>.md`。
+
+它会为新提交触发同一循环；每次 attempt 使用独立报告，第三次仍为 `NEEDS_FIX` 时写出人工介入记录并停止。
 
 ### 场景三：Codex 5 小时额度用尽与自动等待续跑
 当 Codex 触发 OpenAI 5 小时速率限制或额度耗尽时：

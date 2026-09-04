@@ -28,6 +28,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.agentforge.core.shared.error.ConflictException;
+import com.agentforge.core.shared.error.ForbiddenException;
+import com.agentforge.core.shared.error.ResourceNotFoundException;
 import com.agentforge.core.shared.web.RequestIdFilter;
 import com.agentforge.core.task.api.TaskController;
 import com.agentforge.core.task.application.TaskService;
@@ -106,6 +108,24 @@ class ResourceApiTest {
                 .andExpect(status().isNoContent());
 
         verify(wikiPageService).delete(eq(projectId), eq(pageId), any(), eq(2L));
+    }
+
+    @Test
+    void wikiGetMapsNotFoundAndForbiddenContracts() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID pageId = UUID.randomUUID();
+        when(wikiPageService.get(eq(projectId), eq(pageId), any()))
+                .thenThrow(new ResourceNotFoundException("Wiki page was not found."));
+
+        mockMvc.perform(get("/api/v1/projects/{projectId}/wiki-pages/{pageId}", projectId, pageId)
+                        .with(userJwt(UUID.randomUUID())))
+                .andExpect(status().isNotFound());
+
+        when(wikiPageService.get(eq(projectId), eq(pageId), any()))
+                .thenThrow(new ForbiddenException("access denied"));
+        mockMvc.perform(get("/api/v1/projects/{projectId}/wiki-pages/{pageId}", projectId, pageId)
+                        .with(userJwt(UUID.randomUUID())))
+                .andExpect(status().isForbidden());
     }
 
     @Test

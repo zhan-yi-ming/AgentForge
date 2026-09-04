@@ -1,166 +1,181 @@
-﻿<#
+<#
 .SYNOPSIS
-    调用 Pi Agent (DeepSeek) 执行当前阶段代码的只读审查并生成标准审查报告。
+    使用 DeepSeek V4-pro 对一个 Git 交付范围执行有超时保护的只读审查。
 .DESCRIPTION
-    读取指定 Git 提交区间或当前工作区的 diff，结合系统提示词调用 Pi Agent
-    生成符合 AgentForge 规范的 Markdown 审查文档并写入 docs/08-reviews/。
-.PARAMETER StageName
-    审查阶段名称，如 "day-2-security-wiki-task"。未指定时自动从变更记录或最新提交信息推断。
-.PARAMETER BaseRef
-    对比基准（默认 HEAD~1）。可指定特定 commit sha、tag 或分支。
-.PARAMETER TargetRef
-    审查目标（默认 HEAD）。
-.PARAMETER OutputFile
-    指定审查文档输出路径。未指定时默认存储在 docs/08-reviews/YYYY-MM-DD-review-<StageName>.md。
-.PARAMETER Model
-    Pi 运行使用的模型，固定为 deepseek/deepseek-v4-pro；禁止使用 Flash。
+    将明确的 Git diff、文件清单与上一轮报告摘要写入临时提示词，再调用 Pi。
+    成功时写入一份独立报告，并把机器可读的 REVIEW_RESULT 返回给 review-loop。
 #>
 
 [CmdletBinding()]
 param(
+    [Parameter(Mandatory = $true)]
     [string]$StageName,
-    [string]$BaseRef = "HEAD~1",
-    [string]$TargetRef = "HEAD",
+    [string]$BaseRef,
+    [Parameter(Mandatory = $true)]
+    [string]$TargetRef,
+    [ValidateRange(1, 3)]
+    [int]$Attempt = 1,
+    [string]$PriorReportPath,
     [string]$OutputFile,
+    [ValidateRange(60, 1800)]
+    [int]$TimeoutSeconds = 300,
     [ValidateSet("deepseek/deepseek-v4-pro")]
     [string]$Model = "deepseek/deepseek-v4-pro"
 )
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Stop"
 
-$ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $ProjectRoot
-
-# 1. 寻找 Pi 启动脚本
 $PiCmd = "C:\Users\86134\Documents\Codex\2026-09-03\bang\outputs\pi.cmd"
-if (-not (Test-Path $PiCmd)) {
+if (-not (Test-Path -LiteralPath $PiCmd)) {
     $PiInPath = Get-Command pi.cmd -ErrorAction SilentlyContinue
-    if ($PiInPath) {
-        $PiCmd = $PiInPath.Source
-    } else {
-        Write-Error "未找到 Pi Agent 启动脚本 pi.cmd，请确认安装路径。"
-        exit 1
+    if ($null -eq $PiInPath) {
+        throw "未找到 Pi Agent 启动器 pi.cmd。"
     }
+    $PiCmd = $PiInPath.Source
 }
 
 $ModelCatalog = & $PiCmd --list-models "v4-pro" 2>&1
-$ModelCatalogExitCode = $LASTEXITCODE
-$ModelCatalogText = $ModelCatalog -join "`n"
-if ($ModelCatalogExitCode -ne 0 -or $ModelCatalogText -notmatch '(?m)\bdeepseek\b.*\bdeepseek-v4-pro\b') {
+if ($LASTEXITCODE -ne 0 -or (($ModelCatalog -join "`n") -notmatch '(?m)\bdeepseek\b.*\bdeepseek-v4-pro\b')) {
     throw "Pi 模型目录中未找到 deepseek/deepseek-v4-pro；审查已停止，禁止降级到 Flash。"
 }
 
-# 2. 检查 Git 提交与 Diff
-try {
-    $HeadCommit = git rev-parse --short $TargetRef 2>$null
-} catch {
-    $HeadCommit = "WORKING_TREE"
+$TargetCommit = (& git rev-parse --verify "$TargetRef^{commit}").Trim()
+if ($LASTEXITCODE -ne 0) {
+    throw "无法解析审查目标提交：$TargetRef"
 }
 
-if (-not $StageName) {
-    # 尝试从最近的 07-changes 文件名或最新提交提取
-    $LatestChange = Get-ChildItem (Join-Path $ProjectRoot "docs\07-changes\*.md") -Exclude "README.md" |
-                    Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if ($LatestChange) {
-        $StageName = [System.IO.Path]::GetFileNameWithoutExtension($LatestChange.Name)
-    } else {
-        $StageName = "stage-$HeadCommit"
+$IsRootReview = [string]::IsNullOrWhiteSpace($BaseRef)
+if (-not $IsRootReview) {
+    $BaseCommit = (& git rev-parse --verify "$BaseRef^{commit}").Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "无法解析审查基线提交：$BaseRef"
+    }
+    $ChangedFiles = @(& git diff --no-ext-diff --name-only "$BaseCommit..$TargetCommit")
+    $DiffStat = @(& git diff --no-ext-diff --stat "$BaseCommit..$TargetCommit")
+    $DiffText = (& git diff --no-ext-diff --unified=20 "$BaseCommit..$TargetCommit") -join "`n"
+} else {
+    $BaseCommit = "<root>"
+    $ChangedFiles = @(& git diff --root --no-ext-diff --name-only $TargetCommit)
+    $DiffStat = @(& git diff --root --no-ext-diff --stat $TargetCommit)
+    $DiffText = (& git diff --root --no-ext-diff --unified=20 $TargetCommit) -join "`n"
+}
+
+if ($ChangedFiles.Count -eq 0) {
+    throw "审查范围没有文件变化：$BaseCommit .. $TargetCommit"
+}
+
+# 大型阶段提交会包含大量文档和脚手架。无界 diff 会让审查本身超时；保留首、中、尾
+# 三段证据，可覆盖不同目录的变更，同时完整文件清单与统计仍保留在提示词中。
+$MaximumDiffCharacters = 24000
+$DiffWasTruncated = $DiffText.Length -gt $MaximumDiffCharacters
+if ($DiffWasTruncated) {
+    $FragmentLength = [int]($MaximumDiffCharacters / 3)
+    $MiddleStart = [Math]::Max(0, [int](($DiffText.Length - $FragmentLength) / 2))
+    $TailStart = $DiffText.Length - $FragmentLength
+    $DiffText = @(
+        "--- diff evidence: beginning ---"
+        $DiffText.Substring(0, $FragmentLength)
+        "--- diff evidence: middle ---"
+        $DiffText.Substring($MiddleStart, $FragmentLength)
+        "--- diff evidence: end ---"
+        $DiffText.Substring($TailStart, $FragmentLength)
+    ) -join "`n"
+}
+
+$PriorReportExcerpt = "无"
+if (-not [string]::IsNullOrWhiteSpace($PriorReportPath) -and (Test-Path -LiteralPath $PriorReportPath)) {
+    $PriorReportExcerpt = Get-Content -Raw -LiteralPath $PriorReportPath
+    if ($PriorReportExcerpt.Length -gt 30000) {
+        $PriorReportExcerpt = $PriorReportExcerpt.Substring(0, 30000)
     }
 }
 
 $Today = Get-Date -Format "yyyy-MM-dd"
 $ReviewsDir = Join-Path $ProjectRoot "docs\08-reviews"
-if (-not (Test-Path $ReviewsDir)) {
+if (-not (Test-Path -LiteralPath $ReviewsDir)) {
     New-Item -ItemType Directory -Path $ReviewsDir -Force | Out-Null
 }
-
-if (-not $OutputFile) {
-    $OutputFile = Join-Path $ReviewsDir "$Today-review-$StageName.md"
+if ([string]::IsNullOrWhiteSpace($OutputFile)) {
+    $OutputFile = Join-Path $ReviewsDir "$Today-review-$StageName-attempt-$Attempt.md"
 }
 
-Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "[AgentForge Review Bridge] 启动 Pi Agent 代码审查" -ForegroundColor Green
-Write-Host "对比范围: $BaseRef .. $TargetRef ($HeadCommit)" -ForegroundColor Yellow
-Write-Host "审查阶段: $StageName" -ForegroundColor Yellow
-Write-Host "输出文件: $OutputFile" -ForegroundColor Yellow
-Write-Host "审查模型: $Model" -ForegroundColor Yellow
-Write-Host "==========================================================" -ForegroundColor Cyan
-
-# 验证 BaseRef 是否存在
-$BaseExists = $false
-try {
-    $null = git rev-parse --verify "$BaseRef" 2>&1
-    if ($LASTEXITCODE -eq 0) { $BaseExists = $true }
-} catch {
-    $BaseExists = $false
-}
-
-$ChangedFiles = @()
-$DiffStat = @()
-
-if ($BaseExists) {
-    $ChangedFiles = git diff --name-only "$BaseRef..$TargetRef" 2>&1
-    $DiffStat = git diff --stat "$BaseRef..$TargetRef" 2>&1
-}
-
-if ((-not $ChangedFiles) -or (-not $BaseExists)) {
-    Write-Host "提示: 正在对比当前工作区改动 (git diff / git status)..." -ForegroundColor Yellow
-    $ChangedFiles = git status --short 2>&1
-    $DiffStat = git diff --stat 2>&1
-}
-
-# 3. 构造审查专用 Prompt
 $TemplateFile = Join-Path $PSScriptRoot "prompts\stage-review-system.md"
-if (Test-Path $TemplateFile) {
-    $TemplateRaw = Get-Content $TemplateFile -Raw -Encoding UTF8
-} else {
-    $TemplateRaw = "请作为 AgentForge 的独立代码审查员（Reviewer，依托 DeepSeek），执行对当前阶段代码的深度只读审查。"
-}
-
+$TemplateRaw = Get-Content -Raw -LiteralPath $TemplateFile -Encoding UTF8
 $PromptContent = $TemplateRaw.Replace("{{STAGE_NAME}}", $StageName)
-$PromptContent = $PromptContent.Replace("{{HEAD_COMMIT}}", $HeadCommit)
-$PromptContent = $PromptContent.Replace("{{BASE_REF}}", $BaseRef)
-$PromptContent = $PromptContent.Replace("{{TARGET_REF}}", $TargetRef)
+$PromptContent = $PromptContent.Replace("{{ATTEMPT}}", $Attempt.ToString())
+$PromptContent = $PromptContent.Replace("{{HEAD_COMMIT}}", $TargetCommit)
+$PromptContent = $PromptContent.Replace("{{BASE_REF}}", $BaseCommit)
+$PromptContent = $PromptContent.Replace("{{TARGET_REF}}", $TargetCommit)
+$PromptContent = $PromptContent.Replace("{{CHANGED_FILES}}", ($ChangedFiles -join "`n"))
 $PromptContent = $PromptContent.Replace("{{DIFF_STAT}}", ($DiffStat -join "`n"))
+$PromptContent = $PromptContent.Replace("{{DIFF_TRUNCATED}}", $(if ($DiffWasTruncated) { "是；证据为 diff 的首、中、尾采样，完整文件清单与统计仍在上方。" } else { "否。" }))
+$PromptContent = $PromptContent.Replace("{{PRIOR_REPORT}}", $PriorReportExcerpt)
+$PromptContent = $PromptContent.Replace("{{GIT_DIFF}}", $DiffText)
 
 $TempPromptFile = [System.IO.Path]::GetTempFileName() + ".md"
-[System.IO.File]::WriteAllText($TempPromptFile, $PromptContent, [System.Text.Encoding]::UTF8)
-
-# 4. 执行 Pi Agent 审查
-Write-Host "正在调用 Pi Agent (DeepSeek) 分析代码中，请稍候..." -ForegroundColor Cyan
-
-$TempOutputFile = [System.IO.Path]::GetTempFileName() + ".txt"
+$TempOutputFile = [System.IO.Path]::GetTempFileName() + ".out"
+$TempErrorFile = [System.IO.Path]::GetTempFileName() + ".err"
 
 try {
-    # 启用只读工具：read,grep,find,ls，管道传递空字符以关闭 stdin 避免非 TTY 挂起
-    $FileArg = "@" + $TempPromptFile
-    "" | & $PiCmd --tools read,grep,find,ls --model $Model -p $FileArg 2>&1 |
-            Out-File -FilePath $TempOutputFile -Encoding utf8
-    $PiExitCode = $LASTEXITCODE
+    [System.IO.File]::WriteAllText($TempPromptFile, $PromptContent, [System.Text.UTF8Encoding]::new($false))
+    $FileArg = "@$TempPromptFile"
+    $process = Start-Process -FilePath $PiCmd `
+        -ArgumentList @("--no-session", "--no-context-files", "--no-tools", "--thinking", "minimal", "--model", $Model, "-p", $FileArg) `
+        -WorkingDirectory $ProjectRoot `
+        -RedirectStandardOutput $TempOutputFile `
+        -RedirectStandardError $TempErrorFile `
+        -NoNewWindow `
+        -PassThru
 
-    if ($PiExitCode -ne 0) {
-        throw "Pi Agent 以退出码 $PiExitCode 结束。"
+    if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        throw "Pi 审查在 $TimeoutSeconds 秒内未完成，已停止该次进程。"
     }
 
-    $PiOutput = Get-Content $TempOutputFile -Raw -Encoding utf8
+    $PiOutput = Get-Content -Raw -LiteralPath $TempOutputFile -ErrorAction SilentlyContinue
+    $PiError = Get-Content -Raw -LiteralPath $TempErrorFile -ErrorAction SilentlyContinue
+    if ($process.ExitCode -ne 0) {
+        throw "Pi Agent 以退出码 $($process.ExitCode) 结束：$PiError"
+    }
     if ([string]::IsNullOrWhiteSpace($PiOutput)) {
-        throw "Pi Agent 未返回审查报告内容。"
+        throw "Pi Agent 未返回审查报告内容：$PiError"
     }
 
-    # 提取 Markdown 报告主体
-    if ($PiOutput -match '(?s)(# 代码审查报告.*)') {
-        $ReportMarkdown = $matches[1]
-    } else {
-        $ReportMarkdown = $PiOutput
+    $Result = "NEEDS_FIX"
+    if ($PiOutput -match '(?im)^\s*REVIEW_RESULT:\s*(PASS|NEEDS_FIX)\s*$') {
+        $Result = $matches[1].ToUpperInvariant()
     }
 
-    [System.IO.File]::WriteAllText($OutputFile, $ReportMarkdown, [System.Text.Encoding]::UTF8)
+    $Report = @"
+# Pi 代码审查报告：$StageName / Attempt $Attempt
 
-    Write-Host "审查完成！报告已保存至: $OutputFile" -ForegroundColor Green
-} catch {
-    throw "Pi Agent 执行审查失败: $($_.Exception.Message)"
+- 日期：$Today
+- 审查阶段：$StageName
+- 审查对象：$TargetCommit（基线：$BaseCommit）
+- 审查工具：Pi Agent（DeepSeek V4-pro，只读）
+- REVIEW_RESULT: $Result
+- Pi 进程超时上限：$TimeoutSeconds 秒
+
+---
+
+$PiOutput
+"@
+    [System.IO.File]::WriteAllText($OutputFile, $Report, [System.Text.UTF8Encoding]::new($false))
+    [PSCustomObject]@{
+        StageName = $StageName
+        Attempt = $Attempt
+        BaseCommit = $BaseCommit
+        TargetCommit = $TargetCommit
+        Result = $Result
+        ReportPath = $OutputFile
+    }
 } finally {
-    if (Test-Path $TempPromptFile) { Remove-Item $TempPromptFile -Force -ErrorAction SilentlyContinue }
-    if (Test-Path $TempOutputFile) { Remove-Item $TempOutputFile -Force -ErrorAction SilentlyContinue }
+    foreach ($temporaryFile in @($TempPromptFile, $TempOutputFile, $TempErrorFile)) {
+        if (Test-Path -LiteralPath $temporaryFile) {
+            Remove-Item -LiteralPath $temporaryFile -Force -ErrorAction SilentlyContinue
+        }
+    }
 }

@@ -19,10 +19,12 @@
 4. 重新运行关键验证，确认记录与实际结果一致。
 5. AI 创建提交，例如 `feat(core-api): add authenticated wiki and task workflows`；正文详细列出文档、接口、迁移、安全、测试和限制。
 6. AI 推送到已确认分支并核对远程 commit；禁止 force push。
-7. 阶段审查（Pi Agent）：由 Pi Agent (DeepSeek) 自动或手动拉起只读审查，对比阶段提交与 diff，生成 `docs/08-reviews/YYYY-MM-DD-review-day-<X>.md` 审查报告。
-8. Codex 评估与修复：Codex 读取审查报告，评估 Issue 并实施必要修复与测试回填；若遇 5 小时限额则等待调度器倒计时唤醒后处理。
-9. AI 汇报完成内容、审查结果、验证与限制、用户介入项和下一阶段计划。
-10. 用户明确确认后，AI 才进入下一阶段。
+7. 提交前确认该工作树的 bridge monitor 已启动；它会在提交后独立调用 Pi V4-pro。Codex 本身仍只允许推送和核验后停止。
+8. 阶段审查（Pi Agent）：Pi 为该阶段生成独立 `docs/08-reviews/YYYY-MM-DD-review-<stage>-attempt-<n>.md` 报告。Day 1/Day 2 等历史阶段由 Codex 下次消息唤醒时补审。
+9. Codex 评估与修复：收到 `NEEDS_FIX` 后先回填报告和变更记录，再实施修复与测试；后续提交触发下一次 attempt。
+10. 第三次审查仍有问题时，自动循环停止并等待人工决定；Pi 失败不消耗 attempt，也不得切换 Flash。
+11. AI 汇报完成内容、审查结果、验证与限制、用户介入项和下一阶段计划。
+12. 用户明确确认后，AI 才进入下一阶段。
 
 ## 提交后汇报格式
 

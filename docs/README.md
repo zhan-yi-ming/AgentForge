@@ -55,6 +55,7 @@
 ### `06-operations/`：系统如何部署与排错
 
 - `local-stack.md`：本地 PostgreSQL/Redis 容器、健康检查和数据清理。
+- `review-orchestration.md`：Pi 审查 monitor、状态文件和故障排查。
 
 ### `07-changes/`：每次变化的证据链
 
@@ -63,7 +64,7 @@
 
 ### `08-reviews/`：代码审查中心
 
-- `README.md`：Pi Agent (DeepSeek) 审查与 Codex 修复评估的闭环规范。
+- `README.md`：Pi Agent (DeepSeek) 审查与 Codex 修复评估的闭环规范、三次修复循环和人工接管边界。
 - 保存各阶段交付物的结构化代码审查报告（`YYYY-MM-DD-review-day-<X>.md`）。
 
 ### `templates/`：写文档时复用

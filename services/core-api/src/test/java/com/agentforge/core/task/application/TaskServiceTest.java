@@ -115,7 +115,7 @@ class TaskServiceTest {
         assertThat(updated.title()).isEqualTo("Updated task");
         assertThat(updated.description()).isEqualTo("done");
         assertThat(updated.status()).isEqualTo(TaskStatus.DONE);
-        service.delete(projectId, taskId, actor, 0);
+        service.delete(projectId, taskId, actor, updated.version());
         verify(tasks).delete(task);
     }
 

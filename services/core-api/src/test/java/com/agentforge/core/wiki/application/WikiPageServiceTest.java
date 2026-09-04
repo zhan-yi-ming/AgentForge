@@ -98,7 +98,7 @@ class WikiPageServiceTest {
 
         assertThat(updated.title()).isEqualTo("Updated");
         assertThat(updated.content()).isEqualTo("new");
-        service.delete(projectId, pageId, actor, 0);
+        service.delete(projectId, pageId, actor, updated.version());
         verify(wikiPages).delete(page);
     }
 

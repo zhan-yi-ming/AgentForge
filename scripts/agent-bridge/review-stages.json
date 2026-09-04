@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "maximumAttempts": 3,
+  "historicalStages": [
+    {
+      "id": "v1-day-1",
+      "displayName": "V1 / Day 1",
+      "baseRef": null,
+      "deliveryCommit": "17b43f44adcb0a5b9682f7995017973d7b8e3e54"
+    },
+    {
+      "id": "v1-day-2",
+      "displayName": "V1 / Day 2",
+      "baseRef": "17b43f44adcb0a5b9682f7995017973d7b8e3e54",
+      "deliveryCommit": "8ad81498470bf265cc58516068bc095e2ebe5fa0"
+    }
+  ]
+}
