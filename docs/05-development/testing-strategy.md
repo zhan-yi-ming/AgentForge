@@ -26,6 +26,9 @@
 - Pi 执行 Agent Service pytest，覆盖 health、内部 token、输入校验、conversationId 与 graph 输出。
 - Pi 执行 Core API verify，覆盖项目授权先于下游调用、请求字段映射和下游失败 503。
 - Java/Python 字段名、UUID、requestId 和 400/401/403/503 契约一致。
+- Pi 在隔离 Python 环境启动真实 uvicorn，并设置 `AGENTFORGE_AGENT_CONTRACT_TEST=true` 后运行 Java verify，验证真实 HTTP header 与 JSON 往返；普通 Java 测试环境不依赖 Python 进程。
+- 跨进程契约测试通过 Spring 测试上下文取得 Boot 自动配置的 `RestClient.Builder`，不得以静态裸 builder 代替生产序列化配置。
+- Day 3 收口及后续阶段的 Pi 验证必须先确认 Docker daemon 可用，并真实执行 PostgreSQL/Testcontainers 测试；不得把容器测试跳过视为通过。Pi 报告需记录容器测试数量、跳过数和清理状态。
 - 真实 token/LLM key 不进入仓库或测试输出。
 
 ## 命令
@@ -37,7 +40,7 @@ mvnw.cmd test
 mvnw.cmd verify
 ```
 
-构建和数据库验证的实际结果写入 `docs/07-changes/` 当前记录。若环境缺少 Java 21 或容器不可用，记录为“未运行”和具体原因。
+构建和数据库验证的实际结果写入 `docs/07-changes/` 当前记录。Docker 已作为阶段验证前置条件；若 daemon 不可用，Pi 必须把本轮标记为 `NEEDS_FIX`，不得以“未运行”或跳过容器测试交付。
 
 ## 测试命名
 

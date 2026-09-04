@@ -40,12 +40,22 @@ Pi 第二轮复验中 Python 5 项全部通过；Java 在 testCompile 阶段发�
 
 ## 最终验证结果
 
-- Pi DeepSeek V4-pro 报告 `VALIDATION_RESULT: PASS`：`docs/08-reviews/2026-09-04-review-v1-day-3-validation-3.md`。
+- 原始 Day 3 验证报告为 `docs/08-reviews/2026-09-04-review-v1-day-3-validation-3.md`；提交后 Attempt 1 的最终整批复验报告为 `docs/08-reviews/2026-09-04-review-day3-attempt1-batch-revalidation.md`，Pi DeepSeek V4-pro 给出 `VALIDATION_RESULT: PASS`。
 - Python 3.14.3：pytest 6 项全部通过，0 失败、0 跳过。
-- Core API：50 项，0 失败、0 错误；2 项 PostgreSQL Testcontainers 因本机 Docker 不可用跳过。
-- Java/Python JSON、内部 token、request ID、授权先于下游、400/401/403/404/503、V1 边界和敏感信息扫描均通过。
-- Pi 已清理 `.venv`、Python/pytest cache 与临时测试目录，Git 状态未被测试污染。
+- Core API：51 项，0 失败、0 错误、0 跳过；其中真实 Java→uvicorn HTTP 契约 1 项通过，PostgreSQL 17 Testcontainers 2 项通过。
+- Docker daemon 29.5.3、Java/Python JSON、内部 token、request ID、授权先于下游、400/401/403/404/503、V1 边界和敏感信息扫描均通过。
+- Pi 已停止 uvicorn，确认 PostgreSQL/Ryuk 容器释放，并清理 `.venv`、Python/pytest cache 与临时测试目录；Git 状态未被测试污染。
 
 ## 已知限制与后续
 
-Day 3 没有启动真实 Python 进程做 Java HTTP 往返；当前由双方 DTO、Python API 测试和 Java service/API 测试保证契约。真实跨进程联调可在 Day 4 RAG 链路前作为批次门禁补充。RestClient 使用独立 Jackson 默认值，但 Python 接受 null conversationId；生产 requestId 由过滤器保证非空。
+Day 3 仍使用 deterministic responder，不包含 RAG、真实 LLM 或会话持久化，这些边界保持不变。此前缺失的真实跨进程联调、Boot RestClient builder、requestId 旁路兜底及 Docker/PostgreSQL 实测均已在 Attempt 1 整批修复中关闭。
+
+## 提交后 Pi Attempt 1 集中反馈
+
+Pi 一次性列出三项：缺少 Java 调用真实 uvicorn 的跨进程契约测试、RestClient 未复用 Spring Boot builder、requestId 对旁路调用缺少兜底。三项统一采纳：增加由环境变量显式开启的 Java HTTP 契约测试与 Pi 启停 uvicorn 的门禁；配置改为注入 `RestClient.Builder`；客户端为空 requestId 时生成 UUID 并在 header/body 中使用同一值。
+
+## Attempt 1 整批修复验证口径
+
+用户已确认本机 Docker daemon 可用。本轮 Pi V4-pro 复验必须一次性完成 Python pytest、真实 uvicorn 的 Java HTTP 契约测试、Core API `verify` 和 PostgreSQL/Testcontainers 集成测试。`PersistenceIntegrationTest` 的两项数据库测试及 HTTP 契约测试均不得跳过；若 Docker 不可用或任一门禁未实际执行，本轮结果必须为 `NEEDS_FIX`。Pi 还需停止本轮启动的 uvicorn、确认 Testcontainers 资源已释放，并清理 Python 隔离环境与缓存。
+
+Pi 首次执行上述强门禁后确认 Docker 与两项 PostgreSQL 测试通过，但真实 HTTP 契约暴露出 JDK HttpClient 对明文 uvicorn 发起 h2c upgrade 时请求体为空，另确认契约测试使用裸 `RestClient.builder()`，没有覆盖 Boot 的生产序列化配置。两项作为同一整批继续修复：客户端显式固定 HTTP/1.1；契约测试以最小 Spring 上下文加载 Jackson、HTTP message converter 与 RestClient 自动配置，并注入实际配置生成的客户端。修复后由 Pi 再次统一执行原完整门禁。

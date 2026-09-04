@@ -13,13 +13,14 @@ import org.springframework.web.client.RestClient;
 public class AgentServiceConfiguration {
 
     @Bean
-    RestClient agentServiceRestClient(AgentServiceProperties properties) {
+    RestClient agentServiceRestClient(RestClient.Builder builder, AgentServiceProperties properties) {
         HttpClient httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(properties.connectTimeout())
                 .build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(properties.readTimeout());
-        return RestClient.builder()
+        return builder.clone()
                 .baseUrl(properties.baseUrl().toString())
                 .defaultHeader("X-AgentForge-Internal-Token", properties.internalToken())
                 .requestFactory(requestFactory)

@@ -3,6 +3,7 @@ package com.agentforge.core.agent.infrastructure;
 import java.util.UUID;
 
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -26,11 +27,14 @@ public class HttpAgentServiceClient implements AgentServiceClient {
             String message,
             UUID conversationId,
             String requestId) {
+        String effectiveRequestId = StringUtils.hasText(requestId)
+                ? requestId
+                : UUID.randomUUID().toString();
         try {
             AgentChatResult response = restClient.post()
                     .uri("/internal/v1/chat")
-                    .header("X-Request-Id", requestId)
-                    .body(new InternalChatRequest(projectId, userId, message, conversationId, requestId))
+                    .header("X-Request-Id", effectiveRequestId)
+                    .body(new InternalChatRequest(projectId, userId, message, conversationId, effectiveRequestId))
                     .retrieve()
                     .body(AgentChatResult.class);
             if (response == null) {
