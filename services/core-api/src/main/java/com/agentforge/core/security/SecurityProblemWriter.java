@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 import com.agentforge.core.shared.web.RequestIdFilter;
 
 @Component
-class SecurityProblemWriter {
+public class SecurityProblemWriter {
 
     private final ObjectMapper objectMapper;
 

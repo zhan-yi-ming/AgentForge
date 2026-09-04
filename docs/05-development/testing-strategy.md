@@ -21,6 +21,13 @@
 - Wiki / Task CRUD、默认值、嵌套项目匹配和乐观锁冲突有测试。
 - 密钥、token 与 passwordHash 不出现在 HTTP 响应、测试快照或提交内容中。
 
+## Day 3 质量门槛
+
+- Pi 执行 Agent Service pytest，覆盖 health、内部 token、输入校验、conversationId 与 graph 输出。
+- Pi 执行 Core API verify，覆盖项目授权先于下游调用、请求字段映射和下游失败 503。
+- Java/Python 字段名、UUID、requestId 和 400/401/403/503 契约一致。
+- 真实 token/LLM key 不进入仓库或测试输出。
+
 ## 命令
 
 在 `services/core-api`：

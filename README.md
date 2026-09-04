@@ -7,8 +7,9 @@
 - 已建立文档先行制度和可追溯文档目录。
 - 已设计 React Web、Java Core API、Python Agent Service 的单仓库边界。
 - 已推送：V1 Day 1，Java 21 + Spring Boot + PostgreSQL 的 User / Project 基础。
-- 已完成：V1 Day 2，登录鉴权、Wiki / Task 和公开仓库安全门禁；当前处于阶段交付检查点。
-- 尚未实现：Python Agent、RAG、Tool Calling 与前端页面。
+- 已完成：V1 Day 2，登录鉴权、Wiki / Task 和公开仓库安全门禁。
+- 已完成：V1 Day 3，FastAPI + LangGraph Chat 与 Java-Python 契约，并通过 Pi 集中验证。
+- 尚未实现：RAG、Tool Calling 与前端页面。
 
 ## 先读文档
 
@@ -16,7 +17,7 @@
 - [产品概览](docs/01-product/product-overview.md)
 - [系统架构](docs/02-architecture/system-overview.md)
 - [本地开发](docs/05-development/local-development.md)
-- [当前变更](docs/07-changes/2026-09-03-day-2-security-wiki-task.md)
+- [当前变更](docs/07-changes/2026-09-04-day-3-agent-service-chat.md)
 - [公开仓库安全](docs/00-governance/public-repository-security.md)
 
 任何修改都必须先遵守 [AGENTS.md](AGENTS.md) 的文档先行规则。

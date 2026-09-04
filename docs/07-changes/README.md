@@ -14,6 +14,7 @@
 
 ## 索引
 
+- `2026-09-04-day-3-agent-service-chat.md`：FastAPI/LangGraph Chat 与 Java-Python 调用契约。
 - `2026-09-04-review-state-only-stage-resume.md`：修复仅存在于运行时状态的阶段无法消费显式 `Review-Fixes` trailer 的调度缺口。
 - `2026-09-04-day1-day2-final-review-evidence.md`：补齐第三轮 Pi 报告要求的验证证据，并定义 Pi 受限测试执行职责。
 - `2026-09-03-repository-bootstrap-and-day-1.md`：项目治理、整体仓库骨架与 Day 1 Java 基础。

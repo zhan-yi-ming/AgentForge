@@ -44,7 +44,7 @@
 ### `04-api/`：服务之间如何通信
 
 - `core-api.md`：Java Core API 的 HTTP 契约、错误模型和版本规则。
-- 后续会补充 Java 与 Python Agent 之间的接口文档。
+- `agent-service.md`：Day 3 Java 与 Python Agent 之间的 Chat 契约。
 
 ### `05-development/`：开发者如何运行和验证
 

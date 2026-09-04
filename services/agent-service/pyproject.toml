@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agentforge-agent-service"
+version = "0.1.0"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "langgraph>=1.0,<2",
+  "pydantic-settings>=2.7,<3",
+  "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+test = ["httpx>=0.28,<1", "pytest>=8.3,<9", "pytest-env>=1.1,<2"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agentforge_agent"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+env = ["AGENTFORGE_AGENT_INTERNAL_TOKEN=test-only-internal-token"]

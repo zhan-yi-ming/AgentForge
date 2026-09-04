@@ -64,6 +64,13 @@ public class ApiExceptionHandler {
                 request);
     }
 
+    @ExceptionHandler(ServiceUnavailableException.class)
+    ResponseEntity<ProblemDetail> handleServiceUnavailable(
+            ServiceUnavailableException exception,
+            HttpServletRequest request) {
+        return response(HttpStatus.SERVICE_UNAVAILABLE, "service-unavailable", exception.getMessage(), request);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ProblemDetail> handleValidation(
             MethodArgumentNotValidException exception,

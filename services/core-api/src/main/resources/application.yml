@@ -24,6 +24,11 @@ agentforge:
       secret: ${AGENTFORGE_JWT_SECRET}
       issuer: ${AGENTFORGE_JWT_ISSUER:https://agentforge.local/core-api}
       ttl: ${AGENTFORGE_JWT_TTL:PT30M}
+  agent-service:
+    base-url: ${AGENTFORGE_AGENT_SERVICE_URL:http://localhost:8000}
+    internal-token: ${AGENTFORGE_AGENT_INTERNAL_TOKEN}
+    connect-timeout: ${AGENTFORGE_AGENT_CONNECT_TIMEOUT:PT2S}
+    read-timeout: ${AGENTFORGE_AGENT_READ_TIMEOUT:PT15S}
 
 server:
   port: ${AGENTFORGE_SERVER_PORT:8080}

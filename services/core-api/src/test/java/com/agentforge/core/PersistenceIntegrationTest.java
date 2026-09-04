@@ -30,7 +30,8 @@ import com.agentforge.core.wiki.domain.WikiPage;
         properties = {
             "agentforge.security.jwt.secret=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
             "agentforge.security.jwt.issuer=https://agentforge.test/core-api",
-            "agentforge.security.jwt.ttl=PT30M"
+            "agentforge.security.jwt.ttl=PT30M",
+            "agentforge.agent-service.internal-token=test-only-internal-token"
         })
 class PersistenceIntegrationTest {
 
