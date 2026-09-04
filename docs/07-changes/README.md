@@ -18,3 +18,4 @@
 - `2026-09-03-day-2-security-wiki-task.md`：公开仓库安全、JWT / RBAC、Wiki 与 Task。
 - `2026-09-03-codex-pi-bridge-and-code-review.md`：Codex 与 Pi Agent 代码审查桥接机制与 5 小时限额调度。
 - `2026-09-04-review-orchestration-loop.md`：Pi 审查自动触发、历史补审、修复复审与三次人工接管。
+- `2026-09-04-review-automation-recovery-and-observability.md`：修复 Windows 永久锁、阶段关联、权威工作树和 Pi 实时进度展示。

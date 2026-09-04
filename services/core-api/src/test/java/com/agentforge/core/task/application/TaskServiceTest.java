@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
@@ -117,6 +118,21 @@ class TaskServiceTest {
         assertThat(updated.status()).isEqualTo(TaskStatus.DONE);
         service.delete(projectId, taskId, actor, updated.version());
         verify(tasks).delete(task);
+        verify(projectAccess, times(2)).requireAccess(projectId, actor);
+    }
+
+    @Test
+    void deleteRejectsStaleVersionWithoutDeleting() {
+        UUID projectId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        TaskItem task = TaskItem.create(projectId, "Task", null, TaskStatus.TODO, TaskPriority.MEDIUM, NOW);
+        when(tasks.findByProjectIdAndId(projectId, taskId)).thenReturn(Optional.of(task));
+
+        assertThatThrownBy(() -> service.delete(projectId, taskId, actor, 1))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("stale");
+        verify(tasks, never()).delete(task);
     }
 
     @Test

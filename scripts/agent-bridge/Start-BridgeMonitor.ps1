@@ -9,7 +9,8 @@ param(
     [int]$PollIntervalSeconds = 15,
     [ValidateRange(60, 1800)]
     [int]$ReviewTimeoutSeconds = 300,
-    [switch]$Visible
+    [switch]$Visible,
+    [switch]$Restart
 )
 
 Set-StrictMode -Version Latest
@@ -25,6 +26,15 @@ if (Test-Path -LiteralPath $PidFile) {
     if ($existingPid -match '^\d+$') {
         $existingProcess = Get-Process -Id ([int]$existingPid) -ErrorAction SilentlyContinue
     }
+}
+
+if ($null -ne $existingProcess -and $Restart) {
+    if ($existingProcess.ProcessName -notin @("pwsh", "powershell")) {
+        throw "PID 文件指向的不是 PowerShell monitor，拒绝停止进程 $($existingProcess.Id)。"
+    }
+    Stop-Process -Id $existingProcess.Id
+    $existingProcess.WaitForExit(10000) | Out-Null
+    $existingProcess = $null
 }
 
 if ($null -ne $existingProcess) {
@@ -47,4 +57,4 @@ if ($Visible) {
 }
 $process = Start-Process @startArguments
 [System.IO.File]::WriteAllText($PidFile, $process.Id.ToString(), [System.Text.UTF8Encoding]::new($false))
-[PSCustomObject]@{ Started = $true; ProcessId = $process.Id; LogFile = $LogFile; ErrorLogFile = $ErrorLogFile }
+[PSCustomObject]@{ Started = $true; ProcessId = $process.Id; Worktree = $startArguments.WorkingDirectory; LogFile = $LogFile; ErrorLogFile = $ErrorLogFile }

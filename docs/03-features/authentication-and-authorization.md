@@ -52,6 +52,9 @@ Refresh Token、主动登出、找回密码、邮箱验证、验证码、锁定�
 
 ## 安全与排查
 
+- JWT 缺少 `sub` 或 `sub` 不是 UUID 时统一按无效凭证处理，返回 401，不能泄漏为空指针导致 500。
+- JWT secret 在配置绑定阶段必须能以标准 Base64 解码且不少于 32 字节；非法值必须让应用以可读错误快速启动失败。
+
 - JWT secret 只来自环境变量，规则见 `../00-governance/public-repository-security.md`。
 - 登录失败不区分邮箱不存在与密码错误，日志只记录 request ID 和失败类别，不记录密码或 token。
 - 401：检查 Authorization 格式、token 到期、issuer 与本机时间。

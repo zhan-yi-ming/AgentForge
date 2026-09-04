@@ -178,6 +178,24 @@ class ResourceApiTest {
     }
 
     @Test
+    void taskGetMapsNotFoundAndForbiddenContracts() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        when(taskService.get(eq(projectId), eq(taskId), any()))
+                .thenThrow(new ResourceNotFoundException("Task was not found."));
+
+        mockMvc.perform(get("/api/v1/projects/{projectId}/tasks/{taskId}", projectId, taskId)
+                        .with(userJwt(UUID.randomUUID())))
+                .andExpect(status().isNotFound());
+
+        when(taskService.get(eq(projectId), eq(taskId), any()))
+                .thenThrow(new ForbiddenException("access denied"));
+        mockMvc.perform(get("/api/v1/projects/{projectId}/tasks/{taskId}", projectId, taskId)
+                        .with(userJwt(UUID.randomUUID())))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void taskRejectsUnknownStatus() throws Exception {
         mockMvc.perform(post("/api/v1/projects/{projectId}/tasks", UUID.randomUUID())
                         .with(userJwt(UUID.randomUUID()))

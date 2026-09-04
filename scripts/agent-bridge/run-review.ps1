@@ -68,7 +68,7 @@ if ($ChangedFiles.Count -eq 0) {
 }
 
 $SensitivePatterns = @{
-    "private-key" = '-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----'
+    "private-key" = '(?m)^\+?\s*-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----\s*$'
     "github-token" = '\bgh[pousr]_[A-Za-z0-9_]{20,}\b'
     "aws-access-key" = '\bAKIA[0-9A-Z]{16}\b'
     "openai-key" = '\bsk-[A-Za-z0-9]{20,}\b'

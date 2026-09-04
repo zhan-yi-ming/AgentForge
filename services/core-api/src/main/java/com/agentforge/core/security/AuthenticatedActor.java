@@ -10,10 +10,14 @@ import com.agentforge.core.shared.error.UnauthorizedException;
 public record AuthenticatedActor(UUID userId, boolean admin) {
 
     public static AuthenticatedActor from(Jwt jwt) {
+        String subject = jwt.getSubject();
+        if (subject == null) {
+            throw new UnauthorizedException("The access token is missing a subject.");
+        }
         try {
             List<String> roles = jwt.getClaimAsStringList("roles");
             return new AuthenticatedActor(
-                    UUID.fromString(jwt.getSubject()),
+                    UUID.fromString(subject),
                     roles != null && roles.contains("ADMIN"));
         }
         catch (IllegalArgumentException exception) {

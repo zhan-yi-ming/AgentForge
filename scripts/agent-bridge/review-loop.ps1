@@ -34,6 +34,8 @@ if (-not $DryRun) {
     }
 }
 
+try {
+
 function ConvertTo-Hashtable($Value) {
     if ($null -eq $Value) { return $null }
     if ($Value -is [System.Collections.IDictionary]) {
@@ -76,13 +78,15 @@ function Save-State($State) {
         New-Item -ItemType Directory -Path $parent -Force | Out-Null
     }
     $temporaryStatePath = "$StatePath.$PID.$([guid]::NewGuid().ToString('N')).tmp"
+    $backupStatePath = "$StatePath.backup"
     try {
         [System.IO.File]::WriteAllText(
             $temporaryStatePath,
             ($State | ConvertTo-Json -Depth 8),
             [System.Text.UTF8Encoding]::new($false))
         if (Test-Path -LiteralPath $StatePath) {
-            [System.IO.File]::Replace($temporaryStatePath, $StatePath, "$StatePath.bak")
+            [System.IO.File]::Replace($temporaryStatePath, $StatePath, $backupStatePath)
+            Remove-Item -LiteralPath $backupStatePath -Force -ErrorAction SilentlyContinue
         } else {
             Move-Item -LiteralPath $temporaryStatePath -Destination $StatePath
         }
@@ -92,6 +96,9 @@ function Save-State($State) {
     } finally {
         if (Test-Path -LiteralPath $temporaryStatePath) {
             Remove-Item -LiteralPath $temporaryStatePath -Force -ErrorAction SilentlyContinue
+        }
+        if (Test-Path -LiteralPath $backupStatePath) {
+            Remove-Item -LiteralPath $backupStatePath -Force -ErrorAction SilentlyContinue
         }
     }
 }
@@ -182,6 +189,13 @@ function Get-CurrentCommit {
     return $commit
 }
 
+function Get-ReviewFixStageIds([string]$Commit) {
+    $message = (& git show -s --format=%B $Commit) -join "`n"
+    return @([regex]::Matches($message, '(?im)^Review-Fixes:\s*([a-z0-9][a-z0-9._-]*)\s*$') |
+        ForEach-Object { $_.Groups[1].Value } |
+        Select-Object -Unique)
+}
+
 function Find-AutomaticStageDefinition($State, $KnownDefinitions, [string]$CurrentCommit) {
     foreach ($definition in $KnownDefinitions) {
         if ([string]$definition.deliveryCommit -eq $CurrentCommit) {
@@ -214,8 +228,13 @@ $maximumAttempts = [int]$stageRegistry.maximumAttempts
 $state = Get-State
 $currentCommit = Get-CurrentCommit
 $definitions = @($stageRegistry.historicalStages)
-$automatic = Find-AutomaticStageDefinition $state $definitions $currentCommit
+$reviewFixStageIds = @(Get-ReviewFixStageIds $currentCommit)
+$automatic = if ($reviewFixStageIds.Count -eq 0) { Find-AutomaticStageDefinition $state $definitions $currentCommit } else { $null }
 if ($null -ne $automatic) { $definitions += [pscustomobject]$automatic }
+foreach ($fixStageId in $reviewFixStageIds) {
+    $knownStage = @($definitions | Where-Object { [string]$_.id -eq $fixStageId }).Count -gt 0 -or $state.stages.ContainsKey($fixStageId)
+    if (-not $knownStage) { throw "Review-Fixes 引用了未知阶段：$fixStageId" }
+}
 
 $actions = @()
 foreach ($definition in $definitions) {
@@ -228,6 +247,7 @@ foreach ($definition in $definitions) {
 
     $targetRef = $null
     $baseRef = $null
+    $isExplicitFix = $reviewFixStageIds -contains [string]$stage.id
     $isOtherRegisteredDelivery = @($definitions | Where-Object {
             ([string]$_.id -ne [string]$stage.id) -and ([string]$_.deliveryCommit -eq $currentCommit)
         }).Count -gt 0 -or @($state.stages.Values | Where-Object {
@@ -237,7 +257,8 @@ foreach ($definition in $definitions) {
         $targetRef = $stage.deliveryCommit
         $baseRef = $stage.initialBaseRef
     } elseif ($stage.status -eq "WAITING_FOR_CODEX_FIX" -and
-              -not $isOtherRegisteredDelivery -and
+              ($reviewFixStageIds.Count -eq 0 -or $isExplicitFix) -and
+              ($isExplicitFix -or -not $isOtherRegisteredDelivery) -and
               $stage.lastReviewedCommit -ne $currentCommit -and
               (Is-Ancestor $stage.lastReviewedCommit $currentCommit)) {
         $targetRef = $currentCommit
@@ -305,5 +326,7 @@ $finalResult = [PSCustomObject]@{
     Actions = $actions
     NextStageReady = $state.nextStageReady
 }
-if ($null -ne $script:StateLock) { $script:StateLock.Dispose(); $script:StateLock = $null }
 $finalResult
+} finally {
+    if ($null -ne $script:StateLock) { $script:StateLock.Dispose(); $script:StateLock = $null }
+}

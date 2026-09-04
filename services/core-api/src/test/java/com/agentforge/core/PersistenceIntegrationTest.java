@@ -1,6 +1,12 @@
 package com.agentforge.core;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import java.time.Instant;
+
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.RollbackException;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +22,7 @@ import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.security.application.AuthenticationService;
 import com.agentforge.core.task.application.TaskService;
 import com.agentforge.core.wiki.application.WikiPageService;
+import com.agentforge.core.wiki.domain.WikiPage;
 
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest(
@@ -46,6 +53,9 @@ class PersistenceIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private EntityManagerFactory entityManagerFactory;
+
     @Test
     void flywayCreatesSchemaAndJpaPersistsAuthenticatedProjectResources() {
         var authentication = authenticationService.register(
@@ -66,5 +76,40 @@ class PersistenceIntegrationTest {
         assertThat(jdbcTemplate.queryForObject(
                 "select count(*) from flyway_schema_history where success = true",
                 Integer.class)).isGreaterThanOrEqualTo(2);
+    }
+
+    @Test
+    void wikiVersionRejectsASecondCommitFromAStaleSnapshot() {
+        var authentication = authenticationService.register(
+                "optimistic-lock@example.com",
+                "Lock Test",
+                "integration-password");
+        var actor = new AuthenticatedActor(authentication.user().id(), false);
+        var project = projectService.createProject(actor, "Lock Project", null);
+        var created = wikiPageService.create(project.id(), actor, "Concurrency", "initial");
+        var firstManager = entityManagerFactory.createEntityManager();
+        var secondManager = entityManagerFactory.createEntityManager();
+        try {
+            firstManager.getTransaction().begin();
+            secondManager.getTransaction().begin();
+            WikiPage first = firstManager.find(WikiPage.class, created.id());
+            WikiPage stale = secondManager.find(WikiPage.class, created.id());
+            first.update("Concurrency", "first", Instant.now());
+            stale.update("Concurrency", "stale", Instant.now());
+            firstManager.getTransaction().commit();
+
+            assertThatThrownBy(secondManager.getTransaction()::commit)
+                    .isInstanceOf(RollbackException.class);
+        }
+        finally {
+            if (firstManager.getTransaction().isActive()) {
+                firstManager.getTransaction().rollback();
+            }
+            if (secondManager.getTransaction().isActive()) {
+                secondManager.getTransaction().rollback();
+            }
+            firstManager.close();
+            secondManager.close();
+        }
     }
 }

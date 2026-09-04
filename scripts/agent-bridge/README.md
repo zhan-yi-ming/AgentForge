@@ -7,7 +7,9 @@
 - `run-review.ps1`：执行单次、带超时的 Pi V4-pro 只读审查，输出独立报告。
 - `review-loop.ps1`：唯一的阶段状态机入口；负责历史补审、修复后复审、三次上限和人工接管。
 - `bridge-monitor.ps1`：常驻后台守护脚本，周期性调用 `review-loop.ps1`；当 Codex 额度耗尽时自动进入 5 小时倒计时休眠，并在恢复后生成续跑指令。
+- `Test-ReviewBridge.ps1`：不调用 Pi 的回归入口，验证脚本语法、BUSY 互斥、异常释放锁、DryRun 不写状态和 JSON 状态输出。
 - `Start-BridgeMonitor.ps1`：在当前开发工作树中隐藏启动并复用 monitor。
+- `Show-ReviewStatus.ps1`：一次性或持续显示 monitor、锁、阶段队列、Pi 进程和日志进度。
 - `review-stages.json`：Day 1、Day 2 的版本化历史审查边界。
 - `prompts/stage-review-system.md`：审查提示词与审查标准定义。
 
@@ -35,9 +37,12 @@ Codex 每个新消息会调用以下命令。它补审 Day 1/Day 2，或处理�
 
 ```powershell
 .\scripts\agent-bridge\Start-BridgeMonitor.ps1
+.\scripts\agent-bridge\Show-ReviewStatus.ps1 -Watch
 ```
 
 它会为新提交触发同一循环；每次 attempt 使用独立报告，第三次仍为 `NEEDS_FIX` 时写出人工介入记录并停止。
+
+若状态显示 `STALLED`，运行 `.\scripts\agent-bridge\Start-BridgeMonitor.ps1 -Restart`。修复某份报告时，在提交正文加入 `Review-Fixes: <stage-id>`；该 trailer 是下一次 Attempt 的唯一 Git 级关联依据。
 
 ### 场景三：Codex 5 小时额度用尽与自动等待续跑
 当 Codex 触发 OpenAI 5 小时速率限制或额度耗尽时：

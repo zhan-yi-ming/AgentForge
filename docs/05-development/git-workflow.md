@@ -21,7 +21,7 @@
 6. AI 推送到已确认分支并核对远程 commit；禁止 force push。
 7. 提交前确认该工作树的 bridge monitor 已启动；它会在提交后独立调用 Pi V4-pro。Codex 本身仍只允许推送和核验后停止。
 8. 阶段审查（Pi Agent）：Pi 为该阶段生成独立 `docs/08-reviews/YYYY-MM-DD-review-<stage>-attempt-<n>.md` 报告。Day 1/Day 2 等历史阶段由 Codex 下次消息唤醒时补审。
-9. Codex 评估与修复：收到 `NEEDS_FIX` 后先回填报告和变更记录，再实施修复与测试；后续提交触发下一次 attempt。
+9. Codex 评估与修复：收到 `NEEDS_FIX` 后先回填报告和变更记录，再实施修复与测试；修复提交正文必须包含 `Review-Fixes: <stage-id>` trailer，后续提交只触发所声明阶段的下一次 attempt。
 10. 第三次审查仍有问题时，自动循环停止并等待人工决定；Pi 失败不消耗 attempt，也不得切换 Flash。
 11. AI 汇报完成内容、审查结果、验证与限制、用户介入项和下一阶段计划。
 12. 用户明确确认后，AI 才进入下一阶段。

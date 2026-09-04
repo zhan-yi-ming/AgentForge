@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
@@ -22,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.shared.error.ConflictException;
+import com.agentforge.core.shared.error.ForbiddenException;
 import com.agentforge.core.shared.error.ResourceNotFoundException;
 import com.agentforge.core.wiki.domain.WikiPage;
 import com.agentforge.core.wiki.domain.WikiPageRepository;
@@ -100,6 +103,21 @@ class WikiPageServiceTest {
         assertThat(updated.content()).isEqualTo("new");
         service.delete(projectId, pageId, actor, updated.version());
         verify(wikiPages).delete(page);
+        verify(projectAccess, times(2)).requireAccess(projectId, actor);
+    }
+
+    @Test
+    void deleteRejectsStaleVersionWithoutDeleting() {
+        UUID projectId = UUID.randomUUID();
+        UUID pageId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        WikiPage page = WikiPage.create(projectId, "Architecture", "old", NOW);
+        when(wikiPages.findByProjectIdAndId(projectId, pageId)).thenReturn(Optional.of(page));
+
+        assertThatThrownBy(() -> service.delete(projectId, pageId, actor, 1))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("stale");
+        verify(wikiPages, never()).delete(page);
     }
 
     @Test
@@ -108,11 +126,10 @@ class WikiPageServiceTest {
         UUID pageId = UUID.randomUUID();
         when(wikiPages.findByProjectIdAndId(projectId, pageId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.get(
-                projectId,
-                pageId,
-                new AuthenticatedActor(UUID.randomUUID(), false)))
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        assertThatThrownBy(() -> service.get(projectId, pageId, actor))
                 .isInstanceOf(ResourceNotFoundException.class);
+        verify(projectAccess).requireAccess(projectId, actor);
     }
 
     @Test
@@ -122,8 +139,22 @@ class WikiPageServiceTest {
         WikiPage second = WikiPage.create(projectId, "Second", "two", NOW.minusSeconds(60));
         when(wikiPages.findAllByProjectIdOrderByUpdatedAtDesc(projectId)).thenReturn(List.of(first, second));
 
-        assertThat(service.list(projectId, new AuthenticatedActor(UUID.randomUUID(), true)))
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), true);
+        assertThat(service.list(projectId, actor))
                 .extracting(WikiPageView::title)
                 .containsExactly("First", "Second");
+        verify(projectAccess).requireAccess(projectId, actor);
+    }
+
+    @Test
+    void projectAuthorizationRunsBeforeWikiLookup() {
+        UUID projectId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        org.mockito.Mockito.doThrow(new ForbiddenException("forbidden"))
+                .when(projectAccess).requireAccess(projectId, actor);
+
+        assertThatThrownBy(() -> service.get(projectId, UUID.randomUUID(), actor))
+                .isInstanceOf(ForbiddenException.class);
+        verify(wikiPages, never()).findByProjectIdAndId(any(), any());
     }
 }
