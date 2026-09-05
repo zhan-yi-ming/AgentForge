@@ -6,6 +6,8 @@
 
 ## 当前一次性审核入口
 
+启动器配置、十秒预检和快速失败的权威说明见 `pi-review-connection.md`；不得用本页历史 monitor 内容替代当前流程。
+
 在实现与 Codex 测试完成、提交之前运行：
 
 ```powershell
@@ -60,12 +62,9 @@ Pi 以无会话、无项目上下文自动加载、无工具的非交互模式�
 
 ## 排错顺序
 
-1. 运行 `pi.cmd --list-models v4-pro`，必须显示 `deepseek/deepseek-v4-pro`。
-2. 运行 `Show-ReviewStatus.ps1`；若为 `STALLED`，使用 `Start-BridgeMonitor.ps1 -Restart` 安全停止 PID 文件对应的旧 monitor 并重启。
-3. 运行 `review-loop.ps1 -DryRun` 检查待审阶段、尝试次数和阻断状态。
-4. 检查 monitor 日志中的 Pi 退出码或超时信息；不要用 Flash 作为替代。
-5. 检查报告是否包含 `REVIEW_RESULT:`；缺失时视为待修复并交由 Codex 研判。
-6. 第三次报告仍为 `NEEDS_FIX` 时查看人类介入记录，等待用户决定，不要强行第四次循环。
+当前只按 `pi-review-connection.md` 解析 `AGENTFORGE_PI_CMD`；不要直接假设裸 `pi.cmd` 在 PATH。使用解析后的绝对路径运行 `--list-models v4-pro`，目录表必须在同一行包含 `deepseek` 与 `deepseek-v4-pro`。启动器或模型失败后立即请用户处理。
+
+历史排错曾使用 `Show-ReviewStatus.ps1`、`review-loop.ps1 -DryRun`、monitor 日志和 `Start-BridgeMonitor.ps1 -Restart`；这些步骤只供旧报告追溯，当前禁止执行或重启。
 
 以下自动轮次与 Pi validation 规则均为历史流程，当前保持停用。现行流程仅由 Codex 在完成真实测试后发起一次性 Pi 只读审核；修复后可定向复审，但不恢复自动循环或由 Pi 执行验证。
 

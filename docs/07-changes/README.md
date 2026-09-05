@@ -14,6 +14,7 @@
 
 ## 索引
 
+- `2026-09-06-pi-review-connection-governance.md`：统一提交前 Pi 只读审核门禁，并固化启动器连接与快速失败方式。
 - `2026-09-05-day-7-v1-acceptance.md`：V1 最终验收、完整本地 Compose、演示数据和运行教程。
 - `2026-09-05-day-6-react-workspace.md`：React 项目工作区、AI Chat、人工确认与 Markdown 安全预览。
 - `2026-09-05-day-5-tool-calling-hitl.md`：Python create/update task 意图、Java 待确认 action、confirm/reject 与确定性写回。

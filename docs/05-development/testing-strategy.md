@@ -71,6 +71,8 @@ Day 4 跨进程闭环由仓库脚本执行：
 
 用户曾撤销 Pi 审查与测试授权，该决定及 Day 1–4 复核保留在 `docs/07-changes/2026-09-05-disable-pi-and-day1-day4-audit.md` 供历史追溯。随后用户重新授权每阶段一次性 Pi 只读代码审核，但没有恢复 Pi 测试、monitor、OnCodexWake 或自动阶段推进；Codex 始终直接执行并记录全部测试证据。
 
+2026-09-06 起的现行门禁是：代码、配置、脚本和文档变更完成并由 Codex 真实验证后，必须在创建提交前直接触发一次 Pi 只读审核；持续授权无需逐次询问。连接失败按 `../06-operations/pi-review-connection.md` 快速停止并请用户处理。
+
 ## Day 5 质量门槛与审核分工
 
 - 行为变更遵循仓库 TDD skill：先在公共 seam 运行可观察的失败测试，再做最小实现。
@@ -96,4 +98,4 @@ Day 4 跨进程闭环由仓库脚本执行：
 - 默认 hash Embedding 与 `disabled` responder 在无外部 key 时完成可重复验收；国内 LLM provider 通过边界 fake 验证兼容调用，真实 key 只用于本地人工体验且不得写入仓库。
 - Java clean verify、Python pytest、Vitest、Vite production build和完整 Compose 验收全部记录真实退出码、数量和清理证据。
 - V1 禁止因收尾提前引入 V2/V3 组件；生产部署、安全加固和真实生成式模型另立阶段。
-- Day 7 最终审核由 Codex 执行，并以浏览器真实交互补充接口和组件测试；本阶段不调用 Pi。
+- Day 7 当时经用户明确豁免 Pi，由 Codex 以浏览器真实交互完成最终审核；这是历史单次豁免，不适用于 2026-09-06 起的新变更。

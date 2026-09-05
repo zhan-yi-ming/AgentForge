@@ -57,6 +57,7 @@
 
 - `local-stack.md`：本地 PostgreSQL/Redis 容器、健康检查和数据清理。
 - `review-orchestration.md`：已停用 Pi 编排的历史设计、禁用状态和追溯说明。
+- `pi-review-connection.md`：提交前一次性 Pi 审核、启动器配置、十秒预检和快速失败规则。
 - `production-single-host.md`：V1.1 公网 Demo 的单机部署、更新、备份、回滚和排障。
 
 ### `07-changes/`：每次变化的证据链
