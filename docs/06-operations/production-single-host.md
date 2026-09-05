@@ -31,7 +31,7 @@ scripts/deploy/health-check.sh
 scripts/deploy/seed-demo.sh
 ```
 
-构建按 core-api、agent-service、web、gateway 顺序执行，避免 2C4G 机器并行构建。Demo 初始化先停止公网 gateway，只在 Core API 容器内部临时开启注册；创建成功、恢复注册关闭后才重新开放 gateway。
+构建按 core-api、agent-service、web、gateway 顺序执行，避免 2C4G 机器并行构建。Docker Compose v5 使用 `docker compose build <service>`；不要传入已不受支持的 `build --no-deps`，且只有显式指定 `--with-dependencies` 时才会连带构建依赖。Demo 初始化先停止公网 gateway，只在 Core API 容器内部临时开启注册；创建成功、恢复注册关闭后才重新开放 gateway。
 
 ## 日常命令
 

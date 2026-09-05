@@ -8,11 +8,11 @@ require_layout
 "${REPO_DIR}/scripts/deploy/init-tls.sh"
 compose config --quiet
 compose up -d postgres
-compose build --no-deps core-api
+compose build core-api
 compose up -d core-api
-compose build --no-deps agent-service
+compose build agent-service
 compose up -d agent-service
-compose build --no-deps web
+compose build web
 compose up -d web
 compose pull gateway
 compose up -d gateway

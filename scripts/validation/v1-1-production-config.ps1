@@ -44,4 +44,12 @@ foreach ($internalService in 'postgres','core-api','agent-service','web') {
     }
 }
 
-Write-Host "Production Compose boundary passed: only gateway publishes 80/443; all 5 services use 10m x 3 logs."
+$deployScripts = Get-ChildItem -Path (Join-Path $root "scripts/deploy") -Filter "*.sh" -File
+foreach ($deployScript in $deployScripts) {
+    $scriptContent = Get-Content -Raw -LiteralPath $deployScript.FullName
+    if ($scriptContent -match '(?m)^\s*(?:compose|docker\s+compose)\s+build\b[^\r\n]*--no-deps\b') {
+        throw "$($deployScript.Name) uses build --no-deps, which Docker Compose v5 does not support."
+    }
+}
+
+Write-Host "Production Compose boundary passed: only gateway publishes 80/443; all 5 services use 10m x 3 logs; deploy scripts avoid unsupported Compose v5 build flags."
