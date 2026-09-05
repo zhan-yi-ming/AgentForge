@@ -1,7 +1,7 @@
 # 系统架构总览
 
 - 状态：Accepted
-- 当前实现范围：Day 1–4 已实现；Day 5 Tool Calling 与人工确认正在实施
+- 当前实现范围：Day 1–Day 6 已实现
 
 ## 系统组件
 
@@ -27,7 +27,7 @@ Redis：V1 后续用于短期会话/状态辅助，不作为业务事实来源�
 
 ### React Web
 
-负责 Project、Wiki、Task、AI Chat、确认交互和 Markdown 预览。浏览器不直接访问数据库，也不持有可以绕过 Core API 的业务权限。
+负责登录、Project、Wiki、Task、AI Chat、确认交互和 Markdown 预览。Day 6 使用 typed API client 与局部 React state；浏览器不直接访问数据库，也不持有可以绕过 Core API 的业务权限。详细结构见 `frontend-architecture.md`。
 
 ### Java Core API
 

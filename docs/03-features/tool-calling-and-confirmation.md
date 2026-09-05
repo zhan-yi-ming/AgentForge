@@ -36,7 +36,7 @@
 - Agent Service HTTP Chat 是 proposal 行为 seam。
 - Core API Chat、confirm、reject 是公共 HTTP seam。
 - 真实 PostgreSQL 验证 Flyway、action 状态与重复确认原子性。
-- 双服务 E2E 证明未确认不写、确认写入、拒绝不写、项目隔离和版本冲突。
+- 双服务 E2E 证明未确认不写、确认写入、拒绝不写和项目隔离；目标 Task 的 version conflict 由 Java 服务测试覆盖。
 
 ## 已知限制
 

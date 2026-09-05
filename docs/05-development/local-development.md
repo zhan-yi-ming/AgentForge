@@ -1,9 +1,9 @@
-# Day 1–Day 5 本地启动与体验教程
+# Day 1–Day 6 本地启动与体验教程
 
 - 状态：Implemented
 - 适用系统：Windows PowerShell
-- 当前可运行应用：Core API、Agent Service
-- 当前没有 Web 页面：React Web 在 Day 6 才实现，本教程通过 HTTP API 观察功能
+- 当前可运行应用：React Web、Core API、Agent Service
+- HTTP 命令可精确观察接口，React Web 可完成主要演示流程
 
 ## 1. 今天完成了什么
 
@@ -14,6 +14,7 @@
 3. Day 3：Java Core API 完成鉴权和项目授权后，通过真实 HTTP/1.1 调用 Python FastAPI + LangGraph Chat。
 4. Day 4：Chat 从当前项目的 Wiki/Task 构建 Chunk，以 Embedding + BM25 + RRF 检索，并返回来源。
 5. Day 5：Chat 返回 create/update task 待确认预览；confirm 后才由 Java 写入，reject 不写入。
+6. Day 6：React 工作区组合登录、Project、Wiki、Task、Chat、Markdown 预览和人工确认，AI 文本只有显式应用并保存后才写入 Wiki。
 
 Day 4 仍使用 deterministic responder，不调用生成式 LLM；回答会展示检索到的项目片段与结构化来源。默认 hash Embedding 不需要外部密钥，便于完整体验混合检索链路。
 
@@ -133,6 +134,20 @@ Invoke-RestMethod http://localhost:8000/health
 ```
 
 两个请求都应返回包含 `UP` 或健康状态的信息。
+
+## 7A. 启动 React Web
+
+打开第五个 PowerShell：
+
+```powershell
+Set-Location 'C:\Users\86134\Documents\ChatGPT\AgentForge\apps\web'
+npm install
+npm run dev
+```
+
+Vite 默认监听 `http://127.0.0.1:5173`，并把浏览器发往 `/api` 的请求代理到 `http://127.0.0.1:8080`。在浏览器打开 Vite 输出的地址后，可以登录、选择项目、编辑并安全预览 Wiki、查看 Task、调用 Chat，以及确认或拒绝 Agent 提议。若账号下没有项目，先按第 10 节 HTTP 命令创建一个项目，再刷新页面。
+
+AI 文本整理会先保留原文并展示 Agent 返回的 Markdown 预览；点击“应用到 Wiki 草稿”只修改浏览器草稿，仍需点击保存才会调用 Wiki API。当前 deterministic responder 的整理质量有限，真实生成式模型不属于 Day 6。
 
 ## 8. 注册并取得 JWT
 

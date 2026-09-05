@@ -1,9 +1,18 @@
 # AgentForge Web
 
-- 状态：Planned
-- 计划天次：V1 / Day 6
-- 技术：React + TypeScript
+- 状态：Implemented
+- 阶段：V1 / Day 6
+- 技术：React + TypeScript + Vite
 
-该应用将承载 Project、Wiki、Task、AI Chat、Markdown 预览和人工确认交互。当前只建立仓库边界，不提前生成页面或依赖。
+该应用承载登录、Project、Wiki、Task、AI Chat、Markdown 安全预览和人工确认交互。Web 只调用 Core API，不直接访问数据库或 Agent Service 内部接口，也不把前端状态当作权限保障。
 
-开始实现前必须先创建或更新相应 `docs/03-features/` 功能文档，并确定 API 契约。Web 只能调用服务 API，不得直接访问数据库或把前端判断当成权限保障。
+开发命令：
+
+```powershell
+npm install
+npm run dev
+npm test -- --run
+npm run build
+```
+
+开发服务器默认把 `/api` 代理到 `http://127.0.0.1:8080`。先启动 Core API 和 Agent Service，再访问 Vite 输出的本地地址。

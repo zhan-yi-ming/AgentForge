@@ -37,6 +37,6 @@ V1 跑通 Web → Java → Python Agent → RAG / Tool → Java 写回。V2 加�
 
 所有改变先进入文档，再进入实现。产品行为看功能文档，系统结构看架构和 ADR，历史变化看变更记录。
 
-## 当前交付边界：Day 5 已完成，Day 6 已授权
+## 当前交付边界：Day 6 正在实施
 
-Day 1–Day 5 已交付。Day 5 已完成 Python 结构化 create/update task 意图、Java 持久化待确认动作、confirm/reject 与确定性写回，并通过 Codex 全量测试和 Pi 实质风险复审。Day 6 的 React 联调、确认页面、AI 文本整理与 Markdown 预览已获用户授权，将在 Day 5 提交推送和远端核验后按文档先行启动。
+Day 1–Day 5 已交付并完成远端核验。Day 6 正在按文档先行实现 React 联调、确认页面、AI 文本整理与 Markdown 预览；前端继续服从 Java 权限、version 和确认边界，不新增旁路写入。

@@ -78,3 +78,12 @@ Day 4 跨进程闭环由仓库脚本执行：
 - 双服务 E2E 必须证明 Task 在 confirm 前不存在/未变化，confirm 后才写入，reject 无副作用。
 - Codex 是唯一测试执行者，必须记录全新命令、退出码、工具版本、测试数量、失败/跳过和清理。
 - 用户已于 2026-09-05 明确重新授权 Pi 仅做只读代码审核。Pi 不执行测试；其 PASS 不能替代 Codex 的机器测试证据。不得恢复 monitor、OnCodexWake 或自动阶段推进。
+
+## Day 6 质量门槛
+
+- Web 单元/组件测试使用 Vitest、Testing Library 与 jsdom，从 DOM 和 typed API client 公共边界验证行为。
+- 覆盖登录与项目加载、Bearer/Problem Details、Markdown 安全渲染、Wiki 草稿与保存、Chat 来源、pending action 确认/拒绝及明确应用 AI 文本。
+- `npm test -- --run` 必须 0 failed；`npm run build` 必须通过 TypeScript 和 Vite production build。
+- 不用快照替代关键交互断言，不测试组件私有 state，不过度 mock React 内部实现。
+- Day 6 至少完成真实 Core API/Agent Service 关键链路联调；完整三应用自动化 E2E、容器化和演示数据在 Day 7 固化。
+- Codex 执行全部测试；Pi 只审核完成后的 diff。重大问题才阻断，小问题登记到下一轮统一处理，不因风格建议反复复审。

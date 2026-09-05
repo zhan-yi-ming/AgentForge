@@ -7,7 +7,7 @@
 第一次进入项目时，按以下顺序阅读：
 
 1. `01-product/product-overview.md`：理解产品解决的问题与 V1 边界。
-2. `01-product/roadmap.md`：理解三阶段路线和当前 Day 5 目标。
+2. `01-product/roadmap.md`：理解三阶段路线和当前 Day 6 目标。
 3. `02-architecture/system-overview.md`：理解 Web、Java、Python、数据与基础设施的关系。
 4. `02-architecture/repository-structure.md`：找到代码和文档的位置。
 5. `03-features/README.md`：进入具体功能文档。
@@ -32,6 +32,7 @@
 ### `02-architecture/`：系统为什么这样组成
 
 - `system-overview.md`：系统上下文、组件职责、调用与信任边界。
+- `frontend-architecture.md`：React 组件、状态、API 与 Markdown 安全边界。
 - `repository-structure.md`：单仓库目录、命名和依赖方向。
 - `backend-architecture.md`：Java 模块、分层职责和约束。
 - `data-architecture.md`：PostgreSQL 数据模型、迁移与隔离原则。

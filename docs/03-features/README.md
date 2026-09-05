@@ -17,4 +17,4 @@
 
 以下文档尚未创建，表示功能也不应开始实现：
 
-- AI 文本整理与 Markdown 预览（Day 6）
+- [React 项目工作区](web-workspace.md)：登录、项目选择、Wiki/Task、AI Chat、人工确认与 Markdown 预览（Day 6）

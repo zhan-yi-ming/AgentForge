@@ -10,8 +10,9 @@
 - 已完成：V1 Day 2，登录鉴权、Wiki / Task 和公开仓库安全门禁。
 - 已完成：V1 Day 3，FastAPI + LangGraph Chat 与 Java-Python 契约。
 - 已完成：V1 Day 4，Wiki/Task Chunk、Embedding、BM25、RRF、Retrieved Context 与来源引用；Day 1–4 已由 Codex 使用干净构建和真实跨进程测试复核。
-- 尚未实现：Tool Calling、人工确认与前端页面。
-- 下一步：等待用户明确授权后才开始 Day 5。
+- 已完成并推送：V1 Day 5，Tool Calling、持久化待确认动作、人工确认/拒绝与 Java 确定性写回。
+- 已完成：V1 Day 6，React 工作区、Markdown 安全预览、Chat 来源与待确认动作交互，以及 AI 文本显式应用到 Wiki 草稿；Pi 未发现阻断性问题，审查项已集中修正并由 Codex 回归验证。
+- 下一步：Day 7 需用户另行授权后再开始，继续遵循文档先行。
 
 ## 先读文档
 
@@ -19,7 +20,7 @@
 - [产品概览](docs/01-product/product-overview.md)
 - [系统架构](docs/02-architecture/system-overview.md)
 - [本地开发](docs/05-development/local-development.md)
-- [当前变更](docs/07-changes/2026-09-04-day-4-hybrid-rag.md)
+- [当前变更](docs/07-changes/2026-09-05-day-6-react-workspace.md)
 - [公开仓库安全](docs/00-governance/public-repository-security.md)
 
 任何修改都必须先遵守 [AGENTS.md](AGENTS.md) 的文档先行规则。
@@ -38,4 +39,4 @@ docs/                       项目长期记忆与变更证据
 
 需要 Java 21 与 Docker Desktop。复制 `.env.example` 为 `.env`，生成独立的本地 JWT secret，再按 [本地开发文档](docs/05-development/local-development.md) 启动依赖和 Core API。任何真实密钥都不能进入本公开仓库。
 
-> 必须让 `java -version` 指向 Java 21。Day 1–Day 4 的完整启动和接口体验步骤见本地开发文档。
+> 必须让 `java -version` 指向 Java 21。Day 1–Day 6 的完整启动和体验步骤见本地开发文档。

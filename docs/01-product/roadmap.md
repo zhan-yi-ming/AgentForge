@@ -1,7 +1,7 @@
 # 三阶段路线图
 
 - 状态：Accepted
-- 当前焦点：V1 / Day 5 已完成；Day 6 React 联调与 AI 文本整理已授权，等待 Day 5 远端核验后启动
+- 当前焦点：V1 / Day 6 React 联调、AI 文本整理与 Markdown 预览已完成；Day 7 待用户授权
 
 ## V1：能用
 

@@ -10,7 +10,7 @@ AgentForge/
 ├─ AGENTS.md                 # AI 项目级硬规则
 ├─ README.md                 # 人类入口与快速开始
 ├─ apps/
-│  └─ web/                   # React + TypeScript，V1 Day 6 开始实现
+│  └─ web/                   # React + TypeScript + Vite 项目工作区
 ├─ services/
 │  ├─ core-api/              # Java 21 + Spring Boot，确定性业务系统
 │  └─ agent-service/         # Python + FastAPI + LangGraph，V1 Day 3 开始实现
