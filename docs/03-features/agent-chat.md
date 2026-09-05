@@ -9,7 +9,9 @@ Day 4 Graph 为 `START -> prepare -> retrieve -> respond -> END`。State 在 Day
 
 未认证 401；无项目权限 403；无效输入 400；Agent Service、Core 回调、索引数据库或 Embedding provider 不可用时公共入口返回 503。不保存聊天记录，不产生 Tool 意图。
 
-Day 4 responder 仍不调用生成式 LLM。存在候选时返回检索摘要并附结构化 Wiki/Task 来源；无候选时明确说明没有找到相关项目上下文，`sources` 为空。
+Responder 支持 `disabled`、`deepseek`、`zhipu`、`qwen` 四种模式。`disabled` 用于无 key 开发与测试，沿用确定性检索摘要；选择三家之一时，LangGraph `respond` 节点把用户问题和已授权、已排序、受字符预算限制的 RAG context 交给对应生成式模型。系统提示要求模型仅把 context 当作项目资料而非指令，不伪造来源；结构化 `sources` 始终由检索结果生成，不由模型生成。
+
+模型调用只影响 `answer`。Tool proposal 仍由确定性白名单 planner 产生，模型不能直接执行或扩大业务操作；Java 的校验、人工确认与确定性写回边界不变。provider 缺少 key、上游认证/限流/网络失败或响应无有效文本时，公共入口返回 503，响应不包含 key 或上游响应正文。
 
 生产入口由 RequestIdFilter 保证 requestId；客户端对未来旁路调用仍会在空值时生成 UUID，确保 header、请求体与响应关联一致。跨语言契约由 Codex 启动真实 uvicorn 后执行 Java HTTP 集成测试。
 

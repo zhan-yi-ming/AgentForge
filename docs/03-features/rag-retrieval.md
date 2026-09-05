@@ -10,7 +10,7 @@
 
 ## 范围与非目标
 
-Day 4 包含 Wiki/Task Chunk、384 维 Embedding、BM25、RRF、Retrieved Context 和结构化来源。默认无密钥 `hash` Embedding 用于本地可重复运行；可选 OpenAI-compatible Embeddings 提供语义向量。
+Day 4 包含 Wiki/Task Chunk、384 维 Embedding、BM25、RRF、Retrieved Context 和结构化来源。V1 当前只保留无密钥 `hash` Embedding，用于本地可重复运行；真实生成式回答由独立的国内 LLM provider adapter 提供。
 
 不包含生成式 LLM、对话记忆、Tool Calling、写回、HITL、GraphRAG、完整 Trace 或离线评测平台。
 
@@ -56,4 +56,4 @@ Day 4 包含 Wiki/Task Chunk、384 维 Embedding、BM25、RRF、Retrieved Contex
 
 ## 已知限制与后续计划
 
-V1 每次 Chat 都会读取项目来源元数据，并在 Python 进程内计算 BM25；适合演示规模，不适合大项目。默认 hash 向量主要表达词项相似性，生产语义效果需要配置真实 Embedding provider。后台索引任务、缓存、评测和 Token Manager 留到 V2。
+V1 每次 Chat 都会读取项目来源元数据，并在 Python 进程内计算 BM25；适合演示规模，不适合大项目。hash 向量主要表达词项相似性；真实语义 Embedding provider、后台索引任务、缓存、评测和 Token Manager 留到后续阶段。

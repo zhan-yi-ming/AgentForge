@@ -18,11 +18,12 @@ class Settings(BaseSettings):
     core_api_url: str = "http://localhost:8080"
     rag_db_dsn: SecretStr
     rag_enabled: bool = True
-    embedding_provider: Literal["hash", "openai"] = "hash"
+    embedding_provider: Literal["hash"] = "hash"
     embedding_dimensions: int = Field(default=384, ge=384, le=384)
-    openai_base_url: str = "https://api.openai.com/v1"
-    openai_api_key: SecretStr | None = None
-    openai_embedding_model: str = "text-embedding-3-small"
+    llm_provider: Literal["disabled", "deepseek", "zhipu", "qwen"] = "disabled"
+    llm_api_key: SecretStr | None = None
+    llm_base_url: str | None = None
+    llm_model: str | None = None
     request_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     rag_top_k: int = Field(default=6, ge=1, le=20)
     rag_candidate_k: int = Field(default=12, ge=1, le=50)

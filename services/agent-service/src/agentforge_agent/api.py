@@ -4,8 +4,9 @@ import hmac
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from .config import Settings, get_settings
-from .errors import RagDependencyError
+from .errors import LlmDependencyError, RagDependencyError
 from .graph import build_chat_graph
+from .llm import build_responder
 from .retrieval import DisabledRetrievalService, RetrievalService
 from .schemas import ChatRequest, ChatResponse, HealthResponse
 
@@ -18,6 +19,17 @@ def get_retrieval_service() -> RetrievalService | DisabledRetrievalService:
     if not settings.rag_enabled:
         return DisabledRetrievalService()
     return RetrievalService.from_settings(settings)
+
+
+@lru_cache
+def get_responder():
+    try:
+        return build_responder(get_settings())
+    except LlmDependencyError as exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LLM provider is unavailable.",
+        ) from exception
 
 
 def require_internal_token(
@@ -42,9 +54,10 @@ def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
 def chat(
     request: ChatRequest,
     retrieval_service: RetrievalService | DisabledRetrievalService = Depends(get_retrieval_service),
+    responder=Depends(get_responder),
 ) -> ChatResponse:
     try:
-        chat_graph = build_chat_graph(retrieval_service.retrieve)
+        chat_graph = build_chat_graph(retrieval_service.retrieve, responder)
         state = chat_graph.invoke(
             {
                 "project_id": request.project_id,
@@ -61,6 +74,11 @@ def chat(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="RAG dependencies are unavailable.",
+        ) from exception
+    except LlmDependencyError as exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LLM provider is unavailable.",
         ) from exception
     return ChatResponse(
         conversation_id=state["conversation_id"],

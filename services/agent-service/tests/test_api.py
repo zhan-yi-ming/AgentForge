@@ -2,7 +2,8 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from agentforge_agent.api import get_retrieval_service
+from agentforge_agent.api import get_responder, get_retrieval_service
+from agentforge_agent.errors import LlmDependencyError
 from agentforge_agent.main import app
 from agentforge_agent.retrieval import RetrievalResult
 from agentforge_agent.schemas import ChatSource
@@ -29,6 +30,10 @@ class FakeRetrievalService:
 
 
 app.dependency_overrides[get_retrieval_service] = lambda: FakeRetrievalService()
+
+
+def fake_llm_responder(state) -> str:
+    return f"AI answer for: {state['normalized_message']}"
 
 
 def test_health_does_not_require_internal_token() -> None:
@@ -63,6 +68,40 @@ def test_chat_runs_graph_and_creates_conversation_id() -> None:
     assert body["sources"][0]["sourceType"] == "WIKI"
     assert body["requestId"] == "request-123"
     assert body["conversationId"]
+
+
+def test_chat_uses_configured_llm_responder() -> None:
+    app.dependency_overrides[get_responder] = lambda: fake_llm_responder
+    try:
+        response = client.post(
+            "/internal/v1/chat",
+            headers={"X-AgentForge-Internal-Token": TOKEN},
+            json=chat_request(message="  explain the architecture  "),
+        )
+    finally:
+        app.dependency_overrides.pop(get_responder, None)
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "AI answer for: explain the architecture"
+
+
+def test_chat_sanitizes_llm_provider_failure() -> None:
+    def failing_responder(state):
+        raise LlmDependencyError("upstream body containing secret details")
+
+    app.dependency_overrides[get_responder] = lambda: failing_responder
+    try:
+        response = client.post(
+            "/internal/v1/chat",
+            headers={"X-AgentForge-Internal-Token": TOKEN},
+            json=chat_request(),
+        )
+    finally:
+        app.dependency_overrides.pop(get_responder, None)
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "LLM provider is unavailable."}
+    assert "secret details" not in response.text
 
 
 def test_chat_preserves_conversation_id() -> None:

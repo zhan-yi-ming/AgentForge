@@ -1,6 +1,6 @@
 # AgentForge
 
-面向研发团队的“项目知识 + 任务协作 + AI Agent”平台。V1 Day 1–Day 7 已完成，提供 Web → Java → Python Agent → RAG / Tool → Java 写回的可演示闭环。
+面向研发团队的“项目知识 + 任务协作 + AI Agent”平台。V1 Day 1–Day 7 已完成，提供 Web → Java → Python Agent → DeepSeek / 智谱 / 通义千问 + RAG / Tool → Java 写回的可演示闭环。
 
 ## 当前进度
 
@@ -41,10 +41,12 @@ docs/                       项目长期记忆与变更证据
 
 ```powershell
 .\scripts\setup-local-env.ps1
+# 打开 .env，把 LLM_PROVIDER 改成 deepseek/zhipu/qwen，并填写 LLM_API_KEY
+notepad .env
 docker compose --env-file .env -f infra/compose.yaml up --build -d
 .\scripts\demo\seed-v1.ps1
 ```
 
-打开 `http://127.0.0.1:5173`，使用演示脚本输出的账号密码登录。默认 hash Embedding 不需要任何外部 key；`.env` 中的 JWT 与两个内部 token 由脚本自动生成且不会提交。完整说明、手工运行方式和 OpenAI-compatible Embedding key 配置见 [本地开发文档](docs/05-development/local-development.md)。
+在 `.env` 中选择 `deepseek`、`zhipu` 或 `qwen` 并填写 `AGENTFORGE_AGENT_LLM_API_KEY`，再打开 `http://127.0.0.1:5173`，使用演示脚本输出的账号密码登录。默认 `disabled` 模式无需外部 key；`.env` 中的模型 key、JWT 与两个内部 token 均不会提交。完整配置和手工运行方式见 [本地开发文档](docs/05-development/local-development.md)。
 
 > Compose 方式不要求本机安装 Java、Python 或 Node。只有手工开发模式才需要 Java 21、Python 3.12–3.14 与 Node.js。

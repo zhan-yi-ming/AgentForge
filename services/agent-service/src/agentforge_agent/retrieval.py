@@ -3,7 +3,7 @@ from uuid import UUID
 
 from .config import Settings
 from .core_client import CoreApiClient
-from .embeddings import HashEmbeddingProvider, OpenAIEmbeddingProvider
+from .embeddings import HashEmbeddingProvider
 from .rag_store import RagStore, StoredChunk
 from .ranking import reciprocal_rank_fusion
 from .schemas import ChatSource
@@ -34,17 +34,7 @@ class RetrievalService:
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "RetrievalService":
-        if settings.embedding_provider == "openai":
-            key = settings.openai_api_key.get_secret_value() if settings.openai_api_key else ""
-            embedder = OpenAIEmbeddingProvider(
-                key,
-                settings.openai_base_url,
-                settings.openai_embedding_model,
-                settings.embedding_dimensions,
-                settings.request_timeout_seconds,
-            )
-        else:
-            embedder = HashEmbeddingProvider(settings.embedding_dimensions)
+        embedder = HashEmbeddingProvider(settings.embedding_dimensions)
         return cls(
             core_client=CoreApiClient(
                 settings.core_api_url,

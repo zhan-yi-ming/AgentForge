@@ -42,4 +42,5 @@ $content = $content.Replace("agentforge_local_only", $databasePassword)
 [IO.File]::WriteAllText($targetPath, $content, [Text.UTF8Encoding]::new($false))
 
 Write-Host "Created local configuration: $targetPath"
-Write-Host "Default hash embedding needs no external API key."
+Write-Host "Default disabled LLM mode needs no external API key."
+Write-Host "To enable AI, edit this ignored file and set LLM_PROVIDER plus LLM_API_KEY."

@@ -25,6 +25,8 @@
 
 Python 不返回 actionId/status，也不执行写入。Java 不信任 proposal，必须重新校验组合、长度、枚举、actor、project 和 Task version。内部 token 错误返回 401。`GET /health` 返回服务状态，不包含密钥或环境值。
 
+当 `AGENTFORGE_AGENT_LLM_PROVIDER` 为 `deepseek`、`zhipu` 或 `qwen` 时，`answer` 来自对应 OpenAI-compatible Chat Completions 服务；`disabled` 时为确定性回退回答。provider 缺少 key、模型服务不可达、认证/限流失败或响应不含有效文本时内部入口返回 503，Core API 继续向浏览器输出通用 503，不透传上游正文或凭据。
+
 ## Core API 内部来源入口
 
 `POST /internal/v1/rag/sources` 必须携带 `X-AgentForge-Core-Internal-Token` 与 `X-Request-Id`，且不接受 Bearer JWT 代替。Body：

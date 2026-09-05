@@ -17,7 +17,7 @@
 6. Day 6：React 工作区组合登录、Project、Wiki、Task、Chat、Markdown 预览和人工确认，AI 文本只有显式应用并保存后才写入 Wiki。
 7. Day 7：完整 Compose 一次启动 Web、Core API、Agent Service 与 pgvector PostgreSQL，并提供安全配置生成、演示数据和验收脚本。
 
-Day 4 仍使用 deterministic responder，不调用生成式 LLM；回答会展示检索到的项目片段与结构化来源。默认 hash Embedding 不需要外部密钥，便于完整体验混合检索链路。
+默认 `disabled` responder 会展示确定性检索摘要，便于无外部 key 验证完整链路。将 `.env` 的 provider 和对应 key 改为 DeepSeek、智谱或通义千问后，LangGraph 会在 `respond` 节点生成真实 AI 回答。RAG 默认 hash Embedding 仍不需要外部密钥。
 
 ## 1A. 最快启动方式（推荐）
 
@@ -25,6 +25,8 @@ Day 4 仍使用 deterministic responder，不调用生成式 LLM；回答会展�
 
 ```powershell
 .\scripts\setup-local-env.ps1
+# 打开 .env，把 LLM_PROVIDER 改成 deepseek/zhipu/qwen，并填写 LLM_API_KEY
+notepad .env
 docker compose --env-file .env -f infra/compose.yaml up --build -d
 docker compose --env-file .env -f infra/compose.yaml ps
 .\scripts\demo\seed-v1.ps1
@@ -38,19 +40,28 @@ docker compose --env-file .env -f infra/compose.yaml ps
 - `AGENTFORGE_AGENT_INTERNAL_TOKEN`：Java → Python 的内部 token，至少 16 字符。
 - `AGENTFORGE_CORE_INTERNAL_TOKEN`：Python → Java 的另一个内部 token，至少 16 字符，不能与上一项共用。
 - `POSTGRES_PASSWORD`：本机数据库密码，并同步进入两个数据库连接 URL。
+- `AGENTFORGE_AGENT_LLM_API_KEY`：只在启用 `deepseek`、`zhipu` 或 `qwen` 时填写所选厂商的 key；这是唯一需要你从模型厂商控制台取得的值。
 
 推荐直接运行 `scripts/setup-local-env.ps1` 自动生成以上值，不要手工复制示例占位符。`.env` 已被 Git 忽略。
 
-默认 `AGENTFORGE_AGENT_EMBEDDING_PROVIDER=hash`，**不需要 OpenAI key**。若要使用 OpenAI-compatible Embedding，在本地 `.env` 修改/添加：
+首次体验推荐先选 DeepSeek。在被 Git 忽略的 `.env` 中修改；等号右侧直接替换为厂商控制台生成的真实值，不要保留中文说明：
 
 ```dotenv
-AGENTFORGE_AGENT_EMBEDDING_PROVIDER=openai
-AGENTFORGE_AGENT_OPENAI_BASE_URL=https://api.openai.com/v1
-AGENTFORGE_AGENT_OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-AGENTFORGE_AGENT_OPENAI_API_KEY=只填写你自己的本地key
+AGENTFORGE_AGENT_LLM_PROVIDER=deepseek
+AGENTFORGE_AGENT_LLM_API_KEY=只填写你自己的DeepSeek密钥
 ```
 
-该 key 目前只用于 Embedding，不会把 deterministic responder 变成生成式 LLM。不要把 `.env`、key、token 或含 token 的日志提交到仓库。
+智谱对应 `AGENTFORGE_AGENT_LLM_PROVIDER=zhipu`，千问对应 `AGENTFORGE_AGENT_LLM_PROVIDER=qwen`，并将同一 `AGENTFORGE_AGENT_LLM_API_KEY` 替换成该厂商的 key。每次切换后运行 `docker compose --env-file .env -f infra/compose.yaml up -d --force-recreate agent-service` 使配置生效。
+
+切换智谱或千问时只改 provider、key；默认模型和地址如下，也可在本地覆盖 `AGENTFORGE_AGENT_LLM_MODEL` 与 `AGENTFORGE_AGENT_LLM_BASE_URL`：
+
+| provider | 默认模型 | 默认 base URL |
+| --- | --- | --- |
+| `deepseek` | `deepseek-v4-flash` | `https://api.deepseek.com` |
+| `zhipu` | `glm-4-flash-250414` | `https://open.bigmodel.cn/api/paas/v4` |
+| `qwen` | `qwen-plus` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+
+百炼子业务空间或其他地域必须按控制台替换 base URL；模型名以账号当前可调用列表为准。`AGENTFORGE_AGENT_LLM_PROVIDER=disabled` 可随时恢复无 key 模式。不要把 `.env`、key、token 或含 token 的日志提交到仓库。
 
 ## 2. 前置条件
 
@@ -133,7 +144,8 @@ Day 4 需要以下新增环境值，它们由 `.env.example` 提供：
 - `AGENTFORGE_AGENT_CORE_API_URL`：Python 回调 Core API 的地址。
 - `AGENTFORGE_CORE_INTERNAL_TOKEN`：Python→Java 专用 token，必须与 Java 进程一致，且不能与 `AGENTFORGE_AGENT_INTERNAL_TOKEN` 共用。
 - `AGENTFORGE_AGENT_RAG_DB_DSN`：Python 只用于 `rag_chunk` 派生索引的 PostgreSQL DSN。
-- `AGENTFORGE_AGENT_EMBEDDING_PROVIDER=hash`：默认无密钥模式。切换为 `openai` 时另行在本机设置 `AGENTFORGE_AGENT_OPENAI_API_KEY`，不得写入 `.env.example` 或 Git。
+- `AGENTFORGE_AGENT_EMBEDDING_PROVIDER=hash`：V1 固定无密钥 Embedding 模式。
+- `AGENTFORGE_AGENT_LLM_PROVIDER`：`disabled` 或三家 provider；启用模型时必须在当前进程提供 `AGENTFORGE_AGENT_LLM_API_KEY`。
 
 看到 uvicorn 正在监听后不要关闭窗口。若 PowerShell 禁止激活脚本，可以不激活，改用：
 
@@ -223,7 +235,7 @@ $headers = @{ Authorization = "Bearer $token" }
 ```powershell
 $projectBody = @{
     name = "Local Demo $(Get-Date -Format 'HHmmss')"
-    description = 'Day 1 to Day 4 local demonstration'
+    description = 'AgentForge local AI demonstration'
 } | ConvertTo-Json
 $project = Invoke-RestMethod -Method Post -Uri "$core/api/v1/projects" -Headers $headers -ContentType 'application/json' -Body $projectBody
 $projectId = $project.id
@@ -262,7 +274,7 @@ Invoke-RestMethod -Uri "$core/api/v1/projects/$projectId/wiki-pages" -Headers $h
 Invoke-RestMethod -Uri "$core/api/v1/projects/$projectId/tasks" -Headers $headers
 ```
 
-## 11. 体验 Day 4 RAG Chat
+## 11. 体验真实模型 + RAG Chat
 
 ```powershell
 $chatBody = @{
@@ -277,7 +289,7 @@ $chat
 
 ```text
 conversationId : 一个 UUID
-answer         : 包含命中项目片段的确定性摘要
+answer         : disabled 模式为确定性摘要；启用 provider 后为模型结合项目片段生成的回答
 requestId      : 一个请求追踪 ID
 sources        : 至少包含 Architecture Wiki 来源
 ```
@@ -343,6 +355,6 @@ docker compose --env-file .env -f infra/compose.yaml down
 - Day 4 RAG 返回 503：再检查 `AGENTFORGE_CORE_INTERNAL_TOKEN` 两端是否一致、`AGENTFORGE_AGENT_CORE_API_URL` 是否指向 Core API，以及 PostgreSQL 镜像是否支持 `CREATE EXTENSION vector`。
 - Day 5 Chat 没有 `pendingAction`：使用文档中的明确创建表达；更新必须包含合法 Task UUID、当前 version 和至少一个修改字段。
 - confirm 返回 409：action 已拒绝，或目标 Task version 已变化；重新读取 Task 后创建新提案。
-- openai Embedding 失败：确认 provider、API URL、模型、384 维配置和本机 key；排查时不得输出 key。需要无网络恢复时切回 `hash`。
+- 模型调用返回 503：确认 provider 拼写、所选厂商 key、账号模型权限、余额、地域 base URL 和模型名；排查时不得输出 key。需要无网络恢复时切回 `disabled`。
 - Bearer 请求返回 401：token 可能已超过默认 30 分钟，重新登录获取。
 - 请求返回错误时：记录响应头 `X-Request-Id`，到 Core API 日志中搜索相同值。
