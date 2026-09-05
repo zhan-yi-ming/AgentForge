@@ -19,6 +19,81 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  core-api:
+    build:
+      context: ../services/core-api
+    environment:
+      AGENTFORGE_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-agentforge}
+      AGENTFORGE_DB_USERNAME: ${POSTGRES_USER:-agentforge}
+      AGENTFORGE_DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      AGENTFORGE_SERVER_PORT: 8080
+      AGENTFORGE_JWT_SECRET: ${AGENTFORGE_JWT_SECRET:?run scripts/setup-local-env.ps1}
+      AGENTFORGE_JWT_ISSUER: ${AGENTFORGE_JWT_ISSUER:-https://agentforge.local/core-api}
+      AGENTFORGE_JWT_TTL: ${AGENTFORGE_JWT_TTL:-PT30M}
+      AGENTFORGE_AGENT_SERVICE_URL: http://agent-service:8000
+      AGENTFORGE_AGENT_INTERNAL_TOKEN: ${AGENTFORGE_AGENT_INTERNAL_TOKEN:?run scripts/setup-local-env.ps1}
+      AGENTFORGE_CORE_INTERNAL_TOKEN: ${AGENTFORGE_CORE_INTERNAL_TOKEN:?run scripts/setup-local-env.ps1}
+      AGENTFORGE_AGENT_CONNECT_TIMEOUT: ${AGENTFORGE_AGENT_CONNECT_TIMEOUT:-PT2S}
+      AGENTFORGE_AGENT_READ_TIMEOUT: ${AGENTFORGE_AGENT_READ_TIMEOUT:-PT30S}
+    ports:
+      - "${CORE_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  agent-service:
+    build:
+      context: ../services/agent-service
+    environment:
+      AGENTFORGE_AGENT_INTERNAL_TOKEN: ${AGENTFORGE_AGENT_INTERNAL_TOKEN:?run scripts/setup-local-env.ps1}
+      AGENTFORGE_CORE_INTERNAL_TOKEN: ${AGENTFORGE_CORE_INTERNAL_TOKEN:?run scripts/setup-local-env.ps1}
+      AGENTFORGE_AGENT_CORE_API_URL: http://core-api:8080
+      AGENTFORGE_AGENT_RAG_DB_DSN: postgresql://${POSTGRES_USER:-agentforge}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-agentforge}
+      AGENTFORGE_AGENT_EMBEDDING_PROVIDER: ${AGENTFORGE_AGENT_EMBEDDING_PROVIDER:-hash}
+      AGENTFORGE_AGENT_EMBEDDING_DIMENSIONS: ${AGENTFORGE_AGENT_EMBEDDING_DIMENSIONS:-384}
+      AGENTFORGE_AGENT_OPENAI_BASE_URL: ${AGENTFORGE_AGENT_OPENAI_BASE_URL:-https://api.openai.com/v1}
+      AGENTFORGE_AGENT_OPENAI_EMBEDDING_MODEL: ${AGENTFORGE_AGENT_OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      AGENTFORGE_AGENT_OPENAI_API_KEY: ${AGENTFORGE_AGENT_OPENAI_API_KEY:-}
+    ports:
+      - "${AGENT_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      core-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../apps/web
+    ports:
+      - "${WEB_PORT:-5173}:80"
+    depends_on:
+      core-api:
+        condition: service_healthy
+      agent-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
@@ -32,6 +107,7 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+    profiles: ["optional"]
 
 volumes:
   agentforge-postgres-data:

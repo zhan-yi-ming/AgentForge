@@ -11,10 +11,11 @@
 - `review-orchestration.md`：历史 Codex/Pi 编排方案；Pi 已停用，只保留追溯资料。
 - `agent-chat.md`：Day 3 项目内 Chat、LangGraph 状态流与 Java-Python 边界，已实现。
 - `rag-retrieval.md`：Day 4 Wiki/Task Chunk、Embedding、BM25、RRF、Context 与来源引用，已实现并通过真实 pgvector 与跨进程验证。
-- `tool-calling-and-confirmation.md`：Day 5 create/update task 意图、待确认 action 与 Java 确定性写回，正在实施。
+- `tool-calling-and-confirmation.md`：Day 5 create/update task 意图、待确认 action 与 Java 确定性写回，已实现。
+- `web-workspace.md`：Day 6 登录、项目选择、Wiki/Task、AI Chat、人工确认与 Markdown 预览，已实现并在 Day 7 完成真实浏览器验收。
 
 ## 后续计划
 
 以下文档尚未创建，表示功能也不应开始实现：
 
-- [React 项目工作区](web-workspace.md)：登录、项目选择、Wiki/Task、AI Chat、人工确认与 Markdown 预览（Day 6）
+- V2 的 Context Manager、Memory Namespace、完整 RBAC、审计、幂等和可恢复执行尚未建立功能文档，也不得提前实现。

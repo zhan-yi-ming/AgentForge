@@ -1,7 +1,7 @@
 # 系统架构总览
 
 - 状态：Accepted
-- 当前实现范围：Day 1–Day 6 已实现
+- 当前实现范围：V1 / Day 1–Day 7 已实现并通过本地完整栈验收
 
 ## 系统组件
 
@@ -20,7 +20,7 @@ Java Core API (services/core-api) ------> PostgreSQL + pgvector
 Python Agent Service (services/agent-service) -> Embedding / Retrieval
   概率性决策、上下文、RAG、Tool 意图
 
-Redis：V1 后续用于短期会话/状态辅助，不作为业务事实来源。
+Redis：仅作为后续阶段可选 profile 保留，V1 默认不启动，也不作为业务事实来源。
 ```
 
 ## 组件职责

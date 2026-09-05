@@ -1,7 +1,11 @@
 # 本地基础设施
 
-- 状态：Accepted
+- 状态：Implemented
 - 编排文件：`infra/compose.yaml`
+
+## 完整 V1 栈
+
+`infra/compose.yaml` 统一启动 `postgres`、`core-api`、`agent-service` 和 `web`。`redis` 仅作为可选 profile 保留，不参与 V1 业务链路。Web 容器提供静态 React 页面，并把 `/api` 反向代理到 Core API。
 
 ## PostgreSQL
 
@@ -9,14 +13,14 @@ Day 1 的必要依赖，保存 User 和 Project。Compose 使用命名卷持久�
 
 ## Redis
 
-为 V1 后续的短期状态与缓存预留。Day 1 Java 不连接 Redis；启动它只是验证整体本地拓扑，不代表相关功能已实现。
+为后续短期状态与缓存预留。V1 不连接 Redis，默认完整栈也不启动它；只有显式启用 `optional` profile 才启动。
 
 ## 启停
 
 ```text
-docker compose --env-file .env -f infra/compose.yaml up -d postgres redis
+docker compose --env-file .env -f infra/compose.yaml up --build -d
 docker compose --env-file .env -f infra/compose.yaml ps
-docker compose --env-file .env -f infra/compose.yaml logs postgres
+docker compose --env-file .env -f infra/compose.yaml logs -f web core-api agent-service postgres
 docker compose --env-file .env -f infra/compose.yaml down
 ```
 

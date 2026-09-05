@@ -37,6 +37,6 @@ V1 跑通 Web → Java → Python Agent → RAG / Tool → Java 写回。V2 加�
 
 所有改变先进入文档，再进入实现。产品行为看功能文档，系统结构看架构和 ADR，历史变化看变更记录。
 
-## 当前交付边界：Day 6 正在实施
+## 当前交付边界：V1 已完成
 
-Day 1–Day 5 已交付并完成远端核验。Day 6 正在按文档先行实现 React 联调、确认页面、AI 文本整理与 Markdown 预览；前端继续服从 Java 权限、version 和确认边界，不新增旁路写入。
+Day 1–Day 7 已完成：React Web、Java Core API、Python Agent Service 与 pgvector PostgreSQL 可由 Compose 一次启动，Project/Wiki/Task、RAG、Tool proposal、人工确认/拒绝和 Java 确定性写回已通过接口、组件、集成和真实浏览器验收。V2 可靠性能力尚未开始。

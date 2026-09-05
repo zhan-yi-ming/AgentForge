@@ -87,3 +87,13 @@ Day 4 跨进程闭环由仓库脚本执行：
 - 不用快照替代关键交互断言，不测试组件私有 state，不过度 mock React 内部实现。
 - Day 6 至少完成真实 Core API/Agent Service 关键链路联调；完整三应用自动化 E2E、容器化和演示数据在 Day 7 固化。
 - Codex 执行全部测试；Pi 只审核完成后的 diff。重大问题才阻断，小问题登记到下一轮统一处理，不因风格建议反复复审。
+
+## Day 7 / V1 最终验收门槛
+
+- 从空构建启动 Web、Core API、Agent Service 与 pgvector PostgreSQL，不能依赖旧 JAR、旧虚拟环境或旧前端产物。
+- Web 入口及三个后端健康检查通过；公开 API 完成注册/登录、Project、Wiki、Task、RAG Chat、Tool proposal、confirm/reject。
+- 演示数据只经公开 API 创建，重复邮箱可回退登录；脚本不打印 access token，不内置真实密码或外部 API key。
+- 默认 hash Embedding 在无外部 key 时完成验收；OpenAI-compatible Embedding 是明确可选配置，不得把 key 写入仓库。
+- Java clean verify、Python pytest、Vitest、Vite production build和完整 Compose 验收全部记录真实退出码、数量和清理证据。
+- V1 禁止因收尾提前引入 V2/V3 组件；生产部署、安全加固和真实生成式模型另立阶段。
+- Day 7 最终审核由 Codex 执行，并以浏览器真实交互补充接口和组件测试；本阶段不调用 Pi。

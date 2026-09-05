@@ -1,4 +1,4 @@
-# Day 1–Day 6 本地启动与体验教程
+# V1 / Day 1–Day 7 本地启动与体验教程
 
 - 状态：Implemented
 - 适用系统：Windows PowerShell
@@ -15,8 +15,42 @@
 4. Day 4：Chat 从当前项目的 Wiki/Task 构建 Chunk，以 Embedding + BM25 + RRF 检索，并返回来源。
 5. Day 5：Chat 返回 create/update task 待确认预览；confirm 后才由 Java 写入，reject 不写入。
 6. Day 6：React 工作区组合登录、Project、Wiki、Task、Chat、Markdown 预览和人工确认，AI 文本只有显式应用并保存后才写入 Wiki。
+7. Day 7：完整 Compose 一次启动 Web、Core API、Agent Service 与 pgvector PostgreSQL，并提供安全配置生成、演示数据和验收脚本。
 
 Day 4 仍使用 deterministic responder，不调用生成式 LLM；回答会展示检索到的项目片段与结构化来源。默认 hash Embedding 不需要外部密钥，便于完整体验混合检索链路。
+
+## 1A. 最快启动方式（推荐）
+
+只需 Docker Desktop 已启动。在仓库根目录运行：
+
+```powershell
+.\scripts\setup-local-env.ps1
+docker compose --env-file .env -f infra/compose.yaml up --build -d
+docker compose --env-file .env -f infra/compose.yaml ps
+.\scripts\demo\seed-v1.ps1
+```
+
+等待四个服务显示 healthy 后打开 `http://127.0.0.1:5173`。演示脚本会输出本地登录邮箱和密码，不输出 access token。首次构建需要下载容器镜像和依赖；以后直接 `docker compose --env-file .env -f infra/compose.yaml up -d`。
+
+### 哪些 key 需要替换
+
+- `AGENTFORGE_JWT_SECRET`：Core API 签名 JWT，必须是 Base64 编码且解码后至少 32 字节。
+- `AGENTFORGE_AGENT_INTERNAL_TOKEN`：Java → Python 的内部 token，至少 16 字符。
+- `AGENTFORGE_CORE_INTERNAL_TOKEN`：Python → Java 的另一个内部 token，至少 16 字符，不能与上一项共用。
+- `POSTGRES_PASSWORD`：本机数据库密码，并同步进入两个数据库连接 URL。
+
+推荐直接运行 `scripts/setup-local-env.ps1` 自动生成以上值，不要手工复制示例占位符。`.env` 已被 Git 忽略。
+
+默认 `AGENTFORGE_AGENT_EMBEDDING_PROVIDER=hash`，**不需要 OpenAI key**。若要使用 OpenAI-compatible Embedding，在本地 `.env` 修改/添加：
+
+```dotenv
+AGENTFORGE_AGENT_EMBEDDING_PROVIDER=openai
+AGENTFORGE_AGENT_OPENAI_BASE_URL=https://api.openai.com/v1
+AGENTFORGE_AGENT_OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+AGENTFORGE_AGENT_OPENAI_API_KEY=只填写你自己的本地key
+```
+
+该 key 目前只用于 Embedding，不会把 deterministic responder 变成生成式 LLM。不要把 `.env`、key、token 或含 token 的日志提交到仓库。
 
 ## 2. 前置条件
 

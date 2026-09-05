@@ -14,6 +14,7 @@
 
 ## 索引
 
+- `2026-09-05-day-7-v1-acceptance.md`：V1 最终验收、完整本地 Compose、演示数据和运行教程。
 - `2026-09-05-day-6-react-workspace.md`：React 项目工作区、AI Chat、人工确认与 Markdown 安全预览。
 - `2026-09-05-day-5-tool-calling-hitl.md`：Python create/update task 意图、Java 待确认 action、confirm/reject 与确定性写回。
 - `2026-09-05-disable-pi-and-day1-day4-audit.md`：停用 Pi、引入工程 skills，并由 Codex 以干净构建和真实跨进程测试复核 Day 1–4。

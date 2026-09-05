@@ -7,7 +7,7 @@
 第一次进入项目时，按以下顺序阅读：
 
 1. `01-product/product-overview.md`：理解产品解决的问题与 V1 边界。
-2. `01-product/roadmap.md`：理解三阶段路线和当前 Day 6 目标。
+2. `01-product/roadmap.md`：理解三阶段路线和当前 Day 7 / V1 验收目标。
 3. `02-architecture/system-overview.md`：理解 Web、Java、Python、数据与基础设施的关系。
 4. `02-architecture/repository-structure.md`：找到代码和文档的位置。
 5. `03-features/README.md`：进入具体功能文档。
