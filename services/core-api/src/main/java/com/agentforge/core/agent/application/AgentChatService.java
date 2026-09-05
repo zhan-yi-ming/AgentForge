@@ -25,6 +25,12 @@ public class AgentChatService {
             UUID conversationId,
             String requestId) {
         projectAccess.requireAccess(projectId, actor);
-        return agentServiceClient.chat(projectId, actor.userId(), message.trim(), conversationId, requestId);
+        return agentServiceClient.chat(
+                projectId,
+                actor.userId(),
+                actor.admin(),
+                message.trim(),
+                conversationId,
+                requestId);
     }
 }

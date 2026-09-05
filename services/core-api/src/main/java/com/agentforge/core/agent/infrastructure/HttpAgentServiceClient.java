@@ -24,6 +24,7 @@ public class HttpAgentServiceClient implements AgentServiceClient {
     public AgentChatResult chat(
             UUID projectId,
             UUID userId,
+            boolean actorAdmin,
             String message,
             UUID conversationId,
             String requestId) {
@@ -34,7 +35,13 @@ public class HttpAgentServiceClient implements AgentServiceClient {
             AgentChatResult response = restClient.post()
                     .uri("/internal/v1/chat")
                     .header("X-Request-Id", effectiveRequestId)
-                    .body(new InternalChatRequest(projectId, userId, message, conversationId, effectiveRequestId))
+                    .body(new InternalChatRequest(
+                            projectId,
+                            userId,
+                            actorAdmin,
+                            message,
+                            conversationId,
+                            effectiveRequestId))
                     .retrieve()
                     .body(AgentChatResult.class);
             if (response == null) {
@@ -50,6 +57,7 @@ public class HttpAgentServiceClient implements AgentServiceClient {
     private record InternalChatRequest(
             UUID projectId,
             UUID userId,
+            boolean actorAdmin,
             String message,
             UUID conversationId,
             String requestId) {

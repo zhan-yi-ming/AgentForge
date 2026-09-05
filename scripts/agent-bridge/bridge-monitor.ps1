@@ -17,6 +17,10 @@ param(
     [switch]$Once
 )
 
+# Disabled by user request on 2026-09-05; retain historical implementation for audit only.
+[PSCustomObject]@{ OverallStatus = 'DISABLED'; Actions = @(); Reason = 'Pi review and validation disabled by user' }
+return
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 

@@ -71,12 +71,32 @@
 
 为 `(project_id, updated_at DESC)` 建列表索引。状态和优先级同时由 Java enum 与数据库检查约束保护。
 
+## Day 4 RAG 派生索引
+
+Flyway V3 迁移启用 `vector` 扩展并创建 `rag_chunk`。该表可从 Wiki/Task 重建，不是业务事实。
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| `id` | UUID | 主键 | 由来源版本和 Chunk 序号确定性生成 |
+| `project_id` | UUID | 外键、非空、索引 | 项目隔离键，项目删除时级联清理 |
+| `source_type` | VARCHAR(16) | `WIKI` / `TASK` | 来源类型 |
+| `source_id` | UUID | 非空 | Wiki Page 或 Task ID |
+| `source_version` | BIGINT | 非负 | 业务来源版本 |
+| `chunk_index` | INTEGER | 非负 | 来源内稳定序号 |
+| `title` | VARCHAR(200) | 非空 | 用于 Context 和引用 |
+| `content` | TEXT | 非空 | 原文片段，用于 BM25 与摘录 |
+| `embedding` | VECTOR(384) | 非空 | 归一化 Embedding |
+| `created_at` | TIMESTAMPTZ | 非空 | 本次索引写入时间 |
+
+唯一键为 `(source_type, source_id, source_version, chunk_index)`；查询索引覆盖 `project_id`，向量使用 cosine HNSW。Python 只访问此表，不访问业务表。来源版本变化时整组替换，来源删除时删除对应 Chunk。
+
 ## 隔离与并发
 
 - Project owner 是权限事实；API 不能用客户端传入的 ownerId 代替认证身份。
 - Wiki / Task 具体资源查询必须同时包含 `project_id` 和资源 ID，防止路径与资源错配。
 - 更新和删除要求客户端提交当前 `version`。版本不一致返回 409，禁止 last-write-wins 静默覆盖。
 - 数据库唯一 / 检查 / 外键约束提供并发下最终保护，应用层校验提供可读错误。
+- RAG 查询和清理都必须带 `project_id`；即使来源 ID 猜测成功，也不能跨项目读取 Chunk。
 
 ## 迁移规则
 

@@ -14,6 +14,8 @@
 
 ## 索引
 
+- `2026-09-05-disable-pi-and-day1-day4-audit.md`：停用 Pi、引入工程 skills，并由 Codex 以干净构建和真实跨进程测试复核 Day 1–4。
+- `2026-09-04-day-4-hybrid-rag.md`：Wiki/Task Chunk、Embedding、BM25、RRF、Retrieved Context 与来源引用。
 - `2026-09-04-day-3-agent-service-chat.md`：FastAPI/LangGraph Chat 与 Java-Python 调用契约。
 - `2026-09-04-review-state-only-stage-resume.md`：修复仅存在于运行时状态的阶段无法消费显式 `Review-Fixes` trailer 的调度缺口。
 - `2026-09-04-day1-day2-final-review-evidence.md`：补齐第三轮 Pi 报告要求的验证证据，并定义 Pi 受限测试执行职责。

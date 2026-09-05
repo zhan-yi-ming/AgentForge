@@ -229,6 +229,12 @@ title 1–200；description 可空且最大 10,000。status 可省略，默认 `
 
 `GET /actuator/health` 无需认证，用于本地和容器健康检查。默认只暴露 health 和 info，不暴露环境变量、堆信息或配置密钥。
 
+## Agent Chat
+
+`POST /api/v1/projects/{projectId}/agent/chat` 的请求与错误语义见 `agent-service.md`。Day 4 在既有成功响应上新增 `sources` 数组；这是兼容的信息扩展。来源只包含类型、ID、标题和短摘录，不返回整份未命中文档。
+
+`/internal/v1/rag/sources` 是 Agent Service 专用只读接口，不属于浏览器公共 API。它使用独立 Core 内部 token，并在读取 Wiki/Task 前再次执行用户存在和项目权限校验。
+
 ## 兼容性
 
 Day 2 在首个可用版本形成前有意替换了 Day 1 匿名 User / Project 契约，迁移理由记录在 ADR-0005 和当前变更记录。后续新增可选响应字段视为兼容；删除或重命名字段、改变含义或状态码属于破坏性变化，必须先更新功能/API 文档并写 ADR 或迁移说明。

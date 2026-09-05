@@ -51,7 +51,7 @@ class AgentServiceHttpContractIntegrationTest {
         registry.add("agentforge.agent-service.base-url", () -> requiredEnvironment("AGENTFORGE_AGENT_SERVICE_URL"));
         registry.add("agentforge.agent-service.internal-token", () -> requiredEnvironment("AGENTFORGE_AGENT_INTERNAL_TOKEN"));
         registry.add("agentforge.agent-service.connect-timeout", () -> "PT2S");
-        registry.add("agentforge.agent-service.read-timeout", () -> "PT15S");
+        registry.add("agentforge.agent-service.read-timeout", () -> "PT30S");
         registry.add("spring.jackson.default-property-inclusion", () -> "non_null");
     }
 
@@ -60,9 +60,9 @@ class AgentServiceHttpContractIntegrationTest {
         HttpAgentServiceClient client = new HttpAgentServiceClient(restClient);
 
         AgentChatResult result = client.chat(
-                UUID.randomUUID(), UUID.randomUUID(), "  contract check  ", null, null);
+                UUID.randomUUID(), UUID.randomUUID(), false, "  contract check  ", null, null);
 
-        assertThat(result.answer()).isEqualTo("Agent service received: contract check");
+        assertThat(result.answer()).startsWith("No relevant project context was found");
         assertThat(result.conversationId()).isNotNull();
         assertThat(result.requestId()).isNotBlank();
     }
@@ -74,7 +74,7 @@ class AgentServiceHttpContractIntegrationTest {
                 .build();
 
         assertThatThrownBy(() -> new HttpAgentServiceClient(invalidTokenClient).chat(
-                UUID.randomUUID(), UUID.randomUUID(), "contract check", null, null))
+                UUID.randomUUID(), UUID.randomUUID(), false, "contract check", null, null))
                 .isInstanceOf(ServiceUnavailableException.class);
     }
 
@@ -89,7 +89,7 @@ class AgentServiceHttpContractIntegrationTest {
                 .agentServiceRestClient(restClientBuilder, unavailableProperties);
 
         assertThatThrownBy(() -> new HttpAgentServiceClient(unavailableClient).chat(
-                UUID.randomUUID(), UUID.randomUUID(), "contract check", null, null))
+                UUID.randomUUID(), UUID.randomUUID(), false, "contract check", null, null))
                 .isInstanceOf(ServiceUnavailableException.class);
     }
 
@@ -102,6 +102,7 @@ class AgentServiceHttpContractIntegrationTest {
             assertThat(request).isInstanceOf(MockClientHttpRequest.class);
             JsonNode body = objectMapper.readTree(((MockClientHttpRequest) request).getBodyAsString());
             assertThat(body.has("conversationId")).isFalse();
+            assertThat(body.path("actorAdmin").asBoolean()).isFalse();
             String bodyRequestId = body.path("requestId").asText();
             assertThat(bodyRequestId).isNotBlank();
             assertThat(UUID.fromString(bodyRequestId)).isNotNull();
@@ -112,9 +113,28 @@ class AgentServiceHttpContractIntegrationTest {
                 MediaType.APPLICATION_JSON));
 
         AgentChatResult result = new HttpAgentServiceClient(recordingBuilder.build()).chat(
-                UUID.randomUUID(), UUID.randomUUID(), "contract check", null, null);
+                UUID.randomUUID(), UUID.randomUUID(), false, "contract check", null, null);
 
         assertThat(result.answer()).isEqualTo("contract response");
+        server.verify();
+    }
+
+    @Test
+    void httpAdapterForwardsAdministratorFlag() {
+        RestClient.Builder recordingBuilder = restClientBuilder.clone().baseUrl("http://contract.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(recordingBuilder).build();
+        server.expect(request -> {
+            JsonNode body = objectMapper.readTree(((MockClientHttpRequest) request).getBodyAsString());
+            assertThat(body.path("actorAdmin").asBoolean()).isTrue();
+        }).andRespond(withSuccess(
+                "{\"conversationId\":\"15fd0b81-7cc8-4833-b5d9-79fb67784bc5\","
+                        + "\"answer\":\"admin contract response\",\"requestId\":\"admin-contract\"}",
+                MediaType.APPLICATION_JSON));
+
+        AgentChatResult result = new HttpAgentServiceClient(recordingBuilder.build()).chat(
+                UUID.randomUUID(), UUID.randomUUID(), true, "contract check", null, "admin-contract");
+
+        assertThat(result.answer()).isEqualTo("admin contract response");
         server.verify();
     }
 

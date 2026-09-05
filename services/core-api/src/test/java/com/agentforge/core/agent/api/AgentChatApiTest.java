@@ -22,6 +22,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.agentforge.core.agent.application.AgentChatResult;
 import com.agentforge.core.agent.application.AgentChatService;
+import com.agentforge.core.agent.application.AgentSource;
 import com.agentforge.core.security.SecurityConfiguration;
 import com.agentforge.core.security.SecurityProblemWriter;
 import com.agentforge.core.shared.error.ServiceUnavailableException;
@@ -45,7 +46,10 @@ class AgentChatApiTest {
         UUID conversationId = UUID.randomUUID();
         when(agentChatService.chat(eq(projectId), any(), eq("hello"), eq(conversationId), any()))
                 .thenAnswer(invocation -> new AgentChatResult(
-                        conversationId, "Agent service received: hello", invocation.getArgument(4)));
+                        conversationId,
+                        "Relevant project context",
+                        invocation.getArgument(4),
+                        List.of(new AgentSource("WIKI", UUID.randomUUID(), "Architecture", "Java owns writes."))));
 
         mockMvc.perform(post("/api/v1/projects/{projectId}/agent/chat", projectId)
                         .with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString()).claim("roles", List.of("USER"))))
@@ -56,8 +60,10 @@ class AgentChatApiTest {
                                 """.formatted(conversationId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.conversationId").value(conversationId.toString()))
-                .andExpect(jsonPath("$.answer").value("Agent service received: hello"))
-                .andExpect(jsonPath("$.requestId").value("request-123"));
+                .andExpect(jsonPath("$.answer").value("Relevant project context"))
+                .andExpect(jsonPath("$.requestId").value("request-123"))
+                .andExpect(jsonPath("$.sources[0].sourceType").value("WIKI"))
+                .andExpect(jsonPath("$.sources[0].title").value("Architecture"));
     }
 
     @Test

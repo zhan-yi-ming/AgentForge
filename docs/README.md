@@ -7,7 +7,7 @@
 第一次进入项目时，按以下顺序阅读：
 
 1. `01-product/product-overview.md`：理解产品解决的问题与 V1 边界。
-2. `01-product/roadmap.md`：理解三阶段路线和当前 Day 1 目标。
+2. `01-product/roadmap.md`：理解三阶段路线和当前 Day 4 目标。
 3. `02-architecture/system-overview.md`：理解 Web、Java、Python、数据与基础设施的关系。
 4. `02-architecture/repository-structure.md`：找到代码和文档的位置。
 5. `03-features/README.md`：进入具体功能文档。
@@ -44,7 +44,7 @@
 ### `04-api/`：服务之间如何通信
 
 - `core-api.md`：Java Core API 的 HTTP 契约、错误模型和版本规则。
-- `agent-service.md`：Day 3 Java 与 Python Agent 之间的 Chat 契约。
+- `agent-service.md`：Day 3–Day 4 Java/Python Chat、RAG 来源与引用契约。
 
 ### `05-development/`：开发者如何运行和验证
 
@@ -55,7 +55,7 @@
 ### `06-operations/`：系统如何部署与排错
 
 - `local-stack.md`：本地 PostgreSQL/Redis 容器、健康检查和数据清理。
-- `review-orchestration.md`：Pi 审查 monitor、状态文件和故障排查。
+- `review-orchestration.md`：已停用 Pi 编排的历史设计、禁用状态和追溯说明。
 
 ### `07-changes/`：每次变化的证据链
 
@@ -64,7 +64,7 @@
 
 ### `08-reviews/`：代码审查中心
 
-- `README.md`：Pi Agent (DeepSeek) 审查与 Codex 修复评估的闭环规范、三次修复循环和人工接管边界。
+- `README.md`：历史 Pi 报告的追溯规则；当前验证由 Codex 直接执行。
 - 保存各阶段交付物的结构化代码审查报告（`YYYY-MM-DD-review-day-<X>.md`）。
 
 ### `templates/`：写文档时复用

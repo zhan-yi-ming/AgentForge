@@ -1,13 +1,23 @@
+from functools import lru_cache
 import hmac
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from .config import Settings, get_settings
+from .errors import RagDependencyError
 from .graph import build_chat_graph
+from .retrieval import DisabledRetrievalService, RetrievalService
 from .schemas import ChatRequest, ChatResponse, HealthResponse
 
 router = APIRouter()
-chat_graph = build_chat_graph()
+
+
+@lru_cache
+def get_retrieval_service() -> RetrievalService | DisabledRetrievalService:
+    settings = get_settings()
+    if not settings.rag_enabled:
+        return DisabledRetrievalService()
+    return RetrievalService.from_settings(settings)
 
 
 def require_internal_token(
@@ -29,12 +39,17 @@ def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
     response_model=ChatResponse,
     dependencies=[Depends(require_internal_token)],
 )
-def chat(request: ChatRequest) -> ChatResponse:
+def chat(
+    request: ChatRequest,
+    retrieval_service: RetrievalService | DisabledRetrievalService = Depends(get_retrieval_service),
+) -> ChatResponse:
     try:
+        chat_graph = build_chat_graph(retrieval_service.retrieve)
         state = chat_graph.invoke(
             {
                 "project_id": request.project_id,
                 "user_id": request.user_id,
+                "actor_admin": request.actor_admin,
                 "message": request.message,
                 "conversation_id": request.conversation_id,
                 "request_id": request.request_id,
@@ -42,8 +57,14 @@ def chat(request: ChatRequest) -> ChatResponse:
         )
     except ValueError as exception:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exception)) from exception
+    except RagDependencyError as exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="RAG dependencies are unavailable.",
+        ) from exception
     return ChatResponse(
         conversation_id=state["conversation_id"],
         answer=state["answer"],
         request_id=state["request_id"],
+        sources=state.get("sources", []),
     )

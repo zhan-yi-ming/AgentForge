@@ -1,6 +1,8 @@
 # Pi 审查编排运行手册
 
-- 状态：Accepted
+- 状态：Deprecated
+
+> 2026-09-05 起本页仅用于历史追溯。所有 Pi/monitor 入口均已禁用，当前验证流程以 `../05-development/testing-strategy.md` 为准。
 
 ## 启动
 
@@ -76,3 +78,7 @@ Review-Fixes: review-orchestration-loop
 ```
 
 自动发现的阶段可能只存在于 `.review-loop-state.json`。后续修复提交使用同名 `Review-Fixes` trailer 时，循环会恢复并调度该阶段；如果 trailer 拼写与注册表、变更记录和运行时状态均不匹配，循环必须报错而不是静默创建阶段。
+
+## 2026-09-05 生效：停用 Pi
+
+用户已撤销 Pi 审查与测试授权。Codex 直接运行构建、格式和测试，核对机器产物并记录退出码、测试数量、失败、跳过与清理。旧 Pi 流程仅供历史追溯，不得启动 monitor、调用 Pi 或凭旧 PASS 自动推进。详见 docs/07-changes/2026-09-05-disable-pi-and-day1-day4-audit.md。

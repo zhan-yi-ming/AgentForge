@@ -24,13 +24,14 @@ class AgentChatServiceTest {
         UUID conversationId = UUID.randomUUID();
         AuthenticatedActor actor = new AuthenticatedActor(userId, false);
         AgentChatResult expected = new AgentChatResult(conversationId, "answer", "request-1");
-        when(client.chat(projectId, userId, "hello", conversationId, "request-1")).thenReturn(expected);
+        when(client.chat(projectId, userId, false, "hello", conversationId, "request-1")).thenReturn(expected);
 
         AgentChatResult result = service.chat(projectId, actor, "  hello  ", conversationId, "request-1");
 
         assertThat(result).isEqualTo(expected);
         InOrder order = inOrder(projectAccess, client);
         order.verify(projectAccess).requireAccess(projectId, actor);
-        order.verify(client).chat(projectId, userId, "hello", conversationId, "request-1");
+        order.verify(client).chat(projectId, userId, false, "hello", conversationId, "request-1");
     }
+
 }

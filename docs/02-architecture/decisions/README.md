@@ -13,3 +13,4 @@ ADR 保存影响长期结构的决定。编号只增不减，Accepted 记录不�
 - `ADR-0007-autonomous-codex-pi-loop.md`：以 heartbeat 恢复 Codex 与 Pi 的跨回合协作。
 - `ADR-0008-review-worker-observability-and-fix-correlation.md`：单工作树 worker、异常安全锁、可观测状态与修复提交 trailer。
 - `ADR-0009-java-to-python-agent-boundary.md`：Java 鉴权后同步调用内部 Python Agent Service。
+- `ADR-0010-day-4-rag-boundary-and-ranking.md`：Java 提供已授权来源，Python 管理派生索引并用 Embedding、BM25 与 RRF 检索。

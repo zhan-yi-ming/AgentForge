@@ -1,4 +1,4 @@
-# Day 1–Day 3 本地启动与体验教程
+# Day 1–Day 4 本地启动与体验教程
 
 - 状态：Implemented
 - 适用系统：Windows PowerShell
@@ -12,8 +12,9 @@
 1. Day 1：PostgreSQL、用户和项目基础数据。
 2. Day 2：注册、登录、JWT、项目权限、Wiki 与 Task CRUD。
 3. Day 3：Java Core API 完成鉴权和项目授权后，通过真实 HTTP/1.1 调用 Python FastAPI + LangGraph Chat。
+4. Day 4：Chat 从当前项目的 Wiki/Task 构建 Chunk，以 Embedding + BM25 + RRF 检索，并返回来源。
 
-Day 3 当前使用 deterministic responder，所以 Chat 会返回 `Agent service received: 你的消息`。它证明 Java/Python 链路已经打通，但还不会检索 Wiki；RAG 属于尚未开发的 Day 4。
+Day 4 仍使用 deterministic responder，不调用生成式 LLM；回答会展示检索到的项目片段与结构化来源。默认 hash Embedding 不需要外部密钥，便于完整体验混合检索链路。
 
 ## 2. 前置条件
 
@@ -44,29 +45,35 @@ Copy-Item .env.example .env
 $random = [Security.Cryptography.RandomNumberGenerator]::Create()
 $jwtBytes = New-Object byte[] 32
 $tokenBytes = New-Object byte[] 32
+$coreTokenBytes = New-Object byte[] 32
 $random.GetBytes($jwtBytes)
 $random.GetBytes($tokenBytes)
+$random.GetBytes($coreTokenBytes)
 $random.Dispose()
 $jwtSecret = [Convert]::ToBase64String($jwtBytes)
 $internalToken = -join ($tokenBytes | ForEach-Object { $_.ToString('x2') })
+$coreInternalToken = -join ($coreTokenBytes | ForEach-Object { $_.ToString('x2') })
 $content = Get-Content .env -Raw
 $content = $content.Replace('REPLACE_WITH_BASE64_32_BYTE_RANDOM_VALUE', $jwtSecret)
 $content = $content.Replace('REPLACE_WITH_RANDOM_INTERNAL_TOKEN', $internalToken)
+$content = $content.Replace('REPLACE_WITH_RANDOM_CORE_INTERNAL_TOKEN', $coreInternalToken)
 Set-Content .env $content -NoNewline
 ```
 
-`.env` 已被 Git 忽略，禁止提交或把其中两个随机值粘贴到 Issue、日志和聊天中。以后已有 `.env` 时不要重复覆盖，除非你明确希望更换本地密钥。
+`.env` 已被 Git 忽略，禁止提交或把其中的随机值粘贴到 Issue、日志和聊天中。以后已有 `.env` 时不要重复覆盖，除非你明确希望更换本地密钥。
+
+从 Day 3 升级的已有 `.env` 需要参照 `.env.example` 手动补入 Day 4 变量，并单独生成 `AGENTFORGE_CORE_INTERNAL_TOKEN`；不要把它复制成已有的 Agent token。上面的新建脚本会同时生成两个不同的内部 token。
 
 ## 4. 启动 PostgreSQL
 
-Redis 是后续阶段预留组件，Day 1–Day 3 只需要 PostgreSQL：
+Redis 是后续阶段预留组件，Day 1–Day 4 只需要带 pgvector 的 PostgreSQL：
 
 ```powershell
 docker compose --env-file .env -f infra/compose.yaml up -d postgres
 docker compose --env-file .env -f infra/compose.yaml ps
 ```
 
-等待 `postgres` 显示 `healthy`。首次启动需要拉取 `postgres:17-alpine`，会比后续启动慢。
+等待 `postgres` 显示 `healthy`。首次启动需要拉取 `pgvector/pgvector:pg17`，会比后续启动慢。
 
 ## 5. 启动 Python Agent Service
 
@@ -84,6 +91,13 @@ python -m venv .venv
 python -m pip install -e ".[test]"
 uvicorn agentforge_agent.main:app --reload --host 127.0.0.1 --port 8000
 ```
+
+Day 4 需要以下新增环境值，它们由 `.env.example` 提供：
+
+- `AGENTFORGE_AGENT_CORE_API_URL`：Python 回调 Core API 的地址。
+- `AGENTFORGE_CORE_INTERNAL_TOKEN`：Python→Java 专用 token，必须与 Java 进程一致，且不能与 `AGENTFORGE_AGENT_INTERNAL_TOKEN` 共用。
+- `AGENTFORGE_AGENT_RAG_DB_DSN`：Python 只用于 `rag_chunk` 派生索引的 PostgreSQL DSN。
+- `AGENTFORGE_AGENT_EMBEDDING_PROVIDER=hash`：默认无密钥模式。切换为 `openai` 时另行在本机设置 `AGENTFORGE_AGENT_OPENAI_API_KEY`，不得写入 `.env.example` 或 Git。
 
 看到 uvicorn 正在监听后不要关闭窗口。若 PowerShell 禁止激活脚本，可以不激活，改用：
 
@@ -159,7 +173,7 @@ $headers = @{ Authorization = "Bearer $token" }
 ```powershell
 $projectBody = @{
     name = "Local Demo $(Get-Date -Format 'HHmmss')"
-    description = 'Day 1 to Day 3 local demonstration'
+    description = 'Day 1 to Day 4 local demonstration'
 } | ConvertTo-Json
 $project = Invoke-RestMethod -Method Post -Uri "$core/api/v1/projects" -Headers $headers -ContentType 'application/json' -Body $projectBody
 $projectId = $project.id
@@ -198,11 +212,11 @@ Invoke-RestMethod -Uri "$core/api/v1/projects/$projectId/wiki-pages" -Headers $h
 Invoke-RestMethod -Uri "$core/api/v1/projects/$projectId/tasks" -Headers $headers
 ```
 
-## 11. 体验 Day 3 Agent Chat
+## 11. 体验 Day 4 RAG Chat
 
 ```powershell
 $chatBody = @{
-    message = 'Explain what the Agent Service received'
+    message = 'Which service owns authentication and writes?'
     conversationId = $null
 } | ConvertTo-Json
 $chat = Invoke-RestMethod -Method Post -Uri "$core/api/v1/projects/$projectId/agent/chat" -Headers $headers -ContentType 'application/json' -Body $chatBody
@@ -213,11 +227,14 @@ $chat
 
 ```text
 conversationId : 一个 UUID
-answer         : Agent service received: Explain what the Agent Service received
+answer         : 包含命中项目片段的确定性摘要
 requestId      : 一个请求追踪 ID
+sources        : 至少包含 Architecture Wiki 来源
 ```
 
-这个请求实际经过：JWT 校验 → 项目权限校验 → Java HTTP 客户端 → Python FastAPI → LangGraph `prepare`/`respond` 节点 → Java 响应。
+这个请求实际经过：JWT 校验 → 项目权限校验 → Java HTTP 客户端 → Python FastAPI → LangGraph `prepare`/`retrieve`/`respond` → Core 内部来源授权 → Chunk/Embedding/BM25/RRF → Java 响应。
+
+再询问 `Which task verifies chat?`，预期 `sources` 包含之前创建的 `Verify local chat` Task。查询与当前项目无关的随机文本时允许返回空数组，但不能引用其他项目。
 
 ## 12. 观察数据库中的数据
 
@@ -245,5 +262,7 @@ docker compose --env-file .env -f infra/compose.yaml down
 - 数据库连接失败：执行 `docker compose --env-file .env -f infra/compose.yaml ps`，确认 PostgreSQL 为 `healthy`。
 - JWT 启动失败：确认 `.env` 中的 `AGENTFORGE_JWT_SECRET` 已替换，且 Base64 解码后至少 32 字节。
 - Agent 返回 503：先检查 `http://localhost:8000/health`，再确认 Java 与 Python使用完全相同的 `AGENTFORGE_AGENT_INTERNAL_TOKEN`。
+- Day 4 RAG 返回 503：再检查 `AGENTFORGE_CORE_INTERNAL_TOKEN` 两端是否一致、`AGENTFORGE_AGENT_CORE_API_URL` 是否指向 Core API，以及 PostgreSQL 镜像是否支持 `CREATE EXTENSION vector`。
+- openai Embedding 失败：确认 provider、API URL、模型、384 维配置和本机 key；排查时不得输出 key。需要无网络恢复时切回 `hash`。
 - Bearer 请求返回 401：token 可能已超过默认 30 分钟，重新登录获取。
 - 请求返回错误时：记录响应头 `X-Request-Id`，到 Core API 日志中搜索相同值。

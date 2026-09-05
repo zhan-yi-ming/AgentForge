@@ -37,6 +37,6 @@ V1 跑通 Web → Java → Python Agent → RAG / Tool → Java 写回。V2 加�
 
 所有改变先进入文档，再进入实现。产品行为看功能文档，系统结构看架构和 ADR，历史变化看变更记录。
 
-## 当前交付边界：Day 2
+## 当前交付边界：Day 4 已完成
 
-Day 1 已完成整体仓库骨架、Spring Boot + PostgreSQL 基础和 User / Project 最小链路。Day 2 正在实现登录鉴权、基础 RBAC 与 Wiki / Task CRUD；Python Agent、RAG、Tool Calling 和 React 页面仍属于后续天次，不能因为预留目录而被误认为已实现。
+Day 1–Day 4 已完成仓库骨架、Spring Boot + PostgreSQL、登录鉴权、Wiki / Task CRUD、Java 调用 FastAPI + LangGraph Chat，以及 Wiki / Task Chunk、Embedding、BM25、RRF、Retrieved Context 与来源引用。当前工作树已由 Codex 使用真实 PostgreSQL/pgvector、Java→Python HTTP 契约和双服务 E2E 重新验证。Tool Calling、人工确认和 React 页面仍属于后续天次；开始 Day 5 前必须取得用户明确授权。

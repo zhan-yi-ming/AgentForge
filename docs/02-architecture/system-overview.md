@@ -1,7 +1,7 @@
 # 系统架构总览
 
 - 状态：Accepted
-- 当前实现范围：Core API Day 1–2 与 Day 3 Agent Service/Java-Python 链路已实现
+- 当前实现范围：Day 1–3 已实现，Day 4 混合 RAG 正在实施
 
 ## 系统组件
 
@@ -12,12 +12,12 @@ Browser
 React Web (apps/web)
   | REST / JSON
   v
-Java Core API (services/core-api) ------> PostgreSQL
+Java Core API (services/core-api) ------> PostgreSQL + pgvector
   | 业务对象、权限、审批、确定性写入          业务事实
   |
   | internal REST / JSON
   v
-Python Agent Service (services/agent-service) -> LLM / Retrieval
+Python Agent Service (services/agent-service) -> Embedding / Retrieval
   概率性决策、上下文、RAG、Tool 意图
 
 Redis：V1 后续用于短期会话/状态辅助，不作为业务事实来源。
@@ -35,11 +35,11 @@ Redis：V1 后续用于短期会话/状态辅助，不作为业务事实来源�
 
 ### Python Agent Service
 
-负责 LLM、LangGraph、RAG、上下文构建和 Tool Calling。它生成答案或结构化操作意图，但没有绕过 Java Core API 直接修改业务表的权限。
+负责 LLM、LangGraph、RAG、上下文构建和 Tool Calling。Day 4 可写入可重建的 `rag_chunk` 派生索引，但不读取或修改 Wiki、Task、用户等业务表；它生成答案或结构化操作意图，没有绕过 Java Core API 修改业务事实的权限。
 
 ### PostgreSQL
 
-保存业务事实。V1 后续在同一 PostgreSQL 上扩展 `pgvector`，避免过早增加独立向量数据库。
+保存业务事实，并通过 `pgvector` 保存可重建的 RAG Chunk 向量。业务表只由 Java 访问；Python 只访问 `rag_chunk` 派生索引，避免过早增加独立向量数据库。
 
 ### Redis
 
@@ -47,7 +47,7 @@ Redis：V1 后续用于短期会话/状态辅助，不作为业务事实来源�
 
 ## 关键请求边界
 
-- 查询：Web → Core API；需要 AI 时由 Core API 在完成身份与项目授权后调用 Agent Service，详见 ADR-0009。
+- 查询：Web → Core API；需要 AI 时由 Core API 在完成身份与项目授权后调用 Agent Service。Day 4 的 `retrieve` 节点再用独立内部 token 回调 Core API 读取已授权 Wiki/Task DTO，按版本同步 `rag_chunk` 后执行向量 + BM25 + RRF，详见 ADR-0009 与 ADR-0010。
 - 修改：Agent 只能返回 Tool 意图；Web 展示确认；Java 再鉴权、校验、执行并落库。
 - 数据隔离：Day 2 所有项目资源按已认证 user + project owner 校验，ADMIN 仅作为受控运维角色；后续演进为 membership。
 - 身份：Core API 签发短期 JWT，所有业务入口默认认证；JWT secret 只通过运行环境注入。

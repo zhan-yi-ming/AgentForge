@@ -14,6 +14,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
@@ -31,13 +32,15 @@ import com.agentforge.core.wiki.domain.WikiPage;
             "agentforge.security.jwt.secret=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
             "agentforge.security.jwt.issuer=https://agentforge.test/core-api",
             "agentforge.security.jwt.ttl=PT30M",
-            "agentforge.agent-service.internal-token=test-only-internal-token"
+            "agentforge.agent-service.internal-token=test-only-internal-token",
+            "agentforge.core-internal.token=test-only-core-token"
         })
 class PersistenceIntegrationTest {
 
     @Container
     @ServiceConnection
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine");
+    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>(
+            DockerImageName.parse("pgvector/pgvector:pg17").asCompatibleSubstituteFor("postgres"));
 
     @Autowired
     private AuthenticationService authenticationService;
@@ -76,7 +79,10 @@ class PersistenceIntegrationTest {
                 .isEqualTo("Verify migration");
         assertThat(jdbcTemplate.queryForObject(
                 "select count(*) from flyway_schema_history where success = true",
-                Integer.class)).isGreaterThanOrEqualTo(2);
+                Integer.class)).isGreaterThanOrEqualTo(3);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from pg_extension where extname = 'vector'",
+                Integer.class)).isEqualTo(1);
     }
 
     @Test

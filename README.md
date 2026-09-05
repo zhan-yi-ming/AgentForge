@@ -8,8 +8,10 @@
 - 已设计 React Web、Java Core API、Python Agent Service 的单仓库边界。
 - 已推送：V1 Day 1，Java 21 + Spring Boot + PostgreSQL 的 User / Project 基础。
 - 已完成：V1 Day 2，登录鉴权、Wiki / Task 和公开仓库安全门禁。
-- 已完成：V1 Day 3，FastAPI + LangGraph Chat 与 Java-Python 契约，并通过 Pi 集中验证。
-- 尚未实现：RAG、Tool Calling 与前端页面。
+- 已完成：V1 Day 3，FastAPI + LangGraph Chat 与 Java-Python 契约。
+- 已完成：V1 Day 4，Wiki/Task Chunk、Embedding、BM25、RRF、Retrieved Context 与来源引用；Day 1–4 已由 Codex 使用干净构建和真实跨进程测试复核。
+- 尚未实现：Tool Calling、人工确认与前端页面。
+- 下一步：等待用户明确授权后才开始 Day 5。
 
 ## 先读文档
 
@@ -17,7 +19,7 @@
 - [产品概览](docs/01-product/product-overview.md)
 - [系统架构](docs/02-architecture/system-overview.md)
 - [本地开发](docs/05-development/local-development.md)
-- [当前变更](docs/07-changes/2026-09-04-day-3-agent-service-chat.md)
+- [当前变更](docs/07-changes/2026-09-04-day-4-hybrid-rag.md)
 - [公开仓库安全](docs/00-governance/public-repository-security.md)
 
 任何修改都必须先遵守 [AGENTS.md](AGENTS.md) 的文档先行规则。
@@ -36,4 +38,4 @@ docs/                       项目长期记忆与变更证据
 
 需要 Java 21 与 Docker Desktop。复制 `.env.example` 为 `.env`，生成独立的本地 JWT secret，再按 [本地开发文档](docs/05-development/local-development.md) 启动依赖和 Core API。任何真实密钥都不能进入本公开仓库。
 
-> 必须让 `java -version` 指向 Java 21。Day 1–Day 3 的完整启动和接口体验步骤见本地开发文档。
+> 必须让 `java -version` 指向 Java 21。Day 1–Day 4 的完整启动和接口体验步骤见本地开发文档。
