@@ -231,7 +231,15 @@ title 1–200；description 可空且最大 10,000。status 可省略，默认 `
 
 ## Agent Chat
 
-`POST /api/v1/projects/{projectId}/agent/chat` 的请求与错误语义见 `agent-service.md`。Day 4 在既有成功响应上新增 `sources` 数组；这是兼容的信息扩展。来源只包含类型、ID、标题和短摘录，不返回整份未命中文档。
+`POST /api/v1/projects/{projectId}/agent/chat` 的请求与错误语义见 `agent-service.md`。Day 5 新增可空 `pendingAction`；未确认时 Task 数据不变。
+
+### `POST /api/v1/projects/{projectId}/agent/actions/{actionId}/confirm`
+
+无 body。重新校验 JWT、project、action 发起者和目标 Task version。成功返回 action 预览、`status=EXECUTED` 与 `resultTask`。同一 action 重复确认返回同一结果且不重复写入。已拒绝 action 或 stale update 返回 409；路径不匹配返回 404；其他用户返回 403。
+
+### `POST /api/v1/projects/{projectId}/agent/actions/{actionId}/reject`
+
+无 body。成功返回 `status=REJECTED`，`resultTask=null`；Task 不变。重复 reject 返回同一结果；已执行 action 返回 409。
 
 `/internal/v1/rag/sources` 是 Agent Service 专用只读接口，不属于浏览器公共 API。它使用独立 Core 内部 token，并在读取 Wiki/Task 前再次执行用户存在和项目权限校验。
 

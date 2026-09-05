@@ -5,6 +5,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.when;
 
 import java.util.UUID;
+import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -18,7 +19,8 @@ class AgentChatServiceTest {
     void chatAuthorizesBeforeCallingPythonAndTrimsMessage() {
         ProjectAccess projectAccess = org.mockito.Mockito.mock(ProjectAccess.class);
         AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
-        AgentChatService service = new AgentChatService(projectAccess, client);
+        AgentActionService actionService = org.mockito.Mockito.mock(AgentActionService.class);
+        AgentChatService service = new AgentChatService(projectAccess, client, actionService);
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
@@ -32,6 +34,50 @@ class AgentChatServiceTest {
         InOrder order = inOrder(projectAccess, client);
         order.verify(projectAccess).requireAccess(projectId, actor);
         order.verify(client).chat(projectId, userId, false, "hello", conversationId, "request-1");
+    }
+
+    @Test
+    void chatPersistsProposalAndReturnsPendingAction() {
+        ProjectAccess projectAccess = org.mockito.Mockito.mock(ProjectAccess.class);
+        AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
+        AgentActionService actionService = org.mockito.Mockito.mock(AgentActionService.class);
+        AgentChatService service = new AgentChatService(projectAccess, client, actionService);
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(userId, false);
+        ToolProposal proposal = new ToolProposal("CREATE_TASK", null, null, "Add login", null, "TODO", "HIGH");
+        AgentActionView pending = org.mockito.Mockito.mock(AgentActionView.class);
+        when(client.chat(projectId, userId, false, "create", null, "request-2"))
+                .thenReturn(new AgentChatResult(conversationId, "Please confirm", "request-2", java.util.List.of(), proposal, null));
+        when(actionService.createPending(projectId, actor, conversationId, proposal)).thenReturn(Optional.of(pending));
+
+        AgentChatResult result = service.chat(projectId, actor, "create", null, "request-2");
+
+        assertThat(result.pendingAction()).isSameAs(pending);
+        assertThat(result.toolProposal()).isNull();
+    }
+
+    @Test
+    void chatIgnoresInvalidProposalAndKeepsOrdinaryAnswer() {
+        ProjectAccess projectAccess = org.mockito.Mockito.mock(ProjectAccess.class);
+        AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
+        AgentActionService actionService = org.mockito.Mockito.mock(AgentActionService.class);
+        AgentChatService service = new AgentChatService(projectAccess, client, actionService);
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(userId, false);
+        ToolProposal proposal = new ToolProposal("CREATE_TASK", null, null, "x".repeat(201), null, "TODO", "HIGH");
+        when(client.chat(projectId, userId, false, "create", null, "request-3"))
+                .thenReturn(new AgentChatResult(conversationId, "Ordinary answer", "request-3", java.util.List.of(), proposal, null));
+        when(actionService.createPending(projectId, actor, conversationId, proposal)).thenReturn(Optional.empty());
+
+        AgentChatResult result = service.chat(projectId, actor, "create", null, "request-3");
+
+        assertThat(result.answer()).isEqualTo("Ordinary answer");
+        assertThat(result.toolProposal()).isNull();
+        assertThat(result.pendingAction()).isNull();
     }
 
 }

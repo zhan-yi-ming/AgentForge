@@ -90,6 +90,28 @@ Flyway V3 迁移启用 `vector` 扩展并创建 `rag_chunk`。该表可从 Wiki/
 
 唯一键为 `(source_type, source_id, source_version, chunk_index)`；查询索引覆盖 `project_id`，向量使用 cosine HNSW。Python 只访问此表，不访问业务表。来源版本变化时整组替换，来源删除时删除对应 Chunk。
 
+## Day 5 待确认 Task 动作
+
+`agent_task_action` 是 Java 管理的业务确认票据，不是 Python 可写的派生数据。
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| `id` | UUID | 主键 | action 标识 |
+| `project_id` | UUID | 外键、非空、索引 | 项目隔离键 |
+| `requested_by_user_id` | UUID | 外键、非空 | 发起者 |
+| `conversation_id` | UUID | 非空 | 产生 proposal 的会话 |
+| `action_type` | VARCHAR(24) | `CREATE_TASK` / `UPDATE_TASK` | 白名单 Tool |
+| `task_id` | UUID | update 必填 | 更新目标 |
+| `title` / `description` | VARCHAR/TEXT | 可空、应用层长度校验 | 创建参数或更新补丁 |
+| `task_status` / `priority` | VARCHAR(20) | Task 枚举 | 创建参数或更新补丁 |
+| `expected_task_version` | BIGINT | update 必填、非负 | 确认时的乐观锁基线 |
+| `status` | VARCHAR(16) | `PENDING` / `EXECUTED` / `REJECTED` | 决策状态 |
+| `result_task_id` | UUID | executed 后填写 | 已创建/更新 Task |
+| `version` | BIGINT | 非空 | action 乐观锁 |
+| `created_at` / `decided_at` | TIMESTAMPTZ | created 非空 | 生命周期时间 |
+
+confirm/reject 在事务内锁定 action。同一 action 已为 `EXECUTED` 时返回既有 Task，不再次写入；stale update 的事务回滚后 action 仍为 `PENDING`。
+
 ## 隔离与并发
 
 - Project owner 是权限事实；API 不能用客户端传入的 ownerId 代替认证身份。

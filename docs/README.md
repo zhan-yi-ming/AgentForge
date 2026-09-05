@@ -7,7 +7,7 @@
 第一次进入项目时，按以下顺序阅读：
 
 1. `01-product/product-overview.md`：理解产品解决的问题与 V1 边界。
-2. `01-product/roadmap.md`：理解三阶段路线和当前 Day 4 目标。
+2. `01-product/roadmap.md`：理解三阶段路线和当前 Day 5 目标。
 3. `02-architecture/system-overview.md`：理解 Web、Java、Python、数据与基础设施的关系。
 4. `02-architecture/repository-structure.md`：找到代码和文档的位置。
 5. `03-features/README.md`：进入具体功能文档。
@@ -44,7 +44,7 @@
 ### `04-api/`：服务之间如何通信
 
 - `core-api.md`：Java Core API 的 HTTP 契约、错误模型和版本规则。
-- `agent-service.md`：Day 3–Day 4 Java/Python Chat、RAG 来源与引用契约。
+- `agent-service.md`：Day 3–Day 5 Java/Python Chat、RAG 来源、Tool proposal 与确认契约。
 
 ### `05-development/`：开发者如何运行和验证
 
@@ -64,7 +64,7 @@
 
 ### `08-reviews/`：代码审查中心
 
-- `README.md`：历史 Pi 报告的追溯规则；当前验证由 Codex 直接执行。
+- `README.md`：Pi 只读审核与 Codex 测试证据的分工和追溯规则。
 - 保存各阶段交付物的结构化代码审查报告（`YYYY-MM-DD-review-day-<X>.md`）。
 
 ### `templates/`：写文档时复用

@@ -5,11 +5,25 @@
 
 ## Core API 公共入口
 
-`POST /api/v1/projects/{projectId}/agent/chat`，Bearer JWT 必填。请求：`{"message":"Summarize this project","conversationId":null}`。成功 200：`{"conversationId":"uuid","answer":"...","requestId":"uuid","sources":[{"sourceType":"WIKI","sourceId":"uuid","title":"Architecture","excerpt":"..."}]}`。`sources` 最多 6 项并按融合排名去重。400 输入无效，401 未认证，403 无项目权限，404 项目不存在，503 Agent Service 或 RAG 依赖不可用。
+`POST /api/v1/projects/{projectId}/agent/chat`，Bearer JWT 必填。请求：`{"message":"Summarize this project","conversationId":null}`。成功 200 保留 `conversationId`、`answer`、`requestId`、`sources`，并新增可空 `pendingAction`。普通问答为 `null`；有效写意图由 Java 保存后返回 action ID、状态、类型和预览。`sources` 最多 6 项并按融合排名去重。400 输入无效，401 未认证，403 无项目权限，404 项目不存在，503 Agent Service 或 RAG 依赖不可用。
 
 ## Python 内部入口
 
-`POST /internal/v1/chat`，必须携带 `X-AgentForge-Internal-Token` 与 `X-Request-Id`。Body：`{"projectId":"uuid","userId":"uuid","actorAdmin":false,"message":"...","conversationId":null,"requestId":"uuid"}`。返回字段与公共响应一致。内部 token 错误返回 401。`GET /health` 返回服务状态，不包含密钥或环境值。
+`POST /internal/v1/chat`，必须携带 `X-AgentForge-Internal-Token` 与 `X-Request-Id`。Body：`{"projectId":"uuid","userId":"uuid","actorAdmin":false,"message":"...","conversationId":null,"requestId":"uuid"}`。Python 响应在既有字段上新增可空 `toolProposal`：
+
+```json
+{
+  "actionType": "UPDATE_TASK",
+  "taskId": "uuid",
+  "expectedVersion": 2,
+  "title": null,
+  "description": null,
+  "status": "DONE",
+  "priority": null
+}
+```
+
+Python 不返回 actionId/status，也不执行写入。Java 不信任 proposal，必须重新校验组合、长度、枚举、actor、project 和 Task version。内部 token 错误返回 401。`GET /health` 返回服务状态，不包含密钥或环境值。
 
 ## Core API 内部来源入口
 

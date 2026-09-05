@@ -39,6 +39,10 @@
 
 覆盖默认值、CRUD、状态 / 优先级转换、版本冲突、路径项目不匹配、跨用户拒绝与 ADMIN 成功。
 
+## Day 5 Agent 写回约束
+
+Agent 不能直接访问 Task Repository 或写 API。Python 只返回补丁式 proposal；用户确认后，Java action 服务读取当前 Task，并调用本服务的 `create` / `update`。因此标题、枚举、项目权限与 version 规则与人工 Task API 完全相同。
+
 ## 已知限制
 
 没有负责人、截止日期、评论、标签、子任务、分页或自定义状态。Day 5 的 Agent 修改必须复用相同应用服务，不得直接写 Repository。

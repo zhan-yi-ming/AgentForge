@@ -138,6 +138,27 @@ class AgentServiceHttpContractIntegrationTest {
         server.verify();
     }
 
+    @Test
+    void javaClientParsesStructuredToolProposal() {
+        RestClient.Builder recordingBuilder = restClientBuilder.clone().baseUrl("http://contract.test");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(recordingBuilder).build();
+        UUID taskId = UUID.randomUUID();
+        server.expect(request -> { }).andRespond(withSuccess(
+                "{\"conversationId\":\"15fd0b81-7cc8-4833-b5d9-79fb67784bc5\","
+                        + "\"answer\":\"confirm\",\"requestId\":\"proposal-contract\","
+                        + "\"toolProposal\":{\"actionType\":\"UPDATE_TASK\",\"taskId\":\"" + taskId + "\","
+                        + "\"expectedVersion\":2,\"status\":\"DONE\"}}",
+                MediaType.APPLICATION_JSON));
+
+        AgentChatResult result = new HttpAgentServiceClient(recordingBuilder.build()).chat(
+                UUID.randomUUID(), UUID.randomUUID(), false, "update", null, "proposal-contract");
+
+        assertThat(result.toolProposal().taskId()).isEqualTo(taskId);
+        assertThat(result.toolProposal().expectedVersion()).isEqualTo(2);
+        assertThat(result.toolProposal().status()).isEqualTo("DONE");
+        server.verify();
+    }
+
     private static String requiredEnvironment(String name) {
         String value = System.getenv(name);
         if (value == null || value.isBlank()) {

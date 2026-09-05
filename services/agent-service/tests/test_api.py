@@ -98,6 +98,80 @@ def test_chat_returns_no_fabricated_sources_when_retrieval_is_empty() -> None:
     assert response.json()["answer"].startswith("No relevant project context was found")
 
 
+def test_chat_proposes_create_task_without_executing_it() -> None:
+    response = client.post(
+        "/internal/v1/chat",
+        headers={"X-AgentForge-Internal-Token": TOKEN},
+        json=chat_request(message="把登录模块的改造需求整理成任务，优先级设为高。"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["toolProposal"] == {
+        "actionType": "CREATE_TASK",
+        "taskId": None,
+        "expectedVersion": None,
+        "title": "登录模块的改造需求",
+        "description": "把登录模块的改造需求整理成任务，优先级设为高。",
+        "status": "TODO",
+        "priority": "HIGH",
+    }
+
+
+def test_chat_proposes_explicit_task_update() -> None:
+    task_id = uuid4()
+    response = client.post(
+        "/internal/v1/chat",
+        headers={"X-AgentForge-Internal-Token": TOKEN},
+        json=chat_request(message=f"update task {task_id} version 3: status=DONE; priority=HIGH"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["toolProposal"] == {
+        "actionType": "UPDATE_TASK",
+        "taskId": str(task_id),
+        "expectedVersion": 3,
+        "title": None,
+        "description": None,
+        "status": "DONE",
+        "priority": "HIGH",
+    }
+
+
+def test_chat_does_not_propose_ambiguous_update() -> None:
+    response = client.post(
+        "/internal/v1/chat",
+        headers={"X-AgentForge-Internal-Token": TOKEN},
+        json=chat_request(message="update the login task to done"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["toolProposal"] is None
+
+
+def test_chat_does_not_fail_for_malformed_task_uuid() -> None:
+    response = client.post(
+        "/internal/v1/chat",
+        headers={"X-AgentForge-Internal-Token": TOKEN},
+        json=chat_request(
+            message="update task 123456789012345678901234567890123456 version 3: status=DONE"
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["toolProposal"] is None
+
+
+def test_chat_does_not_fail_for_unsupported_tool_enum() -> None:
+    response = client.post(
+        "/internal/v1/chat",
+        headers={"X-AgentForge-Internal-Token": TOKEN},
+        json=chat_request(message="create task: Unsupported priority; priority=URGENT"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["toolProposal"] is None
+
+
 def chat_request(message: str = "hello") -> dict[str, object]:
     return {
         "projectId": str(uuid4()),

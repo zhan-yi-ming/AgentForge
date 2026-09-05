@@ -19,6 +19,8 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.agentforge.core.project.application.ProjectService;
+import com.agentforge.core.agent.application.AgentActionService;
+import com.agentforge.core.agent.application.ToolProposal;
 import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.security.application.AuthenticationService;
 import com.agentforge.core.task.application.TaskService;
@@ -53,6 +55,9 @@ class PersistenceIntegrationTest {
 
     @Autowired
     private TaskService taskService;
+
+    @Autowired
+    private AgentActionService agentActionService;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -118,5 +123,34 @@ class PersistenceIntegrationTest {
             firstManager.close();
             secondManager.close();
         }
+    }
+
+    @Test
+    void pendingAgentActionWritesTaskOnlyOnceAfterConfirmation() {
+        var authentication = authenticationService.register(
+                "agent-action@example.com",
+                "Agent Action",
+                "integration-password");
+        var actor = new AuthenticatedActor(authentication.user().id(), false);
+        var project = projectService.createProject(actor, "Agent Action Project", null);
+        var proposal = new ToolProposal(
+                "CREATE_TASK", null, null, "Confirm me", "Created after confirmation", "TODO", "HIGH");
+
+        var pending = agentActionService.createPending(project.id(), actor, java.util.UUID.randomUUID(), proposal)
+                .orElseThrow();
+
+        assertThat(taskService.list(project.id(), actor)).isEmpty();
+        var executed = agentActionService.confirm(project.id(), pending.id(), actor);
+        var repeated = agentActionService.confirm(project.id(), pending.id(), actor);
+
+        assertThat(executed.resultTask().id()).isEqualTo(repeated.resultTask().id());
+        assertThat(taskService.list(project.id(), actor)).hasSize(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select status from agent_task_action where id = ?",
+                String.class,
+                pending.id())).isEqualTo("EXECUTED");
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from flyway_schema_history where success = true",
+                Integer.class)).isGreaterThanOrEqualTo(4);
     }
 }

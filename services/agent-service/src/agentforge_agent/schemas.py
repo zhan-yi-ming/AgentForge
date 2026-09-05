@@ -25,11 +25,22 @@ class ChatSource(ApiModel):
     excerpt: str
 
 
+class ToolProposal(ApiModel):
+    action_type: Literal["CREATE_TASK", "UPDATE_TASK"]
+    task_id: UUID | None = None
+    expected_version: int | None = Field(default=None, ge=0)
+    title: str | None = None
+    description: str | None = None
+    status: Literal["TODO", "IN_PROGRESS", "DONE"] | None = None
+    priority: Literal["LOW", "MEDIUM", "HIGH"] | None = None
+
+
 class ChatResponse(ApiModel):
     conversation_id: UUID
     answer: str
     request_id: str
     sources: list[ChatSource] = Field(default_factory=list)
+    tool_proposal: ToolProposal | None = None
 
 
 class RagSource(ApiModel):

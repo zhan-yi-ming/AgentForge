@@ -67,4 +67,5 @@ def chat(
         answer=state["answer"],
         request_id=state["request_id"],
         sources=state.get("sources", []),
+        tool_proposal=state.get("tool_proposal"),
     )

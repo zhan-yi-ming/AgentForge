@@ -18,7 +18,7 @@ public record TaskResponse(
         Instant createdAt,
         Instant updatedAt) {
 
-    static TaskResponse from(TaskView task) {
+    public static TaskResponse from(TaskView task) {
         return new TaskResponse(
                 task.id(),
                 task.projectId(),

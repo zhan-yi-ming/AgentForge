@@ -1,4 +1,4 @@
-# Day 1–Day 4 本地启动与体验教程
+# Day 1–Day 5 本地启动与体验教程
 
 - 状态：Implemented
 - 适用系统：Windows PowerShell
@@ -13,6 +13,7 @@
 2. Day 2：注册、登录、JWT、项目权限、Wiki 与 Task CRUD。
 3. Day 3：Java Core API 完成鉴权和项目授权后，通过真实 HTTP/1.1 调用 Python FastAPI + LangGraph Chat。
 4. Day 4：Chat 从当前项目的 Wiki/Task 构建 Chunk，以 Embedding + BM25 + RRF 检索，并返回来源。
+5. Day 5：Chat 返回 create/update task 待确认预览；confirm 后才由 Java 写入，reject 不写入。
 
 Day 4 仍使用 deterministic responder，不调用生成式 LLM；回答会展示检索到的项目片段与结构化来源。默认 hash Embedding 不需要外部密钥，便于完整体验混合检索链路。
 
@@ -236,16 +237,44 @@ sources        : 至少包含 Architecture Wiki 来源
 
 再询问 `Which task verifies chat?`，预期 `sources` 包含之前创建的 `Verify local chat` Task。查询与当前项目无关的随机文本时允许返回空数组，但不能引用其他项目。
 
-## 12. 观察数据库中的数据
+## 12. 体验 Day 5 Tool Calling 与人工确认
+
+创建提案：
+
+```powershell
+$proposalChat = Invoke-RestMethod -Method Post -Uri "$core/api/v1/projects/$projectId/agent/chat" -Headers $headers -ContentType 'application/json' -Body (@{
+    message = '把登录模块的改造需求整理成任务，优先级设为高。'
+} | ConvertTo-Json)
+$proposalChat.pendingAction
+```
+
+此时读取 Task 列表不应出现新任务。确认后才写入：
+
+```powershell
+$actionId = $proposalChat.pendingAction.id
+$executed = Invoke-RestMethod -Method Post -Uri "$core/api/v1/projects/$projectId/agent/actions/$actionId/confirm" -Headers $headers
+$executed.resultTask
+```
+
+把最后路径改为 `/reject` 可以拒绝另一个 `PENDING` action；拒绝后不能再确认。更新表达必须包含 Task UUID 和当前 version，例如：
+
+```text
+update task <task-id> version 0: status=DONE; priority=HIGH
+```
+
+这项显式要求使 V1 的确定性 planner 不会猜测目标；Day 6 页面可从已加载 Task 自动构造上下文。
+
+## 13. 观察数据库中的数据
 
 ```powershell
 docker compose --env-file .env -f infra/compose.yaml exec postgres psql -U agentforge -d agentforge -c 'select id,email,role from app_user;'
 docker compose --env-file .env -f infra/compose.yaml exec postgres psql -U agentforge -d agentforge -c 'select id,name,owner_id from project;'
 docker compose --env-file .env -f infra/compose.yaml exec postgres psql -U agentforge -d agentforge -c 'select title,version from wiki_page;'
 docker compose --env-file .env -f infra/compose.yaml exec postgres psql -U agentforge -d agentforge -c 'select title,status,priority,version from task_item;'
+docker compose --env-file .env -f infra/compose.yaml exec postgres psql -U agentforge -d agentforge -c 'select action_type,status,title,result_task_id from agent_task_action;'
 ```
 
-## 13. 停止服务
+## 14. 停止服务
 
 在 Java 和 Python 的两个运行窗口分别按 `Ctrl+C`，然后在仓库根目录执行：
 
@@ -255,7 +284,7 @@ docker compose --env-file .env -f infra/compose.yaml down
 
 该命令保留 PostgreSQL 命名卷，下次启动数据仍在。只有明确要删除所有本地演示数据时才使用 `docker compose --env-file .env -f infra/compose.yaml down -v`；这会不可恢复地删除本项目 Compose 卷，不是常规停止步骤。
 
-## 14. 常见问题
+## 15. 常见问题
 
 - Java 构建提示 class 版本或 Enforcer 错误：`java -version` 没有指向 Java 21。
 - 端口占用：确认本机 5432、8000、8080 没有其他服务，或调整 `.env` 中相应端口和 URL。
@@ -263,6 +292,8 @@ docker compose --env-file .env -f infra/compose.yaml down
 - JWT 启动失败：确认 `.env` 中的 `AGENTFORGE_JWT_SECRET` 已替换，且 Base64 解码后至少 32 字节。
 - Agent 返回 503：先检查 `http://localhost:8000/health`，再确认 Java 与 Python使用完全相同的 `AGENTFORGE_AGENT_INTERNAL_TOKEN`。
 - Day 4 RAG 返回 503：再检查 `AGENTFORGE_CORE_INTERNAL_TOKEN` 两端是否一致、`AGENTFORGE_AGENT_CORE_API_URL` 是否指向 Core API，以及 PostgreSQL 镜像是否支持 `CREATE EXTENSION vector`。
+- Day 5 Chat 没有 `pendingAction`：使用文档中的明确创建表达；更新必须包含合法 Task UUID、当前 version 和至少一个修改字段。
+- confirm 返回 409：action 已拒绝，或目标 Task version 已变化；重新读取 Task 后创建新提案。
 - openai Embedding 失败：确认 provider、API URL、模型、384 维配置和本机 key；排查时不得输出 key。需要无网络恢复时切回 `hash`。
 - Bearer 请求返回 401：token 可能已超过默认 30 分钟，重新登录获取。
 - 请求返回错误时：记录响应头 `X-Request-Id`，到 Core API 日志中搜索相同值。

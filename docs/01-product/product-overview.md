@@ -37,6 +37,6 @@ V1 跑通 Web → Java → Python Agent → RAG / Tool → Java 写回。V2 加�
 
 所有改变先进入文档，再进入实现。产品行为看功能文档，系统结构看架构和 ADR，历史变化看变更记录。
 
-## 当前交付边界：Day 4 已完成
+## 当前交付边界：Day 5 已完成，Day 6 已授权
 
-Day 1–Day 4 已完成仓库骨架、Spring Boot + PostgreSQL、登录鉴权、Wiki / Task CRUD、Java 调用 FastAPI + LangGraph Chat，以及 Wiki / Task Chunk、Embedding、BM25、RRF、Retrieved Context 与来源引用。当前工作树已由 Codex 使用真实 PostgreSQL/pgvector、Java→Python HTTP 契约和双服务 E2E 重新验证。Tool Calling、人工确认和 React 页面仍属于后续天次；开始 Day 5 前必须取得用户明确授权。
+Day 1–Day 5 已交付。Day 5 已完成 Python 结构化 create/update task 意图、Java 持久化待确认动作、confirm/reject 与确定性写回，并通过 Codex 全量测试和 Pi 实质风险复审。Day 6 的 React 联调、确认页面、AI 文本整理与 Markdown 预览已获用户授权，将在 Day 5 提交推送和远端核验后按文档先行启动。

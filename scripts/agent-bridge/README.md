@@ -1,6 +1,6 @@
 # AgentForge 双 Agent 审查与调度桥接工具 (Codex <-> Pi Agent)
 
-本目录保留历史 **Codex 与 Pi Agent** 异步协同工具供审计。2026-09-05 起所有外部模型启动入口均直接返回 `DISABLED`，不得作为当前验证方式。
+本目录主要保留历史 **Codex 与 Pi Agent** 异步协同工具供审计。当前仅 `run-review.ps1` 恢复为一次性只读审核入口；所有 monitor、loop、validation 与自动推进入口仍直接返回 `DISABLED`。
 
 ## 目录文件说明
 
@@ -24,6 +24,14 @@
 代码审查只能使用完整模型选择器 `deepseek/deepseek-v4-pro`。桥接脚本不允许降级为 `deepseek-v4-flash` 或其他 Flash 模型；每次调用前检查模型目录，并在 Pi 非零退出或没有返回报告时明确失败。失败的提交不会被标记为已审查，不能用速度换审查质量。
 
 ## 常见使用场景
+
+### 当前场景：提交前一次性审核
+
+```powershell
+.\scripts\agent-bridge\run-review.ps1 -StageName day-5-tool-calling-hitl -BaseRef HEAD -TargetRef WORKTREE -Attempt 1
+```
+
+`WORKTREE` 模式审核当前未提交差异。新增文件需先通过 `git add -N <path>` 进入 diff 视图；这不会暂存文件内容。审核失败立即交还用户或 Codex 处理，不自动轮询。
 
 ### 场景一：Codex 消息唤醒或手动处理待审阶段
 
@@ -65,6 +73,6 @@ Codex 每个新消息会调用以下命令。它补审 Day 1/Day 2，或处理�
    - 自动生成 `.codex-resume-signal.md`，内含额度恢复通知、最新审查报告链接和续跑 Prompt。
    - Codex 恢复后即可直接读取信号文件继续推进。
 
-## 2026-09-05 生效：停用 Pi
+## 2026-09-05 当前状态
 
-用户已撤销 Pi 审查与测试授权。Codex 直接运行构建、格式和测试，核对机器产物并记录退出码、测试数量、失败、跳过与清理。旧 Pi 流程仅供历史追溯，不得启动 monitor、调用 Pi 或凭旧 PASS 自动推进。详见 docs/07-changes/2026-09-05-disable-pi-and-day1-day4-audit.md。
+用户已重新授权 Pi 执行一次性只读代码审核；测试仍由 Codex 执行。`run-review.ps1` 之外的旧入口继续停用，不得凭 Pi 报告替代机器测试或自动推进。

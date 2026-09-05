@@ -23,10 +23,6 @@ param(
     [string]$Model = "deepseek/deepseek-v4-pro"
 )
 
-# Disabled by user request on 2026-09-05; retain historical implementation for audit only.
-[PSCustomObject]@{ OverallStatus = 'DISABLED'; Actions = @(); Reason = 'Pi review and validation disabled by user' }
-return
-
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -48,13 +44,20 @@ if ($LASTEXITCODE -ne 0 -or (($ModelCatalog -join "`n") -notmatch '(?m)\bdeepsee
     throw "Pi 模型目录中未找到 deepseek/deepseek-v4-pro；审查已停止，禁止降级到 Flash。"
 }
 
-$TargetCommit = (& git rev-parse --verify "$TargetRef^{commit}").Trim()
-if ($LASTEXITCODE -ne 0) {
-    throw "无法解析审查目标提交：$TargetRef"
-}
-
-$IsRootReview = [string]::IsNullOrWhiteSpace($BaseRef)
-if (-not $IsRootReview) {
+$IsWorktreeReview = $TargetRef -eq "WORKTREE"
+if ($IsWorktreeReview) {
+    if ([string]::IsNullOrWhiteSpace($BaseRef)) { $BaseRef = "HEAD" }
+    $BaseCommit = (& git rev-parse --verify "$BaseRef^{commit}").Trim()
+    if ($LASTEXITCODE -ne 0) { throw "无法解析工作树审查基线：$BaseRef" }
+    $TargetCommit = "WORKTREE@$((& git rev-parse --short HEAD).Trim())"
+    $ChangedFiles = @(& git diff --no-ext-diff --name-only $BaseCommit)
+    $DiffStat = @(& git diff --no-ext-diff --stat $BaseCommit)
+    $DiffText = (& git diff --no-ext-diff --unified=20 $BaseCommit) -join "`n"
+} else {
+    $TargetCommit = (& git rev-parse --verify "$TargetRef^{commit}").Trim()
+    if ($LASTEXITCODE -ne 0) { throw "无法解析审查目标提交：$TargetRef" }
+    $IsRootReview = [string]::IsNullOrWhiteSpace($BaseRef)
+    if (-not $IsRootReview) {
     $BaseCommit = (& git rev-parse --verify "$BaseRef^{commit}").Trim()
     if ($LASTEXITCODE -ne 0) {
         throw "无法解析审查基线提交：$BaseRef"
@@ -62,11 +65,12 @@ if (-not $IsRootReview) {
     $ChangedFiles = @(& git diff --no-ext-diff --name-only "$BaseCommit..$TargetCommit")
     $DiffStat = @(& git diff --no-ext-diff --stat "$BaseCommit..$TargetCommit")
     $DiffText = (& git diff --no-ext-diff --unified=20 "$BaseCommit..$TargetCommit") -join "`n"
-} else {
-    $BaseCommit = "<root>"
-    $ChangedFiles = @(& git diff --root --no-ext-diff --name-only $TargetCommit)
-    $DiffStat = @(& git diff --root --no-ext-diff --stat $TargetCommit)
-    $DiffText = (& git diff --root --no-ext-diff --unified=20 $TargetCommit) -join "`n"
+    } else {
+        $BaseCommit = "<root>"
+        $ChangedFiles = @(& git diff --root --no-ext-diff --name-only $TargetCommit)
+        $DiffStat = @(& git diff --root --no-ext-diff --stat $TargetCommit)
+        $DiffText = (& git diff --root --no-ext-diff --unified=20 $TargetCommit) -join "`n"
+    }
 }
 
 if ($ChangedFiles.Count -eq 0) {
@@ -87,9 +91,9 @@ foreach ($patternName in $SensitivePatterns.Keys) {
     }
 }
 
-# 大型阶段提交会包含大量文档和脚手架。无界 diff 会让审查本身超时；保留首、中、尾
-# 三段证据，可覆盖不同目录的变更，同时完整文件清单与统计仍保留在提示词中。
-$MaximumDiffCharacters = 24000
+# 让正常阶段交付携带完整 diff；只有异常超大差异才保留首、中、尾证据并明确标记截断。
+# Day 5 当前约 14.2 万字符，低于本上限，因此 Pi 能看到全部实现、测试和文档变化。
+$MaximumDiffCharacters = 180000
 $DiffWasTruncated = $DiffText.Length -gt $MaximumDiffCharacters
 if ($DiffWasTruncated) {
     $FragmentLength = [int]($MaximumDiffCharacters / 3)

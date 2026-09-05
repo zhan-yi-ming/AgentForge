@@ -67,6 +67,14 @@ Day 4 跨进程闭环由仓库脚本执行：
 
 脚本使用独立 Compose project 和专用端口，启动 pgvector、Core API 与 Agent Service；通过公共 HTTP 创建两名用户、两个项目、Wiki 与 Task，验证两类召回、跨项目隔离、来源版本替换、删除清理和无匹配不伪造来源。无论成功失败都按精确 PID 停止服务并执行 `docker compose down -v`；只清理由本轮创建的临时日志和隔离资源。
 
-## 2026-09-05 生效：停用 Pi
+## 2026-09-05 历史决定：曾停用 Pi
 
-用户已撤销 Pi 审查与测试授权。Codex 直接运行构建、格式和测试，核对机器产物并记录退出码、测试数量、失败、跳过与清理。旧 Pi 流程仅供历史追溯，不得启动 monitor、调用 Pi 或凭旧 PASS 自动推进。详见 docs/07-changes/2026-09-05-disable-pi-and-day1-day4-audit.md。
+用户曾撤销 Pi 审查与测试授权，该决定及 Day 1–4 复核保留在 `docs/07-changes/2026-09-05-disable-pi-and-day1-day4-audit.md` 供历史追溯。随后用户重新授权每阶段一次性 Pi 只读代码审核，但没有恢复 Pi 测试、monitor、OnCodexWake 或自动阶段推进；Codex 始终直接执行并记录全部测试证据。
+
+## Day 5 质量门槛与审核分工
+
+- 行为变更遵循仓库 TDD skill：先在公共 seam 运行可观察的失败测试，再做最小实现。
+- Python HTTP 测试覆盖 proposal 的成功和歧义降级；Java Web/Service/真实 PostgreSQL 测试覆盖待确认、确认、拒绝、权限、version 和重复确认。
+- 双服务 E2E 必须证明 Task 在 confirm 前不存在/未变化，confirm 后才写入，reject 无副作用。
+- Codex 是唯一测试执行者，必须记录全新命令、退出码、工具版本、测试数量、失败/跳过和清理。
+- 用户已于 2026-09-05 明确重新授权 Pi 仅做只读代码审核。Pi 不执行测试；其 PASS 不能替代 Codex 的机器测试证据。不得恢复 monitor、OnCodexWake 或自动阶段推进。

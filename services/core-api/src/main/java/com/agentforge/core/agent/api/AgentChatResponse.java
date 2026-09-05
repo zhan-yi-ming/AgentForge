@@ -10,13 +10,15 @@ public record AgentChatResponse(
         UUID conversationId,
         String answer,
         String requestId,
-        List<AgentSource> sources) {
+        List<AgentSource> sources,
+        AgentActionResponse pendingAction) {
 
     static AgentChatResponse from(AgentChatResult result) {
         return new AgentChatResponse(
                 result.conversationId(),
                 result.answer(),
                 result.requestId(),
-                result.sources());
+                result.sources(),
+                result.pendingAction() == null ? null : AgentActionResponse.from(result.pendingAction()));
     }
 }

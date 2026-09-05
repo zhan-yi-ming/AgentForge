@@ -11,10 +11,10 @@
 - `review-orchestration.md`：历史 Codex/Pi 编排方案；Pi 已停用，只保留追溯资料。
 - `agent-chat.md`：Day 3 项目内 Chat、LangGraph 状态流与 Java-Python 边界，已实现。
 - `rag-retrieval.md`：Day 4 Wiki/Task Chunk、Embedding、BM25、RRF、Context 与来源引用，已实现并通过真实 pgvector 与跨进程验证。
+- `tool-calling-and-confirmation.md`：Day 5 create/update task 意图、待确认 action 与 Java 确定性写回，正在实施。
 
 ## 后续计划
 
 以下文档尚未创建，表示功能也不应开始实现：
 
-- Tool Calling 与人工确认（Day 5）
 - AI 文本整理与 Markdown 预览（Day 6）

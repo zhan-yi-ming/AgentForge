@@ -1,7 +1,7 @@
 # 系统架构总览
 
 - 状态：Accepted
-- 当前实现范围：Day 1–3 已实现，Day 4 混合 RAG 正在实施
+- 当前实现范围：Day 1–4 已实现；Day 5 Tool Calling 与人工确认正在实施
 
 ## 系统组件
 
@@ -48,7 +48,7 @@ Redis：V1 后续用于短期会话/状态辅助，不作为业务事实来源�
 ## 关键请求边界
 
 - 查询：Web → Core API；需要 AI 时由 Core API 在完成身份与项目授权后调用 Agent Service。Day 4 的 `retrieve` 节点再用独立内部 token 回调 Core API 读取已授权 Wiki/Task DTO，按版本同步 `rag_chunk` 后执行向量 + BM25 + RRF，详见 ADR-0009 与 ADR-0010。
-- 修改：Agent 只能返回 Tool 意图；Web 展示确认；Java 再鉴权、校验、执行并落库。
+- 修改：Agent 只能返回 Tool 意图；Java 将白名单提案保存为 `agent_task_action`；Web/HTTP 客户端展示确认；Java 在 confirm 时重新鉴权、锁定 action、校验 Task version、复用 TaskService 执行并落库。详见 ADR-0011。
 - 数据隔离：Day 2 所有项目资源按已认证 user + project owner 校验，ADMIN 仅作为受控运维角色；后续演进为 membership。
 - 身份：Core API 签发短期 JWT，所有业务入口默认认证；JWT secret 只通过运行环境注入。
 - 可观测：所有跨服务请求逐步携带 `request_id`；V1 使用结构化日志，V2 接入完整 Trace。

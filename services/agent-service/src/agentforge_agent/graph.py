@@ -5,7 +5,8 @@ from uuid import UUID, uuid4
 from langgraph.graph import END, START, StateGraph
 
 from .retrieval import RetrievalResult
-from .schemas import ChatSource
+from .schemas import ChatSource, ToolProposal
+from .tool_planner import plan_tool
 
 
 class ChatState(TypedDict, total=False):
@@ -18,6 +19,7 @@ class ChatState(TypedDict, total=False):
     request_id: str
     retrieved_context: str
     sources: list[ChatSource]
+    tool_proposal: ToolProposal | None
     answer: str
 
 
@@ -57,12 +59,17 @@ def build_chat_graph(retriever: Retriever, responder: Responder = deterministic_
         )
         return {"retrieved_context": result.context, "sources": result.sources}
 
+    def plan(state: ChatState) -> dict[str, object]:
+        return {"tool_proposal": plan_tool(state["normalized_message"])}
+
     builder = StateGraph(ChatState)
     builder.add_node("prepare", prepare)
     builder.add_node("retrieve", retrieve)
+    builder.add_node("plan", plan)
     builder.add_node("respond", respond)
     builder.add_edge(START, "prepare")
     builder.add_edge("prepare", "retrieve")
-    builder.add_edge("retrieve", "respond")
+    builder.add_edge("retrieve", "plan")
+    builder.add_edge("plan", "respond")
     builder.add_edge("respond", END)
     return builder.compile()

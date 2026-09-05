@@ -2,7 +2,17 @@
 
 - 状态：Deprecated
 
-> 2026-09-05 起本页仅用于历史追溯。所有 Pi/monitor 入口均已禁用，当前验证流程以 `../05-development/testing-strategy.md` 为准。
+> 2026-09-05 起自动编排部分仅用于历史追溯。用户已重新授权一次性 Pi 只读代码审核；测试仍由 Codex 执行。
+
+## 当前一次性审核入口
+
+在实现与 Codex 测试完成、提交之前运行：
+
+```powershell
+.\scripts\agent-bridge\run-review.ps1 -StageName day-5-tool-calling-hitl -BaseRef HEAD -TargetRef WORKTREE -Attempt 1
+```
+
+入口会先扫描工作树 diff 中的敏感信息，再固定调用 `deepseek/deepseek-v4-pro` 并生成独立报告。它不启动 monitor、不轮询、不运行测试，也不自动推进阶段。Pi 登录、额度、模型或环境失败时立即停止并请用户处理。
 
 ## 启动
 
@@ -44,7 +54,7 @@ Get-ChildItem .\scripts\agent-bridge\*.ps1 | ForEach-Object {
 }
 ```
 
-Pi 以无会话、无项目上下文自动加载、无工具的非交互模式运行；审查提示词包含完整文件清单、diff 统计和有界的首中尾证据采样。这样既能定位大提交的范围，又避免将无界 diff 送入模型导致会话锁或超时。
+Pi 以无会话、无项目上下文自动加载、无工具的非交互模式运行；审查提示词包含完整文件清单、diff 统计和不超过 180000 字符的完整 diff。只有异常超大差异才明确标注截断并保留首中尾证据；Day 5 的 141965 字符 diff 未截断。
 
 包装器以 Pi 的 `minimal` 推理档请求最多十项确定、可操作的发现；这不是模型降级，审查模型仍固定为 DeepSeek V4-pro。若该有界审查无法完成，脚本会保留失败诊断而不消耗审查轮次。
 
@@ -57,11 +67,11 @@ Pi 以无会话、无项目上下文自动加载、无工具的非交互模式�
 5. 检查报告是否包含 `REVIEW_RESULT:`；缺失时视为待修复并交由 Codex 研判。
 6. 第三次报告仍为 `NEEDS_FIX` 时查看人类介入记录，等待用户决定，不要强行第四次循环。
 
-用户明确授权定向修复后，第三轮上限仍不得重置或触发第四次自动审查。修复完成后必须由 Pi 的独立验证会话给出 `VALIDATION_RESULT: PASS`，Codex 将授权决定和报告路径回填人工介入记录，再把本机 `.review-loop-state.json` 中对应阶段同步为 `PASS`。该同步只关闭已经人工处置的历史阶段，不增加 attempt；报告是可审计依据，运行时状态文件不提交。
+以下自动轮次与 Pi validation 规则均为历史流程，当前保持停用。现行流程仅由 Codex 在完成真实测试后发起一次性 Pi 只读审核；修复后可定向复审，但不恢复自动循环或由 Pi 执行验证。
 
-## Pi 受限验证模式
+## Pi 受限验证模式（历史，已停用）
 
-验证命令固定使用 `deepseek/deepseek-v4-pro`，启用 `read,grep,find,ls,powershell`。Pi 负责执行 Prompt 明确列出的项目测试，并只清理由该次测试明确创建的临时目录、构建测试数据或 Testcontainers 资源。禁止 `edit`、`write`、业务文件写入、Git 写操作、生产环境访问、敏感信息输出和 Flash。Codex 不执行测试，只根据 Pi 报告修改文档、实现或测试代码。执行过程持续写 `.pi-review-status.json` 和实时日志，便于 `Show-ReviewStatus.ps1 -Watch` 查看。
+该模式仅保留历史说明，不得调用。Pi 不运行测试、命令或清理操作；Codex 是唯一测试执行者。当前只读审核固定使用 `deepseek/deepseek-v4-pro`，以无工具模式接收已扫描的 diff。
 
 入口为 `run-validation.ps1 -StageName <name> -PromptFile <path>`。Prompt 必须逐条列出允许执行的测试命令和清理范围；不得授予任意源码、文档或 Git 写入权限。
 
@@ -79,6 +89,6 @@ Review-Fixes: review-orchestration-loop
 
 自动发现的阶段可能只存在于 `.review-loop-state.json`。后续修复提交使用同名 `Review-Fixes` trailer 时，循环会恢复并调度该阶段；如果 trailer 拼写与注册表、变更记录和运行时状态均不匹配，循环必须报错而不是静默创建阶段。
 
-## 2026-09-05 生效：停用 Pi
+## 2026-09-05 当前状态
 
-用户已撤销 Pi 审查与测试授权。Codex 直接运行构建、格式和测试，核对机器产物并记录退出码、测试数量、失败、跳过与清理。旧 Pi 流程仅供历史追溯，不得启动 monitor、调用 Pi 或凭旧 PASS 自动推进。详见 docs/07-changes/2026-09-05-disable-pi-and-day1-day4-audit.md。
+Pi 仅恢复一次性只读审核；Codex 直接运行构建、格式和测试，核对机器产物并记录退出码、测试数量、失败、跳过与清理。旧自动流程继续停用，Pi PASS 不能替代测试证据。
