@@ -57,6 +57,8 @@ Redis：仅作为后续阶段可选 profile 保留，V1 默认不启动，也不
 
 V1 在一个单仓库内维护三个可独立运行的应用，但只把 Java 业务服务做成模块化单体。这样既保留清楚的语言和信任边界，也避免第一周承担微服务治理成本。
 
+V1.1 公网 Demo 在单台 ECS 上增加 Nginx gateway 作为唯一公网入口；PostgreSQL、Core API、Agent Service 与 Web 只加入 Docker 私有网络。生产注册、AI 日配额、IP 限速、模型输出预算、TLS、备份和 Git 回滚边界见 ADR-0013 与 `../06-operations/production-single-host.md`。
+
 ## 成熟项目参考
 
 - [Backstage architecture overview](https://github.com/backstage/backstage/blob/master/docs/overview/architecture-overview.md)：借鉴“app 负责装配、backend 提供能力”和单仓库内显式包边界，不复制其插件复杂度。

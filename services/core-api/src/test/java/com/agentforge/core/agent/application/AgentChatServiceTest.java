@@ -3,6 +3,9 @@ package com.agentforge.core.agent.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.any;
 
 import java.util.UUID;
 import java.util.Optional;
@@ -20,7 +23,8 @@ class AgentChatServiceTest {
         ProjectAccess projectAccess = org.mockito.Mockito.mock(ProjectAccess.class);
         AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
         AgentActionService actionService = org.mockito.Mockito.mock(AgentActionService.class);
-        AgentChatService service = new AgentChatService(projectAccess, client, actionService);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota);
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
@@ -31,8 +35,9 @@ class AgentChatServiceTest {
         AgentChatResult result = service.chat(projectId, actor, "  hello  ", conversationId, "request-1");
 
         assertThat(result).isEqualTo(expected);
-        InOrder order = inOrder(projectAccess, client);
+        InOrder order = inOrder(projectAccess, quota, client);
         order.verify(projectAccess).requireAccess(projectId, actor);
+        order.verify(quota).consume(userId);
         order.verify(client).chat(projectId, userId, false, "hello", conversationId, "request-1");
     }
 
@@ -41,7 +46,8 @@ class AgentChatServiceTest {
         ProjectAccess projectAccess = org.mockito.Mockito.mock(ProjectAccess.class);
         AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
         AgentActionService actionService = org.mockito.Mockito.mock(AgentActionService.class);
-        AgentChatService service = new AgentChatService(projectAccess, client, actionService);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota);
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
@@ -63,7 +69,8 @@ class AgentChatServiceTest {
         ProjectAccess projectAccess = org.mockito.Mockito.mock(ProjectAccess.class);
         AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
         AgentActionService actionService = org.mockito.Mockito.mock(AgentActionService.class);
-        AgentChatService service = new AgentChatService(projectAccess, client, actionService);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota);
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
@@ -78,6 +85,27 @@ class AgentChatServiceTest {
         assertThat(result.answer()).isEqualTo("Ordinary answer");
         assertThat(result.toolProposal()).isNull();
         assertThat(result.pendingAction()).isNull();
+    }
+
+    @Test
+    void exhaustedQuotaStopsBeforeCallingPython() {
+        ProjectAccess projectAccess = org.mockito.Mockito.mock(ProjectAccess.class);
+        AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
+        AgentActionService actionService = org.mockito.Mockito.mock(AgentActionService.class);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota);
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(userId, false);
+        org.mockito.Mockito.doThrow(new com.agentforge.core.shared.error.RateLimitExceededException(
+                "Daily AI request limit reached.")).when(quota).consume(userId);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> service.chat(projectId, actor, "hello", null, "request-4"))
+                .isInstanceOf(com.agentforge.core.shared.error.RateLimitExceededException.class);
+
+        verify(client, never()).chat(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(),
+                any(), any(), any());
     }
 
 }

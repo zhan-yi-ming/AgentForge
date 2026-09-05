@@ -20,6 +20,7 @@ spring:
 
 agentforge:
   security:
+    registration-enabled: ${AGENTFORGE_REGISTRATION_ENABLED:true}
     jwt:
       secret: ${AGENTFORGE_JWT_SECRET}
       issuer: ${AGENTFORGE_JWT_ISSUER:https://agentforge.local/core-api}
@@ -31,6 +32,8 @@ agentforge:
     read-timeout: ${AGENTFORGE_AGENT_READ_TIMEOUT:PT30S}
   core-internal:
     token: ${AGENTFORGE_CORE_INTERNAL_TOKEN}
+  ai:
+    daily-limit: ${AGENTFORGE_AI_DAILY_LIMIT:0}
 
 server:
   port: ${AGENTFORGE_SERVER_PORT:8080}

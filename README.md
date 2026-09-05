@@ -1,6 +1,6 @@
 # AgentForge
 
-面向研发团队的“项目知识 + 任务协作 + AI Agent”平台。V1 Day 1–Day 7 已完成，提供 Web → Java → Python Agent → DeepSeek / 智谱 / 通义千问 + RAG / Tool → Java 写回的可演示闭环。
+面向研发团队的“项目知识 + 任务协作 + AI Agent”平台。V1 Day 1–Day 7 已完成，提供 Web → Java → Python Agent → DeepSeek / 智谱 / 通义千问 + RAG / Tool → Java 写回的可演示闭环。V1.1 增加公网 Demo 的注册开关、双层限流、模型预算和单机生产部署。
 
 ## 当前进度
 
@@ -22,6 +22,7 @@
 - [本地开发](docs/05-development/local-development.md)
 - [当前变更](docs/07-changes/2026-09-05-day-7-v1-acceptance.md)
 - [公开仓库安全](docs/00-governance/public-repository-security.md)
+- [单机生产部署](docs/06-operations/production-single-host.md)
 
 任何修改都必须先遵守 [AGENTS.md](AGENTS.md) 的文档先行规则。
 
@@ -50,3 +51,7 @@ docker compose --env-file .env -f infra/compose.yaml up --build -d
 在 `.env` 中选择 `deepseek`、`zhipu` 或 `qwen` 并填写 `AGENTFORGE_AGENT_LLM_API_KEY`，再打开 `http://127.0.0.1:5173`，使用演示脚本输出的账号密码登录。默认 `disabled` 模式无需外部 key；`.env` 中的模型 key、JWT 与两个内部 token 均不会提交。完整配置和手工运行方式见 [本地开发文档](docs/05-development/local-development.md)。
 
 > Compose 方式不要求本机安装 Java、Python 或 Node。只有手工开发模式才需要 Java 21、Python 3.12–3.14 与 Node.js。
+
+## 生产部署
+
+生产环境使用 `infra/compose.prod.yaml`，只有 Nginx gateway 发布 80/443。先复制 `.env.production.example` 到服务器安全目录并替换全部占位符，再按[单机生产部署手册](docs/06-operations/production-single-host.md)执行；禁止把服务器 `.env`、SSH 私钥或模型 key 放入仓库。

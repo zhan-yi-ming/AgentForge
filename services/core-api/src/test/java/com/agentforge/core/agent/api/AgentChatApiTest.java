@@ -30,6 +30,7 @@ import com.agentforge.core.agent.domain.AgentActionType;
 import com.agentforge.core.security.SecurityConfiguration;
 import com.agentforge.core.security.SecurityProblemWriter;
 import com.agentforge.core.shared.error.ServiceUnavailableException;
+import com.agentforge.core.shared.error.RateLimitExceededException;
 import com.agentforge.core.shared.web.RequestIdFilter;
 
 @WebMvcTest(AgentChatController.class)
@@ -91,6 +92,20 @@ class AgentChatApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{" + "\"message\":\"   \"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void chatMapsDailyQuotaExhaustionToTooManyRequests() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        when(agentChatService.chat(eq(projectId), any(), eq("hello"), any(), any()))
+                .thenThrow(new RateLimitExceededException("Daily AI request limit reached."));
+
+        mockMvc.perform(post("/api/v1/projects/{projectId}/agent/chat", projectId)
+                        .with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString()).claim("roles", List.of("USER"))))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"hello\"}"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.type").value("https://agentforge.local/problems/rate-limit-exceeded"));
     }
 
     @Test

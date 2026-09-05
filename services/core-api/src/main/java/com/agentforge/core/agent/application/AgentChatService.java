@@ -13,14 +13,17 @@ public class AgentChatService {
     private final ProjectAccess projectAccess;
     private final AgentServiceClient agentServiceClient;
     private final AgentActionService agentActionService;
+    private final AiUsageQuota aiUsageQuota;
 
     public AgentChatService(
             ProjectAccess projectAccess,
             AgentServiceClient agentServiceClient,
-            AgentActionService agentActionService) {
+            AgentActionService agentActionService,
+            AiUsageQuota aiUsageQuota) {
         this.projectAccess = projectAccess;
         this.agentServiceClient = agentServiceClient;
         this.agentActionService = agentActionService;
+        this.aiUsageQuota = aiUsageQuota;
     }
 
     public AgentChatResult chat(
@@ -30,6 +33,7 @@ public class AgentChatService {
             UUID conversationId,
             String requestId) {
         projectAccess.requireAccess(projectId, actor);
+        aiUsageQuota.consume(actor.userId());
         AgentChatResult result = agentServiceClient.chat(
                 projectId,
                 actor.userId(),

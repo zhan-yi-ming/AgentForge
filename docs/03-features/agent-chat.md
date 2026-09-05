@@ -13,6 +13,8 @@ Responder 支持 `disabled`、`deepseek`、`zhipu`、`qwen` 四种模式。`disa
 
 模型调用只影响 `answer`。Tool proposal 仍由确定性白名单 planner 产生，模型不能直接执行或扩大业务操作；Java 的校验、人工确认与确定性写回边界不变。provider 缺少 key、上游认证/限流/网络失败或响应无有效文本时，公共入口返回 503，响应不包含 key 或上游响应正文。
 
+V1.1 公网 Demo 在 Java 信任边界为每个认证用户执行 PostgreSQL 原子 UTC 日配额；超限返回 429 且不调用 Agent Service。Agent Service 同时给兼容模型配置最大输出 Token。具体行为见 `public-demo-protection.md`。
+
 生产入口由 RequestIdFilter 保证 requestId；客户端对未来旁路调用仍会在空值时生成 UUID，确保 header、请求体与响应关联一致。跨语言契约由 Codex 启动真实 uvicorn 后执行 Java HTTP 集成测试。
 
 Java 到当前明文 uvicorn 服务固定使用 HTTP/1.1，避免 JDK HttpClient 发起 uvicorn 不支持的 h2c 升级并丢失请求体；未来启用 TLS/HTTP2 时必须另行记录架构决定并执行端到端验证。契约测试通过 Spring 测试上下文取得 Boot 自动配置的 `RestClient.Builder`，覆盖生产 JSON 序列化配置。

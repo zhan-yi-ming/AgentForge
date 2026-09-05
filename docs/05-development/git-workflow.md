@@ -1,5 +1,14 @@
 # Git 工作流
 
+## V1.1 起的长期分支
+
+- `main`：生产稳定分支，只接受从 `dev` 发起并通过验收的发布合并；每次上线创建可读 tag。
+- `dev`：日常集成分支，V2 及后续迭代先在这里完成整体验收。
+- `feature/<topic>`：从 `dev` 创建，一个功能一个分支，通过 PR 合回 `dev` 后删除。
+- `hotfix/<topic>`：从 `main` 创建，修复后同时合回 `main` 与 `dev`，避免问题复现。
+
+推荐路径为 `feature/* -> dev -> main -> production`。`main` 与 `dev` 禁止 force push；GitHub 应要求 PR、状态检查通过和分支最新。个人项目可以保留一名维护者审批，但仍通过 PR 显示差异和 CI 证据。
+
 - 状态：Accepted
 
 ## 原则

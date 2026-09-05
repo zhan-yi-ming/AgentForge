@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
+import java.time.Clock;
+import java.time.LocalDate;
 
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.RollbackException;
@@ -21,6 +23,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import com.agentforge.core.project.application.ProjectService;
 import com.agentforge.core.agent.application.AgentActionService;
 import com.agentforge.core.agent.application.ToolProposal;
+import com.agentforge.core.agent.application.AiUsageQuota;
+import com.agentforge.core.shared.error.RateLimitExceededException;
 import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.security.application.AuthenticationService;
 import com.agentforge.core.task.application.TaskService;
@@ -35,7 +39,8 @@ import com.agentforge.core.wiki.domain.WikiPage;
             "agentforge.security.jwt.issuer=https://agentforge.test/core-api",
             "agentforge.security.jwt.ttl=PT30M",
             "agentforge.agent-service.internal-token=test-only-internal-token",
-            "agentforge.core-internal.token=test-only-core-token"
+            "agentforge.core-internal.token=test-only-core-token",
+            "agentforge.ai.daily-limit=2"
         })
 class PersistenceIntegrationTest {
 
@@ -58,6 +63,9 @@ class PersistenceIntegrationTest {
 
     @Autowired
     private AgentActionService agentActionService;
+
+    @Autowired
+    private AiUsageQuota aiUsageQuota;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -152,5 +160,28 @@ class PersistenceIntegrationTest {
         assertThat(jdbcTemplate.queryForObject(
                 "select count(*) from flyway_schema_history where success = true",
                 Integer.class)).isGreaterThanOrEqualTo(4);
+    }
+
+    @Test
+    void aiUsageQuotaPersistsAndRejectsTheFirstRequestAboveTheLimit() {
+        var authentication = authenticationService.register(
+                "quota-integration@example.com",
+                "Quota Integration",
+                "integration-password");
+        var userId = authentication.user().id();
+
+        aiUsageQuota.consume(userId);
+        aiUsageQuota.consume(userId);
+
+        assertThatThrownBy(() -> aiUsageQuota.consume(userId))
+                .isInstanceOf(RateLimitExceededException.class);
+        assertThat(jdbcTemplate.queryForObject(
+                "select request_count from ai_usage_daily where user_id = ?",
+                Integer.class,
+                userId)).isEqualTo(2);
+        assertThat(jdbcTemplate.queryForObject(
+                "select usage_date from ai_usage_daily where user_id = ?",
+                LocalDate.class,
+                userId)).isEqualTo(LocalDate.now(Clock.systemUTC()));
     }
 }

@@ -1,0 +1,137 @@
+name: agentforge
+
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - agentforge-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    logging: *bounded-logging
+    networks: [app]
+
+  core-api:
+    build:
+      context: ../services/core-api
+    environment:
+      AGENTFORGE_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      AGENTFORGE_DB_USERNAME: ${POSTGRES_USER}
+      AGENTFORGE_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      AGENTFORGE_SERVER_PORT: 8080
+      AGENTFORGE_JWT_SECRET: ${AGENTFORGE_JWT_SECRET:?set AGENTFORGE_JWT_SECRET}
+      AGENTFORGE_JWT_ISSUER: ${AGENTFORGE_JWT_ISSUER:?set AGENTFORGE_JWT_ISSUER}
+      AGENTFORGE_JWT_TTL: ${AGENTFORGE_JWT_TTL:-PT30M}
+      AGENTFORGE_AGENT_SERVICE_URL: http://agent-service:8000
+      AGENTFORGE_AGENT_INTERNAL_TOKEN: ${AGENTFORGE_AGENT_INTERNAL_TOKEN:?set AGENTFORGE_AGENT_INTERNAL_TOKEN}
+      AGENTFORGE_CORE_INTERNAL_TOKEN: ${AGENTFORGE_CORE_INTERNAL_TOKEN:?set AGENTFORGE_CORE_INTERNAL_TOKEN}
+      AGENTFORGE_AGENT_CONNECT_TIMEOUT: PT2S
+      AGENTFORGE_AGENT_READ_TIMEOUT: PT30S
+      AGENTFORGE_REGISTRATION_ENABLED: ${AGENTFORGE_REGISTRATION_ENABLED:-false}
+      AGENTFORGE_AI_DAILY_LIMIT: ${AGENTFORGE_AI_DAILY_LIMIT:-30}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+    logging: *bounded-logging
+    networks: [app]
+
+  agent-service:
+    build:
+      context: ../services/agent-service
+    environment:
+      AGENTFORGE_AGENT_INTERNAL_TOKEN: ${AGENTFORGE_AGENT_INTERNAL_TOKEN}
+      AGENTFORGE_CORE_INTERNAL_TOKEN: ${AGENTFORGE_CORE_INTERNAL_TOKEN}
+      AGENTFORGE_AGENT_CORE_API_URL: http://core-api:8080
+      AGENTFORGE_AGENT_RAG_DB_DSN: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AGENTFORGE_AGENT_EMBEDDING_PROVIDER: hash
+      AGENTFORGE_AGENT_EMBEDDING_DIMENSIONS: 384
+      AGENTFORGE_AGENT_LLM_PROVIDER: ${AGENTFORGE_AGENT_LLM_PROVIDER:-disabled}
+      AGENTFORGE_AGENT_LLM_API_KEY: ${AGENTFORGE_AGENT_LLM_API_KEY:-}
+      AGENTFORGE_AGENT_LLM_BASE_URL: ${AGENTFORGE_AGENT_LLM_BASE_URL:-}
+      AGENTFORGE_AGENT_LLM_MODEL: ${AGENTFORGE_AGENT_LLM_MODEL:-}
+      AGENTFORGE_AGENT_LLM_MAX_TOKENS: ${AGENTFORGE_AGENT_LLM_MAX_TOKENS:-800}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      core-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    restart: unless-stopped
+    logging: *bounded-logging
+    networks: [app]
+
+  web:
+    build:
+      context: ../apps/web
+    depends_on:
+      core-api:
+        condition: service_healthy
+      agent-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    logging: *bounded-logging
+    networks: [app]
+
+  gateway:
+    image: nginx:1.29-alpine
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?set PUBLIC_HOST}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/production.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${AGENTFORGE_TLS_CURRENT_DIR:-/opt/agentforge/tls/current}:/etc/agentforge-tls:ro
+      - ${AGENTFORGE_ACME_WEBROOT_DIR:-/opt/agentforge/tls/acme}:/var/www/certbot:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-check-certificate", "--quiet", "--spider", "https://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    logging: *bounded-logging
+    networks: [app]
+
+networks:
+  app:
+    driver: bridge
+
+volumes:
+  agentforge-postgres-data:
+    name: ${AGENTFORGE_POSTGRES_VOLUME:-agentforge-postgres-data}

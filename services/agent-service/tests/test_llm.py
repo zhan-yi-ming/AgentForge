@@ -71,6 +71,26 @@ def test_build_responder_maps_provider_to_non_openai_endpoint(
     assert captured["model"] == expected_model
     assert captured["api_key"].get_secret_value() == "local-test-key"
     assert "openai.com" not in captured["base_url"]
+    assert captured["max_tokens"] == 800
+
+
+def test_build_responder_applies_configured_max_tokens() -> None:
+    captured = {}
+
+    def fake_factory(**kwargs):
+        captured.update(kwargs)
+        return FakeChatModel()
+
+    build_responder(
+        settings(
+            llm_provider="deepseek",
+            llm_api_key="local-test-key",
+            llm_max_tokens=321,
+        ),
+        model_factory=fake_factory,
+    )
+
+    assert captured["max_tokens"] == 321
 
 
 def test_enabled_provider_requires_local_api_key() -> None:

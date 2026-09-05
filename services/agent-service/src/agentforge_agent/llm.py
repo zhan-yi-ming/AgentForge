@@ -71,5 +71,6 @@ def build_responder(
         model=settings.llm_model or default_model,
         timeout=settings.request_timeout_seconds,
         max_retries=0,
+        max_tokens=settings.llm_max_tokens,
     )
     return CompatibleLlmResponder(model)
