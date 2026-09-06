@@ -27,7 +27,10 @@ set +a
 : "${AGENTFORGE_DEMO_FIXED_EMAIL:?AGENTFORGE_DEMO_FIXED_EMAIL is required}"
 : "${AGENTFORGE_DEMO_FIXED_PASSWORD:?AGENTFORGE_DEMO_FIXED_PASSWORD is required}"
 
-[[ "${PUBLIC_HOST}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || { echo "PUBLIC_HOST must be IPv4." >&2; exit 1; }
+is_public_host "${PUBLIC_HOST}" || {
+    echo "PUBLIC_HOST must be a valid IPv4, IPv6, or DNS domain." >&2
+    exit 1
+}
 [[ "${POSTGRES_PASSWORD}" =~ ^[A-Za-z0-9_-]{24,}$ ]] || {
     echo "POSTGRES_PASSWORD must be at least 24 URL-safe characters." >&2
     exit 1

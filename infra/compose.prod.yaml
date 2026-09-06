@@ -113,6 +113,7 @@ services:
     image: nginx:1.29-alpine
     environment:
       PUBLIC_HOST: ${PUBLIC_HOST:?set PUBLIC_HOST}
+      PUBLIC_WWW_HOST: ${PUBLIC_WWW_HOST:-}
     ports:
       - "80:80"
       - "443:443"

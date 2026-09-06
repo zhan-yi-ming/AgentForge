@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 if [[ "${EUID}" -ne 0 ]]; then
     echo "Run this command as root." >&2
@@ -8,12 +9,17 @@ fi
 PUBLIC_HOST="${1:-}"
 LLM_PROVIDER="${2:-deepseek}"
 TARGET="${AGENTFORGE_ENV_FILE:-/opt/agentforge/env/.env}"
-[[ "${PUBLIC_HOST}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || {
-    echo "Usage: $0 <public-ipv4> [deepseek|zhipu|qwen|disabled]" >&2
+is_public_host "${PUBLIC_HOST}" || {
+    echo "Usage: $0 <public-ip-or-domain> [deepseek|zhipu|qwen|disabled]" >&2
     exit 1
 }
 case "${LLM_PROVIDER}" in deepseek|zhipu|qwen|disabled) ;; *) echo "Unsupported provider." >&2; exit 1 ;; esac
 [[ ! -e "${TARGET}" ]] || { echo "Refusing to overwrite ${TARGET}." >&2; exit 1; }
+
+ISSUER_HOST="${PUBLIC_HOST}"
+if is_ipv6_address "${PUBLIC_HOST}"; then
+    ISSUER_HOST="[${PUBLIC_HOST}]"
+fi
 
 install -d -m 0700 "$(dirname "${TARGET}")"
 umask 077
@@ -28,7 +34,7 @@ POSTGRES_USER=agentforge
 POSTGRES_PASSWORD=${DB_PASSWORD}
 AGENTFORGE_POSTGRES_VOLUME=agentforge-postgres-data
 AGENTFORGE_JWT_SECRET=${JWT_SECRET}
-AGENTFORGE_JWT_ISSUER=https://${PUBLIC_HOST}/core-api
+AGENTFORGE_JWT_ISSUER=https://${ISSUER_HOST}/core-api
 AGENTFORGE_JWT_TTL=PT30M
 AGENTFORGE_AGENT_INTERNAL_TOKEN=${AGENT_TOKEN}
 AGENTFORGE_CORE_INTERNAL_TOKEN=${CORE_TOKEN}

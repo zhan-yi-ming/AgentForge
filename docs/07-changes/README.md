@@ -14,6 +14,7 @@
 
 ## 索引
 
+- `2026-09-06-tls-public-host-compatibility.md`：让生产 TLS 首次申请、同步、续期和 Nginx server_name 同时兼容 IP、根域名与已带 `www` 的域名。
 - `2026-09-06-efficient-agent-development-workflow.md`：在不削弱文档、测试与审核的前提下，按风险和影响范围减少任务时长与 Codex 上下文消耗。
 - `2026-09-06-v2-01-langfuse-base-trace.md`：V2-01 请求、Agent、检索、Tool 与 LLM 的脱敏 fail-open Langfuse 基础 Trace。
 - `2026-09-06-centered-demo-production-release.md`：把已验证的居中 Demo 体验合并到 main、部署生产并完成真实发布后核验。

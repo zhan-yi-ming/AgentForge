@@ -5,7 +5,7 @@ limit_req_status 429;
 
 server {
     listen 80;
-    server_name ${PUBLIC_HOST};
+    server_name ${PUBLIC_HOST} ${PUBLIC_WWW_HOST};
 
     location ^~ /.well-known/acme-challenge/ {
         root /var/www/certbot;
@@ -19,7 +19,7 @@ server {
 
 server {
     listen 443 ssl;
-    server_name ${PUBLIC_HOST};
+    server_name ${PUBLIC_HOST} ${PUBLIC_WWW_HOST};
 
     ssl_certificate /etc/agentforge-tls/fullchain.pem;
     ssl_certificate_key /etc/agentforge-tls/privkey.pem;
