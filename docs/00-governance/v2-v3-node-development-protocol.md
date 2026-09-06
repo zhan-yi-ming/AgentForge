@@ -6,15 +6,15 @@
 
 ## 每次开发的强制阅读入口
 
-任何 V2/V3 工作都不得凭记忆开始。开始新 Node、修改当前 Node、处理 Pi Review Issue、准备 Commit 或准备进入下一 Node 前，必须重新读取：
+任何 V2/V3 工作都不得凭记忆开始。开始新 Node 时建立一次任务上下文包：
 
 1. 本协议。
 2. `../01-product/v2-v3-node-roadmap.md` 中的当前 Node。
-3. 当前产品、架构、功能、API、ADR 和最近变更记录。
+3. 当前变更记录和受影响的产品、架构、功能、API、ADR。
 4. 当前 Node 相关代码与测试。
 5. 上一个 Node 的真实实现和验证结果。
 
-本协议负责“如何开发”，节点路线图负责“按什么顺序、每个 Node 做什么”。二者均为仓库正式文档，不在 `AGENTS.md` 中重复维护。
+本协议负责“如何开发”，节点路线图负责“按什么顺序、每个 Node 做什么”。Review 修复与 Commit 前核对该上下文包、当前 diff 和 Gate 状态；没有边界变化时不重复全文读取。具体上下文扩大条件见 `efficient-validation.md`。
 
 ## 1. 项目定位与确定性边界
 
@@ -86,12 +86,12 @@ GitHub 展示价值：
 3. Codex 输出 Node Start Gate。
 4. 等待用户确认。
 5. 先按文档先行制度更新变更记录、功能/架构/API 等目标文档，再实现。
-6. Codex 运行当前 Node 必要测试并记录机器证据。
+6. Codex 用门禁规划器和调用关系确定影响域，运行当前 Node 必要测试并记录机器证据。
 7. 按风险等级触发 Pi 一次性只读 Review；Review 输入为当前 Node requirement、git diff、必要关联代码和测试结果。
 8. Codex 逐条判断 finding 是否真实、原因、是否需改、最小修复和补测范围，再实施必要修复。
-9. Codex 重跑相关测试，并按风险决定更大范围 Regression。
+9. Codex 重跑被修复影响的测试；只有相关输入变化或影响扩散时才重复其他套件。
 10. 同步必要的 GitHub 公开文档与证据。
-11. 重新读取本协议和当前 Roadmap Node，输出 Node Close Gate。
+11. 重新核对本协议要点、当前 Roadmap Node、任务上下文包和最终 diff，输出 Node Close Gate。
 12. Gate 为 YES 后才可 Commit；随后按现行流程推送、核验并停止。
 13. 等待用户明确开始下一 Node，禁止自动推进。
 
@@ -113,7 +113,7 @@ Pi finding 应至少包含 `severity`、`file`、`line`、`evidence`、`suggeste
 | Medium | 普通业务、Context、Retrieval、Formatter、非核心 API | 相关 Unit + 模块 Regression |
 | High | Permission、Risk、Approval、Idempotency、Retry、Persistence、跨项目隔离、MCP 写工具、图数据写入、Release Gate | 相关 Unit + Integration + 必要 Regression |
 
-V2-09 与 V3-09 必须执行完整 Release Regression。安全、状态、数据或 Agent 行为变化必须 Review；纯低风险文档/UI 调整按现行累计与节点触发规则处理。
+V2-09 与 V3-09 必须执行完整 Release Regression。其他 Node 结束必须做 Milestone Review，但机器测试根据真实影响域选择；安全、状态、数据或 Agent 行为变化必须 Review，纯低风险文档/UI 调整按累计规则处理。
 
 ## 8. GitHub 长期定位与文档维护
 
@@ -145,7 +145,7 @@ README 第一屏的长期方向是 `Reliable AI Agent Workspace for engineering 
 
 一个 Node 尽量形成一个清晰 Commit。推荐 `feat(context): ...`、`feat(agent): ...`、`feat(security): ...`、`feat(eval): ...`、`feat(graphrag): ...`、`feat(mcp): ...`；禁止 `update`、`fix code`、`change`、`final`、`test123` 一类无意义信息。
 
-Commit 前必须检查 Node 越界、下一 Node 混入、测试、公开文档、Planned/Implemented 真实性、密钥/Token/`.env`、临时日志/cache/IDE 文件。随后重新读取本协议与当前 Roadmap Node，并输出：
+Commit 前必须检查 Node 越界、下一 Node 混入、门禁规划与测试、公开文档、Planned/Implemented 真实性、密钥/Token/`.env`、临时日志/cache/IDE 文件。随后核对当前 Roadmap Node、上下文包和最终 diff，并输出：
 
 ```text
 【Node Close Gate】

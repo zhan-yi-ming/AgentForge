@@ -27,6 +27,7 @@
 - `definition-of-done.md`：一项变更何时才算真正完成。
 - `public-repository-security.md`：公开仓库中的密钥边界、扫描与泄漏处置。
 - `v2-v3-node-development-protocol.md`：V2/V3 每次开发强制重读的节点协议与固定 Gate。
+- `efficient-validation.md`：按风险与影响范围选择门禁、复用同任务证据并控制上下文/日志成本。
 
 每个阶段由 AI 完成 Git 提交并推送到已确认的远程分支；提交与推送之间不得再改文件，远程核验后立即进入用户确认检查点。
 

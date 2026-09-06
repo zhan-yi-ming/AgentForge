@@ -1,75 +1,51 @@
 # AgentForge 项目级指令
 
-本文件是仓库内所有 AI 开发代理的最高优先级项目规则。若子目录存在额外的 `AGENTS.md`，子目录规则只能补充本文件，不能削弱本文件。
+本文件是仓库内 AI 开发代理的最高优先级项目规则。子目录 `AGENTS.md` 只能补充，不能削弱这些规则。
 
-## 文档先行：不可跳过的硬规则
+## 不可削弱的边界
 
-**任何增、删、改都必须先更新文档，再开始修改代码、配置、脚本、数据库或基础设施。**
+- **文档先行**：任何增、删、改必须依次执行“变更记录 → 受影响目标文档 → 实现 → 验证回填”。紧急修复也先写精简记录。新增功能更新 `docs/03-features/`；系统边界、依赖方向、数据模型或公共接口变化必须更新架构文档并按需新增 ADR。
+- **确定性职责**：保持 Java 业务执行 / Python Agent 边界，遵守现有 ADR，不提前实现后续 Node。LLM 只产生意图，Java 负责权限、审批和业务写入。
+- **安全**：禁止提交、输出或发送真实密钥、Token、密码、私钥、生产 `.env` 或敏感日志。保留用户已有 staged / unstaged / untracked 内容，不把无关变更混入提交。
+- **真实证据**：Codex 亲自运行风险与影响范围相称的测试。Pi PASS、历史报告、其他工作树和旧缓存不能代替当前机器证据；Java clean verify 与 Python pytest 不得使用旧构建产物冒充通过。
 
-执行顺序固定如下：
+## 开始任务与控制上下文
 
-1. 先阅读 `docs/README.md`、相关架构文档、功能文档、ADR 和最近的变更记录。
-2. 在 `docs/07-changes/` 新建或更新本次变更记录，写明背景、范围、影响、验证方式和回滚思路。
-3. 先修改受影响的产品、架构、功能、API、开发或运维文档，使文档描述目标状态。
-4. 文档完成后，才允许修改实现。
-5. 实现完成后回看文档，补齐实际文件、接口、数据结构、测试结果和已知限制。
+1. 先按 `docs/00-governance/efficient-validation.md` 做 Git preflight：fetch 目标远端、确认分支/base、记录用户已有改动。
+2. 读取 `docs/README.md`、当前变更记录、受影响功能/API/架构/ADR、直接调用方和相关测试。只有边界变化、冲突、失败或影响未知时扩大上下文。
+3. 在 `docs/07-changes/` 建立记录并先修改目标文档，再改实现。
+4. V2/V3 必须额外遵守 `docs/00-governance/v2-v3-node-development-protocol.md` 和当前路线 Node；Start Gate 等待用户确认，一次只实现一个 Node。
 
-禁止事项：
+## 实现与测试
 
-- 禁止“先改代码，之后再补文档”。
-- 禁止只在聊天、提交信息或代码注释里记录设计决定。
-- 禁止新增功能而不创建或更新 `docs/03-features/` 下的功能文档。
-- 禁止改变系统边界、依赖方向、数据模型或公共接口而不新增或更新 ADR。
-- 禁止删除行为或能力而不在文档中说明删除原因、迁移方式和影响。
+- 行为修改使用 `skills/engineering/tdd/SKILL.md`：在已确认的公共 seam 上一次一个纵向切片，先实际红灯，再做最小实现；避免私有实现测试、同义反复断言和过度 mock。
+- 排障使用 `skills/engineering/diagnosing-bugs/SKILL.md`：建立可重复信号，提出可证伪假设，按证据修复、回归并清理。
+- 先运行 `scripts/validation/plan-change-gates.ps1`。风险 L0–L3 决定 Review 强度，Docs/Web/Core API/Agent Service/TLS/跨服务影响域决定测试套件；L3 不自动等于全仓。
+- Schema、权限安全、额度限流、状态机、公共契约属于 L3；外部调用、部署配置、普通 API/Tool/Workflow 或多模块至少 L2；未知路径至少 L2 并向上确认。
+- Release Gate、共享全仓变化或影响无法收敛必须全仓回归。节点结束触发 Milestone Review，但不自动运行无关模块测试。
+- 同一任务内，只有相关源码、配置、依赖、契约和 base 均未变化时可以复用本次已通过证据；相关输入变化、失败或 Review 指向该范围时必须重跑。
+- 成功日志默认只保留命令、工具版本、退出码、passed/failed/skipped、关键 smoke 和清理摘要；不得隐藏 warning、skip、失败或清理异常。
 
-如果请求要求直接改代码但没有文档，AI 必须先完成文档步骤，不需要等待额外提醒。紧急修复也不能跳过；可以写精简记录，但仍需先记录再修复。
+## Pi 一次性只读审核
 
-## 项目工作方式
+- L0/L1 默认不调用 Pi；L2 做 Diff Review；L3、Node、累计门禁和 Release 做 Milestone Review。只有真实阻塞项修复后才复审，纯建议不触发下一轮。
+- Codex 完成相称测试、清理和敏感扫描后，可使用用户持续授权调用 DeepSeek Pi V4-pro；Pi 只读，不测试、不修改、不 monitor、不提交、不推进阶段。
+- 唯一连接说明是 `docs/06-operations/pi-review-connection.md`。启动器或模型不可用时立即请用户处理；禁止全盘搜索、安装尝试、降级模型或循环重试。
+- 只发送已扫描的本次 diff、必要接口、当前范围文档和结构化测试摘要；不得发送凭据或完整敏感日志。Codex 逐条判断 finding，只修复可复现的严重缺陷、不可运行、安全/数据一致性、真实契约冲突、架构边界破坏或明显偏离目标。
 
-- 保持单仓库与 Java 确定性业务 / Python Agent 边界；遵守现有 ADR，不提前引入后续阶段组件。
-- 禁止提交真实密钥、令牌、密码、私钥或敏感日志。
-- Codex 负责文档、实现并亲自执行与风险相称的测试；Pi 只负责实现和测试完成后的独立只读审核。L0/L1 默认不调用 Pi，L2 做 Diff Review，L3 和节点/累计触发做 Review 或 Milestone Review；具体分级和升级规则见 `docs/00-governance/change-workflow.md`。禁止委托 Pi 执行测试、启动 Pi monitor、使用旧报告宣称当前工作树通过，或让 Pi 自动推进阶段。
-- 交付必须有本次真实命令、退出码、工具版本、测试数量、失败/跳过数和清理证据；模型文字 PASS 不是测试证据。Java clean verify 和 Python pytest 不得以旧缓存产物代替。
-- Day 1–4 全面复核完成前不推进 Day 5；之后下一阶段需用户明确授权。用户已于 2026-09-05 明确授权：Day 5 审核通过、提交并完成远端核验后开始 Day 6。
-- 完成验证并回填变更记录后创建真实可读提交，随后先推送并核验；仅在用户已明确授权下一阶段时，远端核验完成后才继续实现。
-- 最终汇报依次说明完成事项、验证与限制、用户可介入事项（是否必需）、下一阶段计划。
+## 提交、推送与汇报
 
-## 工程 skills 规范
+- 回填变更记录，确认暂存区只含本次范围，完成 diff check、临时产物清理和敏感扫描后创建可读提交。
+- V2/V3 Node 提交前核对协议、当前 Roadmap 条目、上下文包和最终 diff，输出 Node Close Gate；Gate 为 YES 才能提交。
+- 提交后不再修改该变更；非 force 推送到已确认远端并核验 commit。远端出现意外历史或推送失败时停止。
+- V2/V3 下一 Node 必须等待用户新的明确授权。用户已明确授权并排序的独立非 Node 后续任务，可在前置提交远端核验后另建变更记录继续，禁止混入同一提交。
+- 最终依次报告：完成事项；风险、影响、验证与限制；用户介入是否必需；下一步计划。
 
-遵循 https://github.com/mattpocock/skills ，按任务读取相关 SKILL.md，不把整个仓库当作单一技能，不盲目套用与 Java/Python 无关的工具。
+## 权威入口
 
-- 排障使用 `skills/engineering/diagnosing-bugs/SKILL.md`：建立可重复的失败信号，复现和最小化，提出可证伪假设，针对证据修复，回归并清理。
-- 行为修改使用 `skills/engineering/tdd/SKILL.md`：通过已约定的公共接口测试行为，一次一个纵向切片，先实际运行失败测试，再实现最小修复；避免测试私有实现、同义反复断言和过度 mock。
-- 测试边界沿用功能/API/测试策略文档；范围已经由用户授权时继续执行，无需重复确认。
-- 文档保存至 docs/，架构决定保存至 docs/02-architecture/decisions/，变更与验证证据保存至 docs/07-changes/ 和 docs/08-reviews/。
-- 使用技能前读取原文与必要引用；用户最新指令优先，不能把技能当作跳过真实验证的理由。
-
-## Pi 审核规则
-
-- 用户已于 2026-09-05 明确重新授权 Pi 执行代码审核；测试始终由 Codex 执行并提供机器证据。
-- 用户持续授权：风险评级要求审核时，Codex 完成开发、相称的真实测试和敏感信息扫描后，可将源码、配置、测试和文档 diff 发送给外部 DeepSeek Pi V4-pro 做一次性只读审核。
-- 上述授权无需逐次确认：代码和文档写完且 Codex 门禁通过后直接触发审核。可使用本机 Pi 已有登录状态建立连接，但禁止读取、打印、复制或把 `.env`、密钥、Token、密码、私钥及实际认证凭证发送给 Pi。
-- Pi 的唯一连接和触发说明见 `docs/06-operations/pi-review-connection.md`。启动器优先读取 `AGENTFORGE_PI_CMD`，其次才检查 PATH 中的 `pi.cmd`；两者均不可用时立即请用户设置，禁止全盘搜索、安装尝试、猜测路径或循环重试。
-- 审核是否需要返工以可运行性和实质风险为准：只处理可复现的严重缺陷、代码无法运行、重大安全或数据一致性问题、真实冲突、架构边界破坏或明显偏离阶段目标。若架构正确且可维护性、可扩展性足够，纯风格、偏好或未来优化建议记录后可不改。
-- 不恢复 OnCodexWake、monitor、自动阶段推进或 Pi validation。旧 bridge 自动入口继续保持 `DISABLED`；后续仅允许一次性、可控的只读审核调用。
-- 保留历史报告用于排查，但不得复用其结论代替当前审核或测试。
-- Pi 遇到登录、额度、模型或环境问题时立即中断并请用户处理，不得无限循环重试。
-
-## 风险分级验证规则
-
-- 每次实现完成后先根据 Git diff、调用关系和最大影响范围评级，不以行数判断：L0 为文案/CSS/注释/README/无行为整理；L1 为边界明确的单组件、小函数、局部交互或接口不变修复；L2 为 API/数据库/缓存/Tool/Agent 节点/Workflow/状态/外部调用/多模块；L3 为架构、Schema、权限安全额度限流、Agent Runtime/状态机、全局上下文、核心流程、API Contract 或公共基础模块。
-- 公共函数、共享结构、API 入参与返回、数据库字段、Agent 状态、权限安全额度限流、异常/Retry/Timeout、多模块或影响不明至少 L2；命中 L3 类别直接 L3。
-- L0 只做必要语法/类型/lint/构建；L1 做相关测试和必要 smoke；L2 做模块测试、核心 smoke 和 Pi Diff Review；L3 做全量测试、核心业务回归和 Pi Review。
-- 连续 5 次 L0/L1、节点结束、重要 merge/commit、进入下一节点前、低风险修改扩散到多模块或测试异常时，强制全量测试、核心 smoke 和 Pi Milestone Review。每份变更记录维护累计计数；L2/L3 Review 或 Milestone Review 通过后归零。
-- 每次最终汇报必须包含风险等级、修改范围、可能影响、本次验证、未执行项及原因。L0/L1 跳过全量测试或 Pi 时必须明确说明，不得无限累计跳过。
-
-## 文档入口
-
-- 文档地图：`docs/README.md`
 - 文档制度：`docs/00-governance/documentation-first-policy.md`
-- 变更流程：`docs/00-governance/change-workflow.md`
-- 完成标准：`docs/00-governance/definition-of-done.md`
-- 公开仓库安全：`docs/00-governance/public-repository-security.md`
-- 代码审查中心：`docs/08-reviews/README.md`
-- Pi 连接与触发：`docs/06-operations/pi-review-connection.md`
-- 当前变更：`docs/07-changes/2026-09-06-pi-review-connection-governance.md`
+- 变更流程与完成标准：`docs/00-governance/change-workflow.md`、`docs/00-governance/definition-of-done.md`
+- 增量验证：`docs/00-governance/efficient-validation.md`
+- Node 协议与路线：`docs/00-governance/v2-v3-node-development-protocol.md`、`docs/01-product/v2-v3-node-roadmap.md`
+- 测试与审核：`docs/05-development/testing-strategy.md`、`docs/08-reviews/README.md`
+- Pi 连接：`docs/06-operations/pi-review-connection.md`
