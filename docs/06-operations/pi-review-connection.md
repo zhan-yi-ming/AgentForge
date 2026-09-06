@@ -69,7 +69,9 @@ deepseek  deepseek-v4-pro
 
 ## 提交前审核
 
-新文件必须先用 intent-to-add 纳入工作树 diff，但这不会暂存内容：
+调用时显式选择 `-ReviewMode Diff` 或 `-ReviewMode Milestone`。Diff 模式只审核本次差异与显式必要上下文；Milestone 模式可通过 `-ContextFiles` 加入产品路线、节点定义或进度文档。上下文必须是仓库内已跟踪的非敏感文本文件，并受长度和敏感扫描限制。
+
+默认情况下，新文件必须先用 intent-to-add 纳入工作树 diff，但这不会暂存内容：
 
 ```powershell
 git add -N -- <new-files>
@@ -79,6 +81,31 @@ git add -N -- <new-files>
     -TargetRef WORKTREE `
     -Attempt 1 `
     -TimeoutSeconds 600
+```
+
+如果工作树还保留用户无关的未暂存修改，应只暂存本次已扫描范围并把 `TargetRef` 设为 `INDEX`。该模式只读取 `git diff --cached HEAD`，避免移动、丢弃或把用户文件发送给外部审核：
+
+```powershell
+.\scripts\agent-bridge\run-review.ps1 `
+    -StageName <stage-name> `
+    -BaseRef HEAD `
+    -TargetRef INDEX `
+    -ReviewMode Diff `
+    -Attempt 1 `
+    -TimeoutSeconds 600
+```
+
+节点级示例：
+
+```powershell
+.\scripts\agent-bridge\run-review.ps1 `
+    -StageName <milestone-name> `
+    -BaseRef HEAD `
+    -TargetRef INDEX `
+    -ReviewMode Milestone `
+    -ContextFiles docs/01-product/roadmap.md,docs/01-product/product-overview.md `
+    -Attempt 1 `
+    -TimeoutSeconds 900
 ```
 
 审核报告生成在 `docs/08-reviews/`。Codex 只处理可复现的严重缺陷、不可运行代码、重大安全/数据一致性问题、真实冲突、架构边界破坏或明显偏离目标；风格和未来优化建议记录即可。通过后回填变更记录，再创建提交。

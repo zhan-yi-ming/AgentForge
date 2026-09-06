@@ -16,6 +16,11 @@ class FakeChatModel:
         self.messages = messages
         return SimpleNamespace(content=self.response_content)
 
+    def stream(self, messages):
+        self.messages = messages
+        for content in self.response_content:
+            yield SimpleNamespace(content=content)
+
 
 def settings(**overrides) -> Settings:
     values = {
@@ -42,6 +47,20 @@ def test_compatible_responder_sends_question_and_retrieved_context() -> None:
     assert model.messages[0].content.startswith("你是 AgentForge")
     assert "谁负责写入？" in model.messages[1].content
     assert "Java owns writes." in model.messages[1].content
+
+
+def test_compatible_responder_streams_native_model_chunks() -> None:
+    model = FakeChatModel(["第一段", "，第二段"])
+    responder = CompatibleLlmResponder(model)
+
+    chunks = list(
+        responder.stream(
+            {"normalized_message": "架构？", "retrieved_context": "Java owns writes."}
+        )
+    )
+
+    assert chunks == ["第一段", "，第二段"]
+    assert "架构？" in model.messages[1].content
 
 
 @pytest.mark.parametrize(

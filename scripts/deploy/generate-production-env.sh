@@ -21,6 +21,7 @@ DB_PASSWORD="$(openssl rand -hex 24)"
 JWT_SECRET="$(openssl rand -base64 48 | tr -d '\n')"
 AGENT_TOKEN="$(openssl rand -hex 32)"
 CORE_TOKEN="$(openssl rand -hex 32)"
+DEMO_PASSWORD="$(openssl rand -base64 24 | tr -d '/+=')Aa1!"
 cat >"${TARGET}" <<EOF
 PUBLIC_HOST=${PUBLIC_HOST}
 POSTGRES_DB=agentforge
@@ -34,6 +35,8 @@ AGENTFORGE_AGENT_INTERNAL_TOKEN=${AGENT_TOKEN}
 AGENTFORGE_CORE_INTERNAL_TOKEN=${CORE_TOKEN}
 AGENTFORGE_REGISTRATION_ENABLED=false
 AGENTFORGE_AI_DAILY_LIMIT=30
+AGENTFORGE_DEMO_FIXED_EMAIL=interviewer@agentforge.local
+AGENTFORGE_DEMO_FIXED_PASSWORD=${DEMO_PASSWORD}
 AGENTFORGE_AGENT_LLM_PROVIDER=${LLM_PROVIDER}
 AGENTFORGE_AGENT_LLM_API_KEY=REPLACE_ON_SERVER_ONLY
 AGENTFORGE_AGENT_LLM_BASE_URL=
@@ -43,3 +46,4 @@ LETSENCRYPT_EMAIL=
 EOF
 chmod 600 "${TARGET}"
 echo "Created ${TARGET}. Replace AGENTFORGE_AGENT_LLM_API_KEY on the server before deployment."
+echo "A stable interview account password was generated in the protected environment file."

@@ -1,6 +1,6 @@
 # AgentForge
 
-面向研发团队的“项目知识 + 任务协作 + AI Agent”平台。V1 Day 1–Day 7 已完成，提供 Web → Java → Python Agent → DeepSeek / 智谱 / 通义千问 + RAG / Tool → Java 写回的可演示闭环。V1.1 增加公网 Demo 的注册开关、双层限流、模型预算和单机生产部署。
+面向研发团队的“项目知识 + 任务协作 + AI Agent”平台，由 `zhan-yi-ming` 构建。V1 Day 1–Day 7 已完成，提供 Web → Java → Python Agent → DeepSeek / 智谱 / 通义千问 + RAG / Tool → Java 写回的可演示闭环。V1.1 增加公网 Demo 的注册开关、双层限流、模型预算和单机生产部署；V1.2 增加真实流式回答、面试演示界面与服务器私有固定账号。
 
 ## 当前进度
 
@@ -13,6 +13,7 @@
 - 已完成并推送：V1 Day 5，Tool Calling、持久化待确认动作、人工确认/拒绝与 Java 确定性写回。
 - 已完成：V1 Day 6，React 工作区、Markdown 安全预览、Chat 来源与待确认动作交互，以及 AI 文本显式应用到 Wiki 草稿；Pi 未发现阻断性问题，审查项已集中修正并由 Codex 回归验证。
 - 已完成：V1 Day 7 完整 Compose、演示数据、安全配置生成、接口验收和真实浏览器验收。
+- 进行中：V1.2 固定面试账号、随机备用账号、SSE 流式回答和视觉体验升级。
 
 ## 先读文档
 

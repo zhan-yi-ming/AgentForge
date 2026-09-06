@@ -7,6 +7,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import java.net.URI;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.ArrayList;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,6 +27,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import com.agentforge.core.agent.application.AgentChatResult;
+import com.agentforge.core.agent.application.AgentStreamEvent;
 import com.agentforge.core.shared.error.ServiceUnavailableException;
 
 @EnabledIfEnvironmentVariable(named = "AGENTFORGE_AGENT_CONTRACT_TEST", matches = "true")
@@ -65,6 +67,21 @@ class AgentServiceHttpContractIntegrationTest {
         assertThat(result.answer()).startsWith("No relevant project context was found");
         assertThat(result.conversationId()).isNotNull();
         assertThat(result.requestId()).isNotBlank();
+    }
+
+    @Test
+    void javaClientConsumesRealPythonNdjsonStreamInOrder() {
+        HttpAgentServiceClient client = new HttpAgentServiceClient(restClient, objectMapper);
+        var events = new ArrayList<AgentStreamEvent>();
+
+        client.stream(
+                UUID.randomUUID(), UUID.randomUUID(), false, "stream contract", null, null,
+                events::add);
+
+        assertThat(events).isNotEmpty();
+        assertThat(events.getFirst().type()).isEqualTo("metadata");
+        assertThat(events).anyMatch(event -> "delta".equals(event.type()) && !event.text().isBlank());
+        assertThat(events.getLast().type()).isEqualTo("complete");
     }
 
     @Test

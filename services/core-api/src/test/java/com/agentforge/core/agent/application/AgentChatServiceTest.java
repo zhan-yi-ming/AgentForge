@@ -6,9 +6,12 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
 import java.util.UUID;
 import java.util.Optional;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -17,6 +20,77 @@ import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.security.AuthenticatedActor;
 
 class AgentChatServiceTest {
+
+    @Test
+    void streamAuthorizesAndConsumesQuotaBeforeForwardingOrderedEvents() {
+        ProjectAccess projectAccess = org.mockito.Mockito.mock(ProjectAccess.class);
+        AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
+        AgentActionService actionService = org.mockito.Mockito.mock(AgentActionService.class);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota);
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(userId, false);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            java.util.function.Consumer<AgentStreamEvent> sink = invocation.getArgument(6);
+            sink.accept(AgentStreamEvent.metadata(conversationId, "request-stream", List.of()));
+            sink.accept(AgentStreamEvent.delta("第一段"));
+            sink.accept(AgentStreamEvent.delta("，第二段"));
+            sink.accept(AgentStreamEvent.complete(null));
+            return null;
+        }).when(client).stream(eq(projectId), eq(userId), eq(false), eq("hello"), eq(null),
+                eq("request-stream"), any());
+
+        AgentChatCommand command = service.prepareStream(
+                projectId, actor, "  hello  ", null, "request-stream");
+        List<AgentStreamEvent> events = new ArrayList<>();
+        service.stream(command, events::add);
+
+        assertThat(events).extracting(AgentStreamEvent::type)
+                .containsExactly("metadata", "delta", "delta", "complete");
+        assertThat(events).extracting(AgentStreamEvent::text)
+                .containsExactly(null, "第一段", "，第二段", null);
+        InOrder order = inOrder(projectAccess, quota, client);
+        order.verify(projectAccess).requireAccess(projectId, actor);
+        order.verify(quota).consume(userId);
+        order.verify(client).stream(eq(projectId), eq(userId), eq(false), eq("hello"), eq(null),
+                eq("request-stream"), any());
+    }
+
+    @Test
+    void streamPersistsProposalUsingConversationFromMetadataBeforeCompleting() {
+        ProjectAccess projectAccess = org.mockito.Mockito.mock(ProjectAccess.class);
+        AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
+        AgentActionService actionService = org.mockito.Mockito.mock(AgentActionService.class);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota);
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(userId, false);
+        ToolProposal proposal = new ToolProposal(
+                "CREATE_TASK", null, null, "Interview task", null, "TODO", "HIGH");
+        AgentActionView pending = org.mockito.Mockito.mock(AgentActionView.class);
+        when(actionService.createPending(projectId, actor, conversationId, proposal))
+                .thenReturn(Optional.of(pending));
+        org.mockito.Mockito.doAnswer(invocation -> {
+            java.util.function.Consumer<AgentStreamEvent> sink = invocation.getArgument(6);
+            sink.accept(AgentStreamEvent.metadata(conversationId, "request-proposal", List.of()));
+            sink.accept(AgentStreamEvent.complete(proposal));
+            return null;
+        }).when(client).stream(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(),
+                any(), any(), any(), any());
+
+        AgentChatCommand command = service.prepareStream(
+                projectId, actor, "create", null, "request-proposal");
+        List<AgentStreamEvent> events = new ArrayList<>();
+        service.stream(command, events::add);
+
+        assertThat(events.getLast().pendingAction()).isSameAs(pending);
+        assertThat(events.getLast().toolProposal()).isNull();
+        verify(actionService).createPending(projectId, actor, conversationId, proposal);
+    }
 
     @Test
     void chatAuthorizesBeforeCallingPythonAndTrimsMessage() {

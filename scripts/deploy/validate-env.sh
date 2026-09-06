@@ -24,6 +24,8 @@ set +a
 : "${AGENTFORGE_JWT_SECRET:?AGENTFORGE_JWT_SECRET is required}"
 : "${AGENTFORGE_AGENT_INTERNAL_TOKEN:?AGENTFORGE_AGENT_INTERNAL_TOKEN is required}"
 : "${AGENTFORGE_CORE_INTERNAL_TOKEN:?AGENTFORGE_CORE_INTERNAL_TOKEN is required}"
+: "${AGENTFORGE_DEMO_FIXED_EMAIL:?AGENTFORGE_DEMO_FIXED_EMAIL is required}"
+: "${AGENTFORGE_DEMO_FIXED_PASSWORD:?AGENTFORGE_DEMO_FIXED_PASSWORD is required}"
 
 [[ "${PUBLIC_HOST}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || { echo "PUBLIC_HOST must be IPv4." >&2; exit 1; }
 [[ "${POSTGRES_PASSWORD}" =~ ^[A-Za-z0-9_-]{24,}$ ]] || {
@@ -53,6 +55,14 @@ esac
 }
 [[ "${AGENTFORGE_AI_DAILY_LIMIT:-0}" =~ ^[1-9][0-9]*$ ]] || {
     echo "Production deployment requires a positive AGENTFORGE_AI_DAILY_LIMIT." >&2
+    exit 1
+}
+[[ "${AGENTFORGE_DEMO_FIXED_EMAIL}" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] || {
+    echo "AGENTFORGE_DEMO_FIXED_EMAIL must be a valid email address." >&2
+    exit 1
+}
+[[ "${#AGENTFORGE_DEMO_FIXED_PASSWORD}" -ge 12 && "${#AGENTFORGE_DEMO_FIXED_PASSWORD}" -le 72 ]] || {
+    echo "AGENTFORGE_DEMO_FIXED_PASSWORD must contain 12 to 72 characters." >&2
     exit 1
 }
 echo "Production environment validation passed."

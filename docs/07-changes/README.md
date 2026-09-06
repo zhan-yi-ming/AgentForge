@@ -14,6 +14,8 @@
 
 ## 索引
 
+- `2026-09-06-risk-based-validation-and-review.md`：L0–L3 风险分级、低风险累计触发和 Pi Diff/Milestone 双模式审核。
+- `2026-09-06-v1-2-interview-demo-experience.md`：固定与随机 Demo 账号、面试官欢迎视觉、真实流式 Agent、main 发布与生产更新。
 - `2026-09-06-compose-v5-build-compatibility.md`：修复 Compose v5 不支持 `build --no-deps` 导致的首次生产部署阻塞。
 - `2026-09-06-pi-review-connection-governance.md`：统一提交前 Pi 只读审核门禁，并固化启动器连接与快速失败方式。
 - `2026-09-05-day-7-v1-acceptance.md`：V1 最终验收、完整本地 Compose、演示数据和运行教程。

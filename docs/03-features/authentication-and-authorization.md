@@ -14,6 +14,7 @@
 - 邮箱、密码登录；成功后签发 Bearer JWT。
 - `USER` / `ADMIN` 两种基础角色。
 - `/users/me` 返回当前用户；业务 API 默认需要认证。
+- 生产演示脚本同时维护一个由服务器环境变量配置的固定面试账号，并生成一个随机备用账号；二者均为普通 `USER`，不能访问 ADMIN 或其他用户项目。
 - 未认证统一 401、已认证但无权限统一 403，均使用 Problem Detail 且包含 request ID。
 
 ## 非目标
@@ -57,6 +58,7 @@ Refresh Token、主动登出、找回密码、邮箱验证、验证码、锁定�
 
 - JWT secret 只来自环境变量，规则见 `../00-governance/public-repository-security.md`。
 - 登录失败不区分邮箱不存在与密码错误，日志只记录 request ID 和失败类别，不记录密码或 token。
+- 固定面试账号密码只从服务器 0600 的 `.env` 读取，不进入 Compose 环境、Git、构建参数、命令回显或脚本输出。修改密码时在服务器更新环境变量并由受控维护流程重置账号；仓库只保留空占位示例。
 - 401：检查 Authorization 格式、token 到期、issuer 与本机时间。
 - 403：检查 actor 角色和项目 owner，不允许通过改请求 ownerId 绕过。
 
@@ -66,6 +68,7 @@ Refresh Token、主动登出、找回密码、邮箱验证、验证码、锁定�
 - 重复邮箱 409，弱/无效输入 400，错误密码统一 401。
 - 无 token 与无效 token 401，跨用户 403，owner 和 ADMIN 成功。
 - 响应和日志不返回 passwordHash 或 secret。
+- 重复执行 Demo 初始化时固定账号可继续登录且不会重复创建同名 workspace；每次仍生成独立随机备用账号，并验证两个账号角色均为 USER。
 
 ## 已知限制
 

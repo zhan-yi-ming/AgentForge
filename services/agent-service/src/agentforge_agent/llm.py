@@ -27,16 +27,9 @@ class CompatibleLlmResponder:
         self.model = model
 
     def __call__(self, state: ChatState) -> str:
-        context = state.get("retrieved_context", "").strip()
-        context_text = context or "（未检索到相关项目资料）"
-        prompt = (
-            f"用户问题：\n{state['normalized_message']}\n\n"
-            f"项目检索上下文：\n{context_text}"
-        )
+        messages = self._messages(state)
         try:
-            response = self.model.invoke(
-                [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)]
-            )
+            response = self.model.invoke(messages)
         except Exception as exception:
             raise LlmDependencyError("Configured LLM provider is unavailable.") from exception
 
@@ -44,6 +37,29 @@ class CompatibleLlmResponder:
         if not isinstance(content, str) or not content.strip():
             raise LlmDependencyError("Configured LLM provider returned no valid text.")
         return content.strip()
+
+    def stream(self, state: ChatState):
+        emitted = False
+        try:
+            for response in self.model.stream(self._messages(state)):
+                content = getattr(response, "content", None)
+                if isinstance(content, str) and content:
+                    emitted = True
+                    yield content
+        except Exception as exception:
+            raise LlmDependencyError("Configured LLM provider is unavailable.") from exception
+        if not emitted:
+            raise LlmDependencyError("Configured LLM provider returned no valid text.")
+
+    @staticmethod
+    def _messages(state: ChatState):
+        context = state.get("retrieved_context", "").strip()
+        context_text = context or "（未检索到相关项目资料）"
+        prompt = (
+            f"用户问题：\n{state['normalized_message']}\n\n"
+            f"项目检索上下文：\n{context_text}"
+        )
+        return [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)]
 
 
 ModelFactory = Callable[..., Any]

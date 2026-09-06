@@ -235,6 +235,8 @@ title 1–200；description 可空且最大 10,000。status 可省略，默认 `
 
 `POST /api/v1/projects/{projectId}/agent/chat` 的请求与错误语义见 `agent-service.md`。Day 5 新增可空 `pendingAction`；未确认时 Task 数据不变。
 
+`POST /api/v1/projects/{projectId}/agent/chat/stream` 使用同一请求校验与权限边界，成功返回 `text/event-stream`。Java 必须在开始流之前完成认证、项目授权和日配额消费；SSE 的 metadata/delta/complete/error 契约见 `agent-service.md`。流式传输不改变 pending action 的确认要求。
+
 V1.1 在转发给 Agent Service 前原子消费一次用户 UTC 日配额；达到 `AGENTFORGE_AI_DAILY_LIMIT` 后返回 429。限制为 0 只表示本地开发关闭配额。
 
 ### `POST /api/v1/projects/{projectId}/agent/actions/{actionId}/confirm`

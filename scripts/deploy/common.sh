@@ -33,3 +33,12 @@ load_public_config() {
         exit 1
     }
 }
+
+load_demo_config() {
+    AGENTFORGE_DEMO_FIXED_EMAIL="$(sed -n 's/^AGENTFORGE_DEMO_FIXED_EMAIL=//p' "${ENV_FILE}" | tail -n 1)"
+    AGENTFORGE_DEMO_FIXED_PASSWORD="$(sed -n 's/^AGENTFORGE_DEMO_FIXED_PASSWORD=//p' "${ENV_FILE}" | tail -n 1)"
+    [[ -n "${AGENTFORGE_DEMO_FIXED_EMAIL}" && -n "${AGENTFORGE_DEMO_FIXED_PASSWORD}" ]] || {
+        echo "Fixed Demo credentials are required in the protected environment file." >&2
+        exit 1
+    }
+}

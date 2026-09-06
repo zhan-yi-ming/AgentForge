@@ -1,11 +1,13 @@
 from functools import lru_cache
 import hmac
+import json
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi.responses import StreamingResponse
 
 from .config import Settings, get_settings
 from .errors import LlmDependencyError, RagDependencyError
-from .graph import build_chat_graph
+from .graph import build_chat_context_graph, build_chat_graph
 from .llm import build_responder
 from .retrieval import DisabledRetrievalService, RetrievalService
 from .schemas import ChatRequest, ChatResponse, HealthResponse
@@ -87,3 +89,66 @@ def chat(
         sources=state.get("sources", []),
         tool_proposal=state.get("tool_proposal"),
     )
+
+
+@router.post(
+    "/internal/v1/chat/stream",
+    dependencies=[Depends(require_internal_token)],
+)
+def chat_stream(
+    request: ChatRequest,
+    retrieval_service: RetrievalService | DisabledRetrievalService = Depends(get_retrieval_service),
+    responder=Depends(get_responder),
+) -> StreamingResponse:
+    try:
+        state = build_chat_context_graph(retrieval_service.retrieve).invoke(
+            {
+                "project_id": request.project_id,
+                "user_id": request.user_id,
+                "actor_admin": request.actor_admin,
+                "message": request.message,
+                "conversation_id": request.conversation_id,
+                "request_id": request.request_id,
+            }
+        )
+    except ValueError as exception:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exception)) from exception
+    except RagDependencyError as exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="RAG dependencies are unavailable.",
+        ) from exception
+
+    def encode(event: dict[str, object]) -> str:
+        return json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+    def events():
+        yield encode(
+            {
+                "type": "metadata",
+                "conversationId": str(state["conversation_id"]),
+                "requestId": state["request_id"],
+                "sources": [
+                    source.model_dump(mode="json", by_alias=True) for source in state.get("sources", [])
+                ],
+            }
+        )
+        try:
+            stream = getattr(responder, "stream", None)
+            chunks = stream(state) if callable(stream) else (responder(state),)
+            for chunk in chunks:
+                if isinstance(chunk, str) and chunk:
+                    yield encode({"type": "delta", "text": chunk})
+            proposal = state.get("tool_proposal")
+            yield encode(
+                {
+                    "type": "complete",
+                    "toolProposal": proposal.model_dump(mode="json", by_alias=True)
+                    if proposal is not None
+                    else None,
+                }
+            )
+        except LlmDependencyError:
+            yield encode({"type": "error", "message": "LLM provider is unavailable."})
+
+    return StreamingResponse(events(), media_type="application/x-ndjson")

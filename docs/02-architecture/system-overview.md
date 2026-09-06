@@ -10,12 +10,12 @@ Browser
   |
   v
 React Web (apps/web)
-  | REST / JSON
+  | REST / JSON + SSE
   v
 Java Core API (services/core-api) ------> PostgreSQL + pgvector
   | 业务对象、权限、审批、确定性写入          业务事实
   |
-  | internal REST / JSON
+  | internal REST / JSON + NDJSON stream
   v
 Python Agent Service (services/agent-service) -> Embedding / Retrieval
   概率性决策、上下文、RAG、Tool 意图
@@ -48,6 +48,7 @@ Redis：仅作为后续阶段可选 profile 保留，V1 默认不启动，也不
 ## 关键请求边界
 
 - 查询：Web → Core API；需要 AI 时由 Core API 在完成身份与项目授权后调用 Agent Service。Day 4 的 `retrieve` 节点再用独立内部 token 回调 Core API 读取已授权 Wiki/Task DTO，按版本同步 `rag_chunk` 后执行向量 + BM25 + RRF，详见 ADR-0009 与 ADR-0010。
+- 流式查询：V1.2 中 Java 先同步完成身份、项目权限与日配额检查，再消费 Python 的内部 NDJSON token 流，并向浏览器输出同源 SSE。Java 仍负责 proposal 校验与 pending action 落库；浏览器和 Python 都不能绕过此边界，详见 ADR-0014。
 - 修改：Agent 只能返回 Tool 意图；Java 将白名单提案保存为 `agent_task_action`；Web/HTTP 客户端展示确认；Java 在 confirm 时重新鉴权、锁定 action、校验 Task version、复用 TaskService 执行并落库。详见 ADR-0011。
 - 数据隔离：Day 2 所有项目资源按已认证 user + project owner 校验，ADMIN 仅作为受控运维角色；后续演进为 membership。
 - 身份：Core API 签发短期 JWT，所有业务入口默认认证；JWT secret 只通过运行环境注入。
@@ -58,6 +59,8 @@ Redis：仅作为后续阶段可选 profile 保留，V1 默认不启动，也不
 V1 在一个单仓库内维护三个可独立运行的应用，但只把 Java 业务服务做成模块化单体。这样既保留清楚的语言和信任边界，也避免第一周承担微服务治理成本。
 
 V1.1 公网 Demo 在单台 ECS 上增加 Nginx gateway 作为唯一公网入口；PostgreSQL、Core API、Agent Service 与 Web 只加入 Docker 私有网络。生产注册、AI 日配额、IP 限速、模型输出预算、TLS、备份和 Git 回滚边界见 ADR-0013 与 `../06-operations/production-single-host.md`。
+
+V1.2 在不新增公网端口的前提下增加 SSE/NDJSON 流式链路，并提供服务器私有固定面试账号与每次生成的随机备用账号。固定凭据只属于部署环境，不属于仓库配置。
 
 ## 成熟项目参考
 

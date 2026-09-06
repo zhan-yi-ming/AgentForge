@@ -12,6 +12,7 @@
 
 - 生产环境默认拒绝新用户注册；登录保持可用。
 - Demo 账号是普通 USER，只能访问自己创建的项目、Wiki 和 Task。
+- 部署者可在服务器私有 `.env` 配置一个长期固定的面试账号；初始化脚本同时生成随机备用账号。固定密码和随机密码都不进入仓库，固定密码也不进入脚本输出。
 - 每个已认证用户每天最多发起配置数量的 AI Chat；达到限制返回 HTTP 429 和可读 Problem Detail，不调用模型。
 - UTC 日期变化后自动进入新的计数周期。
 - Nginx 对登录使用更严格的 IP 限速，对其他 API 使用一般限速。
@@ -22,6 +23,7 @@
 - `AGENTFORGE_REGISTRATION_ENABLED`：是否开放注册；生产为 `false`。
 - `AGENTFORGE_AI_DAILY_LIMIT`：每用户 UTC 日 Chat 上限；`0` 表示关闭限制，仅用于本地开发。
 - `AGENTFORGE_AGENT_LLM_MAX_TOKENS`：单次模型最大输出 Token。
+- `AGENTFORGE_DEMO_FIXED_EMAIL`、`AGENTFORGE_DEMO_FIXED_PASSWORD`：仅供服务器 Demo 初始化脚本读取的固定账号凭据；不得注入浏览器或提交 Git。
 
 ## 测试与验收
 
@@ -29,3 +31,4 @@
 - 限额 N 次均可进入 Chat；第 N+1 次返回 429，且下游调用次数仍为 N。
 - 并发计数由数据库唯一键与条件更新保证不会超过限额。
 - 配额错误不包含密码、token、模型 key 或内部连接信息。
+- 固定账号重复初始化保持可登录且不复制 workspace；随机备用账号每次独立生成。两个账号的权限与 AI 日配额相互独立。

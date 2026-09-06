@@ -24,7 +24,7 @@ function api(overrides: Partial<ApiClient> = {}): ApiClient {
     listWikiPages: vi.fn().mockResolvedValue([] as WikiPage[]),
     createWikiPage: vi.fn(), updateWikiPage: vi.fn(),
     listTasks: vi.fn().mockResolvedValue([task]),
-    chat: vi.fn(), confirmAction: vi.fn(), rejectAction: vi.fn(),
+    chat: vi.fn(), chatStream: vi.fn(), confirmAction: vi.fn(), rejectAction: vi.fn(),
     ...overrides,
   };
 }
@@ -40,6 +40,12 @@ async function login(mockApi: ApiClient) {
 }
 
 describe("App", () => {
+  it("welcomes the interviewer and credits zhan-yi-ming", () => {
+    render(<App api={api()} />);
+    expect(screen.getByText(/你好，面试官/)).toBeInTheDocument();
+    expect(screen.getByText(/zhan-yi-ming/)).toBeInTheDocument();
+  });
+
   it("logs in and loads the selected project resources", async () => {
     const mockApi = api();
     await login(mockApi);
@@ -55,7 +61,11 @@ describe("App", () => {
       status: "PENDING", title: "Review auth", priority: "HIGH", createdAt: "2026-09-05T00:00:00Z",
     };
     const chat: AgentChat = { conversationId: "conversation-1", answer: "Please confirm", requestId: "r1", sources: [], pendingAction: pending };
-    const mockApi = api({ chat: vi.fn().mockResolvedValue(chat),
+    const mockApi = api({ chatStream: vi.fn().mockImplementation(async (_projectId, _message, _conversationId, callbacks) => {
+      callbacks.onDelta("Please ");
+      callbacks.onDelta("confirm");
+      return chat;
+    }),
       confirmAction: vi.fn().mockResolvedValue({ ...pending, status: "EXECUTED", resultTask: task }) });
     const user = await login(mockApi);
     await user.type(screen.getByLabelText("给 Agent 的消息"), "create task");
@@ -72,7 +82,7 @@ describe("App", () => {
       status: "PENDING", title: "Do not create", createdAt: "2026-09-05T00:00:00Z",
     };
     const mockApi = api({
-      chat: vi.fn().mockResolvedValue({ conversationId: "conversation-1", answer: "Review", requestId: "r3", sources: [], pendingAction: pending }),
+      chatStream: vi.fn().mockResolvedValue({ conversationId: "conversation-1", answer: "Review", requestId: "r3", sources: [], pendingAction: pending }),
       rejectAction: vi.fn().mockResolvedValue({ ...pending, status: "REJECTED" }),
     });
     const user = await login(mockApi);
@@ -125,18 +135,19 @@ describe("App", () => {
       actionType: "CREATE_TASK", status: "PENDING", title: "Unexpected proposal",
       createdAt: "2026-09-05T00:00:00Z",
     };
-    const chatMock = vi.fn()
-      .mockResolvedValueOnce({ conversationId: "project-conversation", answer: "Chat answer", requestId: "r4", sources: [] })
-      .mockResolvedValueOnce({ conversationId: "format-conversation", answer: "# Formatted", requestId: "r5", sources: [], pendingAction: pending });
-    const mockApi = api({ chat: chatMock });
+    const chatMock = vi.fn().mockResolvedValue({
+      conversationId: "format-conversation", answer: "# Formatted", requestId: "r5", sources: [], pendingAction: pending,
+    });
+    const streamMock = vi.fn().mockResolvedValue({ conversationId: "project-conversation", answer: "Chat answer", requestId: "r4", sources: [] });
+    const mockApi = api({ chat: chatMock, chatStream: streamMock });
     const user = await login(mockApi);
     await user.type(screen.getByLabelText("给 Agent 的消息"), "project question");
     await user.click(screen.getByRole("button", { name: "发送" }));
     await user.type(screen.getByLabelText("待整理原文"), "format me");
     await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
 
-    await waitFor(() => expect(chatMock).toHaveBeenCalledTimes(2));
-    expect(chatMock.mock.calls[1]?.[2]).toBeUndefined();
+    await waitFor(() => expect(chatMock).toHaveBeenCalledTimes(1));
+    expect(chatMock.mock.calls[0]?.[2]).toBeUndefined();
     expect(await screen.findByText("Unexpected proposal")).toBeInTheDocument();
     expect(screen.getByText("会话 project-")).toBeInTheDocument();
   });

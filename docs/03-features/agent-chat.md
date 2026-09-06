@@ -15,6 +15,10 @@ Responder 支持 `disabled`、`deepseek`、`zhipu`、`qwen` 四种模式。`disa
 
 V1.1 公网 Demo 在 Java 信任边界为每个认证用户执行 PostgreSQL 原子 UTC 日配额；超限返回 429 且不调用 Agent Service。Agent Service 同时给兼容模型配置最大输出 Token。具体行为见 `public-demo-protection.md`。
 
+V1.2 保留原 JSON 入口并新增真实流式入口。Java 在响应开始前同步完成 Bearer、项目权限、输入和 UTC 日配额校验；Python 在完成 LangGraph 的 prepare/retrieve/plan 后，通过模型原生 stream 输出 NDJSON。Java 将事件转换为 SSE：`metadata` 提供 conversationId、requestId 与 sources，多个 `delta` 逐步提供回答文本，`complete` 提供最终 pendingAction（可空），`error` 表示响应开始后的通用流错误。浏览器不得把尚未收到 `complete` 的回答视为完成。
+
+流式链路不会削弱 HITL：Python 的 tool proposal 仍只在流末尾产生；Java 校验并持久化后才把 pending action 放入 `complete` 事件，Task 在用户 confirm 前保持不变。流开始前的错误沿用 400/401/403/404/429/503；流开始后的 provider 失败只发送不含上游正文和凭据的 `error` 事件。
+
 生产入口由 RequestIdFilter 保证 requestId；客户端对未来旁路调用仍会在空值时生成 UUID，确保 header、请求体与响应关联一致。跨语言契约由 Codex 启动真实 uvicorn 后执行 Java HTTP 集成测试。
 
 Java 到当前明文 uvicorn 服务固定使用 HTTP/1.1，避免 JDK HttpClient 发起 uvicorn 不支持的 h2c 升级并丢失请求体；未来启用 TLS/HTTP2 时必须另行记录架构决定并执行端到端验证。契约测试通过 Spring 测试上下文取得 Boot 自动配置的 `RestClient.Builder`，覆盖生产 JSON 序列化配置。
