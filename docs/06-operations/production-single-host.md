@@ -23,7 +23,7 @@
 
 ## 配置与首次部署
 
-运行 `scripts/deploy/generate-production-env.sh <公网IP> <provider>` 生成随机数据库/JWT/内部密钥，并写入登录页公开展示的固定 Demo 邮箱/密码；只在服务器替换模型 key，文件保持 0600。固定 Demo 凭据不是秘密，只能用于普通 USER 的无敏感演示 workspace；不得复用于管理员或任何服务密钥。除这组明确公开的 8 字符密码外，其他自定义固定 Demo 密码仍须为 12–72 字符。也可参考 `.env.production.example` 手工创建；部署前置检查会拒绝占位符、弱内部 token、非 Base64 JWT、URL 不安全的数据库密码或不合格的固定演示凭据。随后执行：
+运行 `scripts/deploy/generate-production-env.sh <公网IP或域名> <provider>` 生成随机数据库/JWT/内部密钥，并写入登录页公开展示的固定 Demo 邮箱/密码；只在服务器替换模型 key，文件保持 0600。`PUBLIC_HOST` 接受 IPv4、完整合法的 IPv6 或不带协议和路径的 DNS 域名；IPv6 在 `PUBLIC_HOST` 中不写方括号，但生成或手工填写 `AGENTFORGE_JWT_ISSUER` URL 时必须写成 `https://[IPv6]/core-api`。固定 Demo 凭据不是秘密，只能用于普通 USER 的无敏感演示 workspace；不得复用于管理员或任何服务密钥。除这组明确公开的 8 字符密码外，其他自定义固定 Demo 密码仍须为 12–72 字符。也可参考 `.env.production.example` 手工创建；部署前置检查会拒绝占位符、非法公网主机、弱内部 token、非 Base64 JWT、URL 不安全的数据库密码或不合格的固定演示凭据。随后执行：
 
 ```bash
 scripts/deploy/deploy.sh
@@ -52,9 +52,22 @@ scripts/deploy/rollback.sh
 
 ## TLS
 
-首次启动先使用临时自签证书让 gateway 可加载配置，再以 ACME webroot 申请公网 IP 短期证书并 reload gateway。证书续期由 systemd timer 定期执行；健康检查必须确认 HTTPS 证书受信且未过期。获得域名后应改用域名证书并更新 issuer/入口地址。
+首次启动先使用与 `PUBLIC_HOST` 类型匹配的临时自签证书让 gateway 可加载配置，再以 ACME webroot 申请受信证书并 reload gateway。IPv4/IPv6 使用 Certbot `--ip-address` 与 short-lived profile；域名使用 `-d`。当 `PUBLIC_HOST` 是普通根域名时，证书和 Nginx 同时包含该域名与动态派生的 `www.` 子域；当它本身以 `www.` 开头时不再追加，IP 模式也不追加。`PUBLIC_WWW_HOST` 由部署脚本运行时派生，不需要写入服务器 `.env`。证书固定使用 `PUBLIC_HOST` 作为 Certbot cert-name，因此 live 目录始终是 `/opt/agentforge/tls/letsencrypt/live/${PUBLIC_HOST}`，与同步脚本兼容。
 
-公网 IP 证书是短期证书，到期日不是需要人工重装的日期。服务器上的 `agentforge-tls-renew.timer` 会定期调用 Certbot；成功续期后 `tls-sync.sh` 将新证书复制到 gateway 使用目录并 reload Nginx。发布和日常巡检使用：
+域名首次申请前，必须确认根域名以及自动包含的 `www` 域名都已通过 A/AAAA 记录指向当前服务器，且公网 80 可访问 ACME webroot。然后在 `/opt/agentforge/env/.env` 设置 `PUBLIC_HOST`，同步更新 `AGENTFORGE_JWT_ISSUER`，执行：
+
+```bash
+scripts/deploy/deploy.sh
+scripts/deploy/tls-issue.sh
+scripts/deploy/install-tls-timer.sh
+scripts/deploy/health-check.sh
+```
+
+`tls-issue.sh` 成功后立即调用 `tls-sync.sh`，把 live 目录中的 `fullchain.pem`、`privkey.pem` 复制到 `/opt/agentforge/tls/current/` 并 reload gateway Nginx。
+
+从旧 IP 证书切换前可先运行与 `tls-renew.sh` 相同挂载的 `certbot certificates` 查看 Certificate Name。旧脚本通常以 IP 作为 lineage 名；若实际名称不同，先运行新版 `tls-issue.sh` 以当前 `PUBLIC_HOST` 和显式 cert-name 重新签发，再依赖 timer 续期。
+
+公网 IP 证书是短期证书，域名证书也由相同 timer 管理；到期日不是需要人工重装的日期。服务器上的 `agentforge-tls-renew.timer` 会定期调用 `certbot renew`；Certbot 从既有 renewal 配置恢复 IP 或完整域名集合，成功后 `tls-sync.sh` 按稳定 cert-name 将新证书复制到 gateway 使用目录并 reload Nginx。发布和日常巡检使用：
 
 ```bash
 systemctl is-enabled agentforge-tls-renew.timer

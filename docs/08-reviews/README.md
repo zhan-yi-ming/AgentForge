@@ -4,7 +4,7 @@
 
 ## 审查流转机制
 
-1. **触发时机**：L0/L1 默认跳过；L2 完成模块测试与 smoke 后做 Diff Review；L3 做 Pi Review。连续 5 次 L0/L1、节点结束、重要 merge/commit、进入下一节点前、多模块扩散或测试异常时做 Milestone Review；不自动触发、不轮询。连接方式见 `../06-operations/pi-review-connection.md`。
+1. **触发时机**：L0/L1 默认跳过；L2 完成影响域测试后做 Diff Review；L3、连续 5 次 L0/L1、节点结束或 Release Gate 做 Milestone Review。Milestone 扩大 Scope/方向审计，不自动要求无关模块全量测试；不自动触发、不轮询。连接方式见 `../06-operations/pi-review-connection.md`。
 2. **审查报告**：Pi Agent 读取当次交付的 `git diff`、相关代码与 Codex 已记录的测试证据，按照 `../templates/review-record-template.md` 格式生成审查报告。审查报告命名规范为：
    `YYYY-MM-DD-review-<stage>-attempt-<n>.md`。
 3. **修复与回填**：Codex 读取审查报告，对提出的问题做出技术研判：
@@ -23,6 +23,6 @@
 ## 两种审核模式
 
 - **Diff Review**：普通 L2 使用。只读取当前节点目标、本次 diff、涉及文件和明确指定的必要接口定义；检查 Bug、调用链、状态一致性、异常、安全/权限/并发/幂等以及测试范围，不重新设计整个项目。
-- **Milestone Review**：节点结束或累计触发时使用。结合产品路线、节点定义、当前进度、本节点变更和测试证据，检查节点是否完成、方向是否一致、边界/数据/API 是否限制后续开发及下一节点隐患。
+- **Milestone Review**：节点结束、L3、累计或 Release Gate 使用。输入限于路线当前条目、变更记录、最终 diff、必要接口和结构化测试摘要；检查节点是否完成、方向是否一致、边界/数据/API 是否限制后续开发。
 
 普通 Diff Review 不允许无故扩大范围；Milestone Review 才允许提出有证据的架构级问题。
