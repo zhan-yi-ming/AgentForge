@@ -2,6 +2,7 @@
 
 - 状态：Accepted
 - 日期：2026-09-06
+- 后续决策：固定 Demo 凭据的公开策略已由 `ADR-0015-public-demo-credential-and-centered-chat.md` 取代；本文的流式协议与服务信任边界继续有效
 
 ## 背景
 

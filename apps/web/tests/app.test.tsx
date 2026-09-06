@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -44,6 +44,54 @@ describe("App", () => {
     render(<App api={api()} />);
     expect(screen.getByText(/你好，面试官/)).toBeInTheDocument();
     expect(screen.getByText(/zhan-yi-ming/)).toBeInTheDocument();
+  });
+
+  it("shows the public demo account and fills it with one action", async () => {
+    const user = userEvent.setup();
+    render(<App api={api()} />);
+
+    expect(screen.getByText("210168y@gmail.com")).toBeInTheDocument();
+    expect(screen.getByText("Z1060168")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "填入体验账号" }));
+
+    expect(screen.getByLabelText("邮箱")).toHaveValue("210168y@gmail.com");
+    expect(screen.getByLabelText("密码")).toHaveValue("Z1060168");
+  });
+
+  it("guides first-time users and lets them reopen the guide", async () => {
+    const user = await login(api());
+    const guide = await screen.findByRole("dialog", { name: "新手引导" });
+    expect(within(guide).getByText(/中央对话/)).toBeInTheDocument();
+
+    await user.click(within(guide).getByRole("button", { name: "开始体验" }));
+    expect(screen.queryByRole("dialog", { name: "新手引导" })).not.toBeInTheDocument();
+    expect(localStorage.getItem("agentforge.onboardingComplete")).toBe("true");
+
+    await user.click(screen.getByRole("button", { name: "新手引导" }));
+    expect(await screen.findByRole("dialog", { name: "新手引导" })).toBeInTheDocument();
+  });
+
+  it("keeps onboarding usable when browser storage is unavailable", async () => {
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => { throw new DOMException("Storage disabled", "SecurityError"); }),
+      setItem: vi.fn(() => { throw new DOMException("Storage disabled", "SecurityError"); }),
+      clear: vi.fn(), removeItem: vi.fn(), key: vi.fn(), length: 0,
+    });
+
+    const user = await login(api());
+    const guide = await screen.findByRole("dialog", { name: "新手引导" });
+    await user.click(within(guide).getByRole("button", { name: "开始体验" }));
+
+    expect(screen.queryByRole("dialog", { name: "新手引导" })).not.toBeInTheDocument();
+  });
+
+  it("places project conversation first in the centered main workspace", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    await login(api());
+
+    const workspace = screen.getByRole("main");
+    expect(within(workspace).getAllByRole("heading", { level: 2 })[0]).toHaveTextContent("项目对话");
+    expect(workspace).toHaveClass("workspace", "centered-workspace");
   });
 
   it("logs in and loads the selected project resources", async () => {

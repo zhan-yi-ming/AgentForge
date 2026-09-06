@@ -23,13 +23,15 @@
 
 ## 配置与首次部署
 
-运行 `scripts/deploy/generate-production-env.sh <公网IP> <provider>` 生成随机数据库/JWT/内部密钥；只在服务器替换模型 key，并填写 `AGENTFORGE_DEMO_FIXED_EMAIL` 与 `AGENTFORGE_DEMO_FIXED_PASSWORD`，文件保持 0600。固定密码至少 12 字符且不得使用仓库示例值；它只由 seed 脚本读取，不注入应用容器。也可参考 `.env.production.example` 手工创建，但部署前置检查会拒绝占位符、弱内部 token、非 Base64 JWT、URL 不安全的数据库密码或不合格的固定演示凭据。随后执行：
+运行 `scripts/deploy/generate-production-env.sh <公网IP> <provider>` 生成随机数据库/JWT/内部密钥，并写入登录页公开展示的固定 Demo 邮箱/密码；只在服务器替换模型 key，文件保持 0600。固定 Demo 凭据不是秘密，只能用于普通 USER 的无敏感演示 workspace；不得复用于管理员或任何服务密钥。除这组明确公开的 8 字符密码外，其他自定义固定 Demo 密码仍须为 12–72 字符。也可参考 `.env.production.example` 手工创建；部署前置检查会拒绝占位符、弱内部 token、非 Base64 JWT、URL 不安全的数据库密码或不合格的固定演示凭据。随后执行：
 
 ```bash
 scripts/deploy/deploy.sh
 scripts/deploy/health-check.sh
 scripts/deploy/seed-demo.sh
 ```
+
+从 V1.2 旧固定账号迁移时，Git 更新不会覆盖服务器私有 `.env`。维护者必须把其中两个 `AGENTFORGE_DEMO_FIXED_*` 值同步为登录页公开值，再运行 `scripts/deploy/seed-demo.sh` 创建/复用新普通 USER workspace；确认新账号可登录后，可保留旧账号作为临时回退或按受控数据流程停用。若未执行这一步，新登录页展示的公开账号不会在既有数据库中自动出现。
 
 构建按 core-api、agent-service、web、gateway 顺序执行，避免 2C4G 机器并行构建。Docker Compose v5 使用 `docker compose build <service>`；不要传入已不受支持的 `build --no-deps`，且只有显式指定 `--with-dependencies` 时才会连带构建依赖。Demo 初始化先停止公网 gateway，只在 Core API 容器内部临时开启注册；创建或复用固定 USER workspace，并创建随机备用 USER workspace，恢复注册关闭后才重新开放 gateway。脚本只输出固定邮箱与随机备用凭据，不回显固定密码。
 

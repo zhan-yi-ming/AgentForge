@@ -18,3 +18,4 @@ ADR 保存影响长期结构的决定。编号只增不减，Accepted 记录不�
 - `ADR-0012-compatible-llm-provider-adapter.md`：LangGraph 通过受限的 OpenAI-compatible 适配器调用 DeepSeek、智谱或通义千问，不连接 OpenAI 服务。
 - `ADR-0013-single-host-public-demo-security.md`：单机公网 Demo 的网关、配额、TLS 和发布边界。
 - `ADR-0014-streaming-agent-and-demo-credentials.md`：用内部 NDJSON、公共 SSE 实现真实流式 Agent，并把固定 Demo 凭据限制在服务器。
+- `ADR-0015-public-demo-credential-and-centered-chat.md`：把固定面试账号定义为受限公开 Demo 凭据，并以居中对话和首次引导降低体验门槛。

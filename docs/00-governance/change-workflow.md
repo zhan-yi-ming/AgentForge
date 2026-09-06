@@ -6,6 +6,8 @@
 
 阅读产品范围、架构、相关功能、API、ADR 和最近变更。确认当前阶段允许做什么，防止提前引入 V2/V3 能力。
 
+V2/V3 Node 还必须先重新读取 `v2-v3-node-development-protocol.md` 和 `../01-product/v2-v3-node-roadmap.md` 中的当前 Node，完成并输出 Node Start Gate 后停止，等待用户明确确认。未确认前不得修改实现。当前 Node 的开发顺序与 Scope 以节点路线图为唯一来源。
+
 ## 2. 写变更记录草稿
 
 在 `docs/07-changes/` 创建记录，至少先填背景、目标、范围、非目标、计划修改的文档和实现。此时状态为 `Proposed`。
@@ -37,6 +39,8 @@ L0/L1 默认不调用 Pi；L2 在相关测试与 smoke 后执行增量 Diff Revi
 ## 8. 创建阶段提交
 
 AI 在确认文档已回填、验证结果真实且工作区只包含本阶段变更后，创建一个真实、可读的 Git 提交。提交信息应表达本阶段的完整意图，不能把下一阶段工作混入当前提交。
+
+V2/V3 Node 在创建提交前必须重新读取节点开发协议和当前 Roadmap Node，输出 Node Close Gate；只有 Gate 为 YES 才能提交。提交、推送和远程核验后停止，禁止自动进入下一 Node。
 
 ## 9. 推送当前提交
 

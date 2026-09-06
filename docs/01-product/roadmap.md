@@ -1,7 +1,7 @@
 # 三阶段路线图
 
 - 状态：Accepted
-- 当前焦点：V1 / Day 1–Day 7 已完成并通过验收；V2 尚未开始，等待用户明确授权
+- 当前焦点：V1 / Day 1–Day 7 已完成并通过验收；V2 尚未开始；下一 Node 为 V2-01 Langfuse 基础 Trace
 
 ## V1：能用
 
@@ -23,6 +23,8 @@ V1 明确不做：Neo4j / GraphRAG、完整 Langfuse Trace、LiteLLM、多模型
 
 补充 Context Manager、Memory Namespace、完整 RBAC 与风险分级、审批与审计、幂等键、LangGraph 持久化、Langfuse Trace、评测与回归测试。目标是让 Agent 有状态、可控、可恢复、可解释。
 
+固定 Node 顺序、逐节点 Scope、验收、Review 与 GitHub 展示边界见 `v2-v3-node-roadmap.md`。V2/V3 每次开发必须遵守 `../00-governance/v2-v3-node-development-protocol.md`，一次只完成一个 Node。
+
 ## V3：高级
 
 加入 Neo4j / GraphRAG、实体消歧、关系溯源、MCP、LiteLLM 和多模型策略，并可选接入 Git 仓库上下文。目标是处理复杂关系与更开放的工具生态。
@@ -30,3 +32,5 @@ V1 明确不做：Neo4j / GraphRAG、完整 Langfuse Trace、LiteLLM、多模型
 ## 路线治理
 
 后续能力只能在进入对应阶段后引入。若确需提前，必须新增 ADR，解释收益、成本、学习负担和为何不能等待。
+
+开始新 Node 时先完成 Node Start Gate 并等待用户确认；完成当前 Node、提交、推送和核验后立即停止，不得自动进入下一 Node。
