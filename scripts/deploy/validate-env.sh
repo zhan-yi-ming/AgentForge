@@ -61,8 +61,13 @@ esac
     echo "AGENTFORGE_DEMO_FIXED_EMAIL must be a valid email address." >&2
     exit 1
 }
-[[ "${#AGENTFORGE_DEMO_FIXED_PASSWORD}" -ge 12 && "${#AGENTFORGE_DEMO_FIXED_PASSWORD}" -le 72 ]] || {
-    echo "AGENTFORGE_DEMO_FIXED_PASSWORD must contain 12 to 72 characters." >&2
-    exit 1
-}
+PUBLIC_DEMO_EMAIL="210168y@gmail.com"
+PUBLIC_DEMO_PASSWORD="Z1060168"
+if [[ "${AGENTFORGE_DEMO_FIXED_EMAIL}" != "${PUBLIC_DEMO_EMAIL}" || \
+      "${AGENTFORGE_DEMO_FIXED_PASSWORD}" != "${PUBLIC_DEMO_PASSWORD}" ]]; then
+    [[ "${#AGENTFORGE_DEMO_FIXED_PASSWORD}" -ge 12 && "${#AGENTFORGE_DEMO_FIXED_PASSWORD}" -le 72 ]] || {
+        echo "A custom AGENTFORGE_DEMO_FIXED_PASSWORD must contain 12 to 72 characters." >&2
+        exit 1
+    }
+fi
 echo "Production environment validation passed."

@@ -13,6 +13,11 @@
 5. `03-features/README.md`：进入具体功能文档。
 6. `07-changes/README.md`：查看最近为什么发生变化。
 
+进入 V2/V3 Node 时，上述通用顺序之前还必须读取：
+
+1. `00-governance/v2-v3-node-development-protocol.md`：Node Boundary、Start/Close Gate、Review、测试、Commit 与 GitHub 真实性规则。
+2. `01-product/v2-v3-node-roadmap.md` 中的当前 Node：开发顺序、Scope、验收、Pi Review 和公开展示边界的唯一来源。
+
 ## 目录地图
 
 ### `00-governance/`：项目如何被维护
@@ -21,6 +26,7 @@
 - `change-workflow.md`：从接收需求到交付检查点的标准流程。
 - `definition-of-done.md`：一项变更何时才算真正完成。
 - `public-repository-security.md`：公开仓库中的密钥边界、扫描与泄漏处置。
+- `v2-v3-node-development-protocol.md`：V2/V3 每次开发强制重读的节点协议与固定 Gate。
 
 每个阶段由 AI 完成 Git 提交并推送到已确认的远程分支；提交与推送之间不得再改文件，远程核验后立即进入用户确认检查点。
 
@@ -28,6 +34,7 @@
 
 - `product-overview.md`：用户问题、产品定位、核心原则和 V1 范围。
 - `roadmap.md`：V1/V2/V3 路线以及 V1 的 7 天节奏。
+- `v2-v3-node-roadmap.md`：V2/V3 的固定 Node 顺序、逐节点 Scope、验收、审核和 GitHub 展示重点。
 
 ### `02-architecture/`：系统为什么这样组成
 
