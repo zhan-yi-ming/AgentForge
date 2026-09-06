@@ -19,6 +19,9 @@ param(
     [string]$OutputFile,
     [ValidateRange(60, 1800)]
     [int]$TimeoutSeconds = 300,
+    [ValidateSet("Diff", "Milestone")]
+    [string]$ReviewMode = "Diff",
+    [string[]]$ContextFiles = @(),
     [ValidateSet("deepseek/deepseek-v4-pro")]
     [string]$Model = "deepseek/deepseek-v4-pro"
 )
@@ -45,7 +48,16 @@ if ($LASTEXITCODE -ne 0 -or (($ModelCatalog -join "`n") -notmatch '(?m)\bdeepsee
 }
 
 $IsWorktreeReview = $TargetRef -eq "WORKTREE"
-if ($IsWorktreeReview) {
+$IsIndexReview = $TargetRef -eq "INDEX"
+if ($IsIndexReview) {
+    if ([string]::IsNullOrWhiteSpace($BaseRef)) { $BaseRef = "HEAD" }
+    $BaseCommit = (& git rev-parse --verify "$BaseRef^{commit}").Trim()
+    if ($LASTEXITCODE -ne 0) { throw "无法解析暂存区审查基线：$BaseRef" }
+    $TargetCommit = "INDEX@$((& git rev-parse --short HEAD).Trim())"
+    $ChangedFiles = @(& git diff --cached --no-ext-diff --name-only $BaseCommit)
+    $DiffStat = @(& git diff --cached --no-ext-diff --stat $BaseCommit)
+    $DiffText = (& git diff --cached --no-ext-diff --unified=20 $BaseCommit) -join "`n"
+} elseif ($IsWorktreeReview) {
     if ([string]::IsNullOrWhiteSpace($BaseRef)) { $BaseRef = "HEAD" }
     $BaseCommit = (& git rev-parse --verify "$BaseRef^{commit}").Trim()
     if ($LASTEXITCODE -ne 0) { throw "无法解析工作树审查基线：$BaseRef" }
@@ -77,6 +89,31 @@ if ($ChangedFiles.Count -eq 0) {
     throw "审查范围没有文件变化：$BaseCommit .. $TargetCommit"
 }
 
+$ContextParts = @()
+$ContextCharacterLimit = 40000
+$ContextCharacterCount = 0
+foreach ($contextFile in $ContextFiles) {
+    if ([string]::IsNullOrWhiteSpace($contextFile)) { continue }
+    $resolvedContext = (Resolve-Path -LiteralPath $contextFile -ErrorAction Stop).Path
+    $rootPrefix = $ProjectRoot.TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedContext.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "审查上下文必须位于项目目录内：$contextFile"
+    }
+    & git ls-files --error-unmatch -- $resolvedContext | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "审查上下文必须是 Git 已跟踪文件：$contextFile" }
+    if ([System.IO.Path]::GetFileName($resolvedContext) -match '(?i)(^\.env|private|credential|secret|token|password)') {
+        throw "审查上下文文件名疑似敏感，已拒绝：$contextFile"
+    }
+    $contextContent = Get-Content -Raw -LiteralPath $resolvedContext -Encoding UTF8
+    $ContextCharacterCount += $contextContent.Length
+    if ($ContextCharacterCount -gt $ContextCharacterLimit) {
+        throw "显式审查上下文超过 $ContextCharacterLimit 字符上限。"
+    }
+    $relativeContext = [System.IO.Path]::GetRelativePath($ProjectRoot, $resolvedContext).Replace('\', '/')
+    $ContextParts += "### $relativeContext`n`n$contextContent"
+}
+$ReviewContext = if ($ContextParts.Count -eq 0) { "无；仅审查本次 diff。" } else { $ContextParts -join "`n`n" }
+
 $SensitivePatterns = @{
     "private-key" = '(?m)^\+?\s*-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----\s*$'
     "github-token" = '\bgh[pousr]_[A-Za-z0-9_]{20,}\b'
@@ -86,7 +123,7 @@ $SensitivePatterns = @{
     "bearer-token" = '\bBearer\s+[A-Za-z0-9._~+/-]{16,}={0,2}\b'
 }
 foreach ($patternName in $SensitivePatterns.Keys) {
-    if ([regex]::IsMatch($DiffText, $SensitivePatterns[$patternName])) {
+    if ([regex]::IsMatch(($DiffText + "`n" + $ReviewContext), $SensitivePatterns[$patternName])) {
         throw "本地敏感信息扫描命中规则 $patternName；已拒绝将差异发送给 Pi。"
     }
 }
@@ -131,6 +168,8 @@ $PiInstructionsFile = Join-Path $PSScriptRoot "pi\AGENTS.md"
 $PiInstructions = Get-Content -Raw -LiteralPath $PiInstructionsFile -Encoding UTF8
 $TemplateRaw = Get-Content -Raw -LiteralPath $TemplateFile -Encoding UTF8
 $PromptContent = ($PiInstructions + "`n`n当前模式：REVIEW`n`n" + $TemplateRaw).Replace("{{STAGE_NAME}}", $StageName)
+$PromptContent = $PromptContent.Replace("{{REVIEW_MODE}}", $ReviewMode)
+$PromptContent = $PromptContent.Replace("{{REVIEW_CONTEXT}}", $ReviewContext)
 $PromptContent = $PromptContent.Replace("{{ATTEMPT}}", $Attempt.ToString())
 $PromptContent = $PromptContent.Replace("{{HEAD_COMMIT}}", $TargetCommit)
 $PromptContent = $PromptContent.Replace("{{BASE_REF}}", $BaseCommit)

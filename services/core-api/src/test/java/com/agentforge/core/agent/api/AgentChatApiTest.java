@@ -7,6 +7,9 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 
 import java.util.List;
 import java.util.UUID;
@@ -25,11 +28,14 @@ import com.agentforge.core.agent.application.AgentChatResult;
 import com.agentforge.core.agent.application.AgentChatService;
 import com.agentforge.core.agent.application.AgentSource;
 import com.agentforge.core.agent.application.AgentActionView;
+import com.agentforge.core.agent.application.AgentChatCommand;
+import com.agentforge.core.agent.application.AgentStreamEvent;
 import com.agentforge.core.agent.domain.AgentActionStatus;
 import com.agentforge.core.agent.domain.AgentActionType;
 import com.agentforge.core.security.SecurityConfiguration;
 import com.agentforge.core.security.SecurityProblemWriter;
 import com.agentforge.core.shared.error.ServiceUnavailableException;
+import com.agentforge.core.shared.error.RateLimitExceededException;
 import com.agentforge.core.shared.web.RequestIdFilter;
 
 @WebMvcTest(AgentChatController.class)
@@ -43,6 +49,42 @@ class AgentChatApiTest {
 
     @Autowired MockMvc mockMvc;
     @MockitoBean AgentChatService agentChatService;
+
+    @Test
+    void chatStreamReturnsIncrementalSseContract() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AgentChatCommand command = new AgentChatCommand(
+                projectId, new com.agentforge.core.security.AuthenticatedActor(UUID.randomUUID(), false),
+                "hello", null, "request-stream");
+        when(agentChatService.prepareStream(eq(projectId), any(), eq("hello"), eq(null), any()))
+                .thenReturn(command);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            java.util.function.Consumer<AgentStreamEvent> sink = invocation.getArgument(1);
+            sink.accept(AgentStreamEvent.metadata(conversationId, "request-stream", List.of()));
+            sink.accept(AgentStreamEvent.delta("第一段"));
+            sink.accept(AgentStreamEvent.delta("，第二段"));
+            sink.accept(AgentStreamEvent.complete(null));
+            return null;
+        }).when(agentChatService).stream(eq(command), any());
+
+        var result = mockMvc.perform(post("/api/v1/projects/{projectId}/agent/chat/stream", projectId)
+                        .with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString()).claim("roles", List.of("USER"))))
+                        .header("X-Request-Id", "request-stream")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"hello\"}"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(result))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("event:metadata")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                        "data:{\"text\":\"\\u7B2C\\u4E00\\u6BB5\"}")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("event:complete")));
+    }
 
     @Test
     void chatReturnsAgentContractAndRequestId() throws Exception {
@@ -91,6 +133,20 @@ class AgentChatApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{" + "\"message\":\"   \"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void chatMapsDailyQuotaExhaustionToTooManyRequests() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        when(agentChatService.chat(eq(projectId), any(), eq("hello"), any(), any()))
+                .thenThrow(new RateLimitExceededException("Daily AI request limit reached."));
+
+        mockMvc.perform(post("/api/v1/projects/{projectId}/agent/chat", projectId)
+                        .with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString()).claim("roles", List.of("USER"))))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"hello\"}"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.type").value("https://agentforge.local/problems/rate-limit-exceeded"));
     }
 
     @Test

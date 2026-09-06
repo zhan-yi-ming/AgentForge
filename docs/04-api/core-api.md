@@ -21,14 +21,16 @@
 | 未提供、过期、签名或 issuer 无效的 token | 401 | 不返回 token 验证内部细节 |
 | 登录邮箱或密码不匹配 | 401 | 统一文案，避免枚举账号 |
 | 已认证但不是 owner / ADMIN | 403 | 不返回资源内容 |
+| 生产环境关闭公共注册 | 403 | 登录保持可用，Demo 账号由受控脚本创建 |
 | 项目或项目内资源不存在 | 404 | 嵌套路由必须同时匹配 projectId 与资源 ID |
 | 唯一约束或乐观锁冲突 | 409 | 服务层冲突及事务提交阶段的 `OptimisticLockingFailureException` 均统一映射；重新读取资源再决定是否重试 |
+| AI UTC 日配额已用完 | 429 | 超额请求不会调用 Agent Service |
 
 ## Auth
 
 ### `POST /api/v1/auth/register`
 
-无需认证。请求：
+无需认证。仅在 `AGENTFORGE_REGISTRATION_ENABLED=true` 时可用；生产默认关闭并返回 403。请求：
 
 ```json
 {
@@ -232,6 +234,10 @@ title 1–200；description 可空且最大 10,000。status 可省略，默认 `
 ## Agent Chat
 
 `POST /api/v1/projects/{projectId}/agent/chat` 的请求与错误语义见 `agent-service.md`。Day 5 新增可空 `pendingAction`；未确认时 Task 数据不变。
+
+`POST /api/v1/projects/{projectId}/agent/chat/stream` 使用同一请求校验与权限边界，成功返回 `text/event-stream`。Java 必须在开始流之前完成认证、项目授权和日配额消费；SSE 的 metadata/delta/complete/error 契约见 `agent-service.md`。流式传输不改变 pending action 的确认要求。
+
+V1.1 在转发给 Agent Service 前原子消费一次用户 UTC 日配额；达到 `AGENTFORGE_AI_DAILY_LIMIT` 后返回 429。限制为 0 只表示本地开发关闭配额。
 
 ### `POST /api/v1/projects/{projectId}/agent/actions/{actionId}/confirm`
 

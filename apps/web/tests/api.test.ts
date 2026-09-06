@@ -21,4 +21,34 @@ describe("API client", () => {
       status: 409, detail: "The Wiki version is stale.", requestId: "request-409",
     });
   });
+
+  it("parses fragmented UTF-8 SSE frames and reports deltas immediately", async () => {
+    const encoder = new TextEncoder();
+    const payload = [
+      'event: metadata\ndata: {"conversationId":"conversation-1","requestId":"r1","sources":[]}\n\n',
+      'event: delta\ndata: {"text":"你"}\n\n',
+      'event: delta\ndata: {"text":"好"}\n\n',
+      'event: complete\ndata: {"pendingAction":null}\n\n',
+    ].join("");
+    const bytes = encoder.encode(payload);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes.slice(0, 101));
+        controller.enqueue(bytes.slice(101, 127));
+        controller.enqueue(bytes.slice(127));
+        controller.close();
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, {
+      status: 200, headers: { "Content-Type": "text/event-stream" },
+    })));
+    const deltas: string[] = [];
+
+    const result = await createApiClient(() => "token-123").chatStream(
+      "project-1", "hello", undefined, { onDelta: (text) => deltas.push(text) },
+    );
+
+    expect(deltas).toEqual(["你", "好"]);
+    expect(result).toMatchObject({ conversationId: "conversation-1", answer: "你好", requestId: "r1" });
+  });
 });

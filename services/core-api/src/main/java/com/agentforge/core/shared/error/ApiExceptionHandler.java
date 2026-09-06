@@ -71,6 +71,13 @@ public class ApiExceptionHandler {
         return response(HttpStatus.SERVICE_UNAVAILABLE, "service-unavailable", exception.getMessage(), request);
     }
 
+    @ExceptionHandler(RateLimitExceededException.class)
+    ResponseEntity<ProblemDetail> handleRateLimitExceeded(
+            RateLimitExceededException exception,
+            HttpServletRequest request) {
+        return response(HttpStatus.TOO_MANY_REQUESTS, "rate-limit-exceeded", exception.getMessage(), request);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ProblemDetail> handleValidation(
             MethodArgumentNotValidException exception,

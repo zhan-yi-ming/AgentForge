@@ -9,6 +9,19 @@
 - Repository 集成测试：使用真实 PostgreSQL/Testcontainers 验证 SQL、约束和查询；Day 1 若环境不可用需明确记录未运行。
 - 端到端测试：跨 Web、Java、Python 的关键闭环，进入对应天次后建立。
 
+## 基于风险选择验证范围
+
+每次修改先回答“如果这里出错，最多影响哪里”，再按 L0–L3 选择最低成本但充分的验证：
+
+| 等级 | 典型影响 | Codex 验证 | Pi |
+| --- | --- | --- | --- |
+| L0 | 文案、CSS、注释、README、无行为整理 | 必要语法/类型/lint/构建，可有依据地跳过自动化测试 | 默认不需要 |
+| L1 | 单组件、小函数、局部交互、接口不变且边界明确 | 直接相关测试，必要时核心 smoke | 默认不需要 |
+| L2 | API 逻辑、数据库读写、缓存、Tool、Agent 节点、Workflow、状态、外部调用、多模块 | 相关模块测试 + 核心 smoke | Diff Review |
+| L3 | 架构、Schema、权限安全额度限流、Agent Runtime/状态机、全局上下文、核心流程、API Contract、公共模块 | 全量测试 + 核心业务回归 | 必须 Review |
+
+连续 5 次 L0/L1、节点结束、重要 merge/commit、进入下一节点前、多模块扩散或测试异常触发全量测试、核心 smoke 和 Milestone Review。每份变更记录维护累计计数；L2/L3 Review 或 Milestone Review 通过后归零。未知影响自动按至少 L2 处理。
+
 ## Day 2 质量门槛
 
 - Java 编译通过。
@@ -71,6 +84,8 @@ Day 4 跨进程闭环由仓库脚本执行：
 
 用户曾撤销 Pi 审查与测试授权，该决定及 Day 1–4 复核保留在 `docs/07-changes/2026-09-05-disable-pi-and-day1-day4-audit.md` 供历史追溯。随后用户重新授权每阶段一次性 Pi 只读代码审核，但没有恢复 Pi 测试、monitor、OnCodexWake 或自动阶段推进；Codex 始终直接执行并记录全部测试证据。
 
+2026-09-06 起的现行门禁是：代码、配置、脚本和文档变更完成并由 Codex 真实验证后，必须在创建提交前直接触发一次 Pi 只读审核；持续授权无需逐次询问。连接失败按 `../06-operations/pi-review-connection.md` 快速停止并请用户处理。
+
 ## Day 5 质量门槛与审核分工
 
 - 行为变更遵循仓库 TDD skill：先在公共 seam 运行可观察的失败测试，再做最小实现。
@@ -96,4 +111,4 @@ Day 4 跨进程闭环由仓库脚本执行：
 - 默认 hash Embedding 与 `disabled` responder 在无外部 key 时完成可重复验收；国内 LLM provider 通过边界 fake 验证兼容调用，真实 key 只用于本地人工体验且不得写入仓库。
 - Java clean verify、Python pytest、Vitest、Vite production build和完整 Compose 验收全部记录真实退出码、数量和清理证据。
 - V1 禁止因收尾提前引入 V2/V3 组件；生产部署、安全加固和真实生成式模型另立阶段。
-- Day 7 最终审核由 Codex 执行，并以浏览器真实交互补充接口和组件测试；本阶段不调用 Pi。
+- Day 7 当时经用户明确豁免 Pi，由 Codex 以浏览器真实交互完成最终审核；这是历史单次豁免，不适用于 2026-09-06 起的新变更。

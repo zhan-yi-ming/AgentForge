@@ -1,0 +1,8 @@
+[Unit]
+Description=Renew AgentForge public IP TLS certificate
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/agentforge/repo/scripts/deploy/tls-renew.sh

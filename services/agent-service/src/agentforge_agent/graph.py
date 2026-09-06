@@ -73,3 +73,39 @@ def build_chat_graph(retriever: Retriever, responder: Responder = deterministic_
     builder.add_edge("plan", "respond")
     builder.add_edge("respond", END)
     return builder.compile()
+
+
+def build_chat_context_graph(retriever: Retriever):
+    """Run deterministic preparation, retrieval and tool planning before streaming."""
+
+    def prepare(state: ChatState) -> dict[str, object]:
+        message = state["message"].strip()
+        if not message:
+            raise ValueError("message must contain non-whitespace characters")
+        return {
+            "normalized_message": message,
+            "conversation_id": state.get("conversation_id") or uuid4(),
+        }
+
+    def retrieve(state: ChatState) -> dict[str, object]:
+        result = retriever(
+            state["project_id"],
+            state["user_id"],
+            state["actor_admin"],
+            state["normalized_message"],
+            state["request_id"],
+        )
+        return {"retrieved_context": result.context, "sources": result.sources}
+
+    def plan(state: ChatState) -> dict[str, object]:
+        return {"tool_proposal": plan_tool(state["normalized_message"])}
+
+    builder = StateGraph(ChatState)
+    builder.add_node("prepare", prepare)
+    builder.add_node("retrieve", retrieve)
+    builder.add_node("plan", plan)
+    builder.add_edge(START, "prepare")
+    builder.add_edge("prepare", "retrieve")
+    builder.add_edge("retrieve", "plan")
+    builder.add_edge("plan", END)
+    return builder.compile()

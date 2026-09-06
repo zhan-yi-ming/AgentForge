@@ -8,11 +8,11 @@
 
 ## 用户价值与场景
 
-项目由 AI 持续开发时，用户需要每个阶段都获得独立、可追溯的 Pi 审查报告，并确信发现的问题会在进入下一阶段前被 Codex 研判和修复。用户发送下一条 Codex 消息时，系统会先检查是否存在待审查或待修复阶段，而不是默默越过质量门。
+项目由 AI 持续开发时，用户需要每次提交前都获得独立、可追溯的 Pi 审查报告，并确信发现的问题会在创建提交前由 Codex 研判。实现和 Codex 测试完成后直接触发一次审核，无需用户逐次授权；旧消息唤醒和后台 monitor 不再参与当前流程。
 
 ## 范围
 
-- 每个阶段以一份交付提交为审查对象；Day 1、Day 2 作为历史阶段补审。
+- 每个阶段以提交前工作树 diff 为审查对象；新增文件先使用 intent-to-add 进入 diff 视图。
 - Pi 固定为 `deepseek/deepseek-v4-pro`；默认不提供任何工具。审查包装器将变更文件清单、diff 统计、上一轮报告和不超过 180000 字符的完整 diff 作为不可变输入；异常超大差异才明确标注截断并保留首中尾证据，此时 Codex 必须补充未覆盖文件研判。Day 5 的 141965 字符 diff 未截断。
 - 每次审查生成独立报告：`YYYY-MM-DD-review-<stage>-attempt-<n>.md`。
 - Pi 以 `minimal` 推理档输出最多十项按严重级别排序的可操作发现；报告必须提供结论、定位和证据，但不以重复长文替代可执行问题。
@@ -23,7 +23,7 @@
 
 ## 触发与流程
 
-当前流程：Codex 完成实现并亲自执行测试，将工作树 diff 交给 `run-review.ps1 -TargetRef WORKTREE` 做一次 Pi 只读审核；Codex研判 finding 并重跑测试。`review-loop`、monitor、heartbeat、Pi validation 和自动阶段推进保持停用。
+当前流程：Codex 完成实现并亲自执行测试，将工作树 diff 交给 `run-review.ps1 -TargetRef WORKTREE` 做一次 Pi 只读审核；Codex 研判 finding 并重跑测试，通过后才创建提交。用户已持续授权发送本阶段源码、配置、测试和文档 diff，无需逐次确认。启动器连接和快速失败见 `../06-operations/pi-review-connection.md`。`review-loop`、monitor、heartbeat、Pi validation 和自动阶段推进保持停用。
 
 以下 1–5 项为已停用的历史自动编排设计，不是当前操作步骤：
 

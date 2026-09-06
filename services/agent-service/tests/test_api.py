@@ -36,6 +36,15 @@ def fake_llm_responder(state) -> str:
     return f"AI answer for: {state['normalized_message']}"
 
 
+class FakeStreamingResponder:
+    def __call__(self, state) -> str:
+        return "".join(self.stream(state))
+
+    def stream(self, state):
+        yield "第一段"
+        yield "，第二段"
+
+
 def test_health_does_not_require_internal_token() -> None:
     response = client.get("/health")
     assert response.status_code == 200
@@ -83,6 +92,31 @@ def test_chat_uses_configured_llm_responder() -> None:
 
     assert response.status_code == 200
     assert response.json()["answer"] == "AI answer for: explain the architecture"
+
+
+def test_chat_stream_emits_metadata_deltas_and_complete_in_order() -> None:
+    app.dependency_overrides[get_responder] = lambda: FakeStreamingResponder()
+    try:
+        response = client.post(
+            "/internal/v1/chat/stream",
+            headers={"X-AgentForge-Internal-Token": TOKEN},
+            json=chat_request(message="  explain the architecture  "),
+        )
+    finally:
+        app.dependency_overrides.pop(get_responder, None)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    events = [__import__("json").loads(line) for line in response.text.splitlines()]
+    assert [event["type"] for event in events] == [
+        "metadata",
+        "delta",
+        "delta",
+        "complete",
+    ]
+    assert events[0]["sources"][0]["sourceType"] == "WIKI"
+    assert [event["text"] for event in events[1:3]] == ["第一段", "，第二段"]
+    assert events[-1]["toolProposal"] is None
 
 
 def test_chat_sanitizes_llm_provider_failure() -> None:

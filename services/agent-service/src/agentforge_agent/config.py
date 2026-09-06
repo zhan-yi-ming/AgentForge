@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr | None = None
     llm_base_url: str | None = None
     llm_model: str | None = None
+    llm_max_tokens: int = Field(default=800, ge=64, le=4096)
     request_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     rag_top_k: int = Field(default=6, ge=1, le=20)
     rag_candidate_k: int = Field(default=12, ge=1, le=50)

@@ -16,6 +16,11 @@ class FakeChatModel:
         self.messages = messages
         return SimpleNamespace(content=self.response_content)
 
+    def stream(self, messages):
+        self.messages = messages
+        for content in self.response_content:
+            yield SimpleNamespace(content=content)
+
 
 def settings(**overrides) -> Settings:
     values = {
@@ -42,6 +47,20 @@ def test_compatible_responder_sends_question_and_retrieved_context() -> None:
     assert model.messages[0].content.startswith("你是 AgentForge")
     assert "谁负责写入？" in model.messages[1].content
     assert "Java owns writes." in model.messages[1].content
+
+
+def test_compatible_responder_streams_native_model_chunks() -> None:
+    model = FakeChatModel(["第一段", "，第二段"])
+    responder = CompatibleLlmResponder(model)
+
+    chunks = list(
+        responder.stream(
+            {"normalized_message": "架构？", "retrieved_context": "Java owns writes."}
+        )
+    )
+
+    assert chunks == ["第一段", "，第二段"]
+    assert "架构？" in model.messages[1].content
 
 
 @pytest.mark.parametrize(
@@ -71,6 +90,26 @@ def test_build_responder_maps_provider_to_non_openai_endpoint(
     assert captured["model"] == expected_model
     assert captured["api_key"].get_secret_value() == "local-test-key"
     assert "openai.com" not in captured["base_url"]
+    assert captured["max_tokens"] == 800
+
+
+def test_build_responder_applies_configured_max_tokens() -> None:
+    captured = {}
+
+    def fake_factory(**kwargs):
+        captured.update(kwargs)
+        return FakeChatModel()
+
+    build_responder(
+        settings(
+            llm_provider="deepseek",
+            llm_api_key="local-test-key",
+            llm_max_tokens=321,
+        ),
+        model_factory=fake_factory,
+    )
+
+    assert captured["max_tokens"] == 321
 
 
 def test_enabled_provider_requires_local_api_key() -> None:
