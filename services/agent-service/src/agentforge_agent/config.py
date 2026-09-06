@@ -2,7 +2,7 @@ from functools import lru_cache
 
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,10 +25,25 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     llm_model: str | None = None
     llm_max_tokens: int = Field(default=800, ge=64, le=4096)
+    langfuse_enabled: bool = False
+    langfuse_public_key: SecretStr | None = None
+    langfuse_secret_key: SecretStr | None = None
+    langfuse_host: str = "https://cloud.langfuse.com"
+    langfuse_environment: str = Field(
+        default="local",
+        pattern=r"^[a-z0-9_-]{1,40}$",
+    )
     request_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     rag_top_k: int = Field(default=6, ge=1, le=20)
     rag_candidate_k: int = Field(default=12, ge=1, le=50)
     rag_context_char_budget: int = Field(default=4000, ge=500, le=12000)
+
+    @field_validator("langfuse_environment")
+    @classmethod
+    def reject_reserved_langfuse_environment(cls, value: str) -> str:
+        if value.startswith("langfuse"):
+            raise ValueError("Langfuse environment uses a reserved prefix.")
+        return value
 
 
 @lru_cache

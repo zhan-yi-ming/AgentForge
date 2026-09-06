@@ -49,6 +49,18 @@ case "${AGENTFORGE_AGENT_LLM_PROVIDER:-disabled}" in
     } ;;
     *) echo "Unsupported LLM provider." >&2; exit 1 ;;
 esac
+case "${AGENTFORGE_AGENT_LANGFUSE_ENABLED:-false}" in
+    false) ;;
+    true)
+        [[ -n "${AGENTFORGE_AGENT_LANGFUSE_PUBLIC_KEY:-}" && \
+           -n "${AGENTFORGE_AGENT_LANGFUSE_SECRET_KEY:-}" && \
+           -n "${AGENTFORGE_AGENT_LANGFUSE_HOST:-}" ]] || {
+            echo "Enabled Langfuse tracing requires public key, secret key and host." >&2
+            exit 1
+        }
+        ;;
+    *) echo "AGENTFORGE_AGENT_LANGFUSE_ENABLED must be true or false." >&2; exit 1 ;;
+esac
 [[ "${AGENTFORGE_REGISTRATION_ENABLED:-false}" == "false" ]] || {
     echo "Production deployment requires AGENTFORGE_REGISTRATION_ENABLED=false." >&2
     exit 1

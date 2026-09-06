@@ -18,6 +18,7 @@ Java Core API (services/core-api) ------> PostgreSQL + pgvector
   | internal REST / JSON + NDJSON stream
   v
 Python Agent Service (services/agent-service) -> Embedding / Retrieval
+Python Agent Service -> Langfuse (optional observability only)
   概率性决策、上下文、RAG、Tool 意图
 
 Redis：仅作为后续阶段可选 profile 保留，V1 默认不启动，也不作为业务事实来源。
@@ -35,7 +36,7 @@ Redis：仅作为后续阶段可选 profile 保留，V1 默认不启动，也不
 
 ### Python Agent Service
 
-负责 LLM、LangGraph、RAG、上下文构建和 Tool Calling。Day 4 可写入可重建的 `rag_chunk` 派生索引，但不读取或修改 Wiki、Task、用户等业务表；它生成答案或结构化操作意图，没有绕过 Java Core API 修改业务事实的权限。
+负责 LLM、LangGraph、RAG、上下文构建和 Tool Calling。Day 4 可写入可重建的 `rag_chunk` 派生索引，但不读取或修改 Wiki、Task、用户等业务表；它生成答案或结构化操作意图，没有绕过 Java Core API 修改业务事实的权限。V2-01 在该服务内通过集中 adapter 建立 `request -> agent -> prepare / retrieval / tool / llm` Langfuse Trace；adapter 只发送白名单摘要并 fail-open，不能执行业务写入或改变 Chat 结果。
 
 ### PostgreSQL
 
@@ -52,7 +53,7 @@ Redis：仅作为后续阶段可选 profile 保留，V1 默认不启动，也不
 - 修改：Agent 只能返回 Tool 意图；Java 将白名单提案保存为 `agent_task_action`；Web/HTTP 客户端展示确认；Java 在 confirm 时重新鉴权、锁定 action、校验 Task version、复用 TaskService 执行并落库。详见 ADR-0011。
 - 数据隔离：Day 2 所有项目资源按已认证 user + project owner 校验，ADMIN 仅作为受控运维角色；后续演进为 membership。
 - 身份：Core API 签发短期 JWT，所有业务入口默认认证；JWT secret 只通过运行环境注入。
-- 可观测：所有跨服务请求逐步携带 `request_id`；V1 使用结构化日志，V2 接入完整 Trace。
+- 可观测：所有跨服务请求携带 `request_id`。V2-01 由 Python 建立基础 Langfuse Trace，并用 `request_id`、`thread_id` 与 `project_id` 关联根请求及 Agent 子节点；Java 结构化日志仍是观测平台不可用时的兜底。用户/模型/检索正文、Tool 参数和所有凭据不进入 Trace，详见 ADR-0016。
 
 ## 部署策略
 

@@ -42,6 +42,8 @@ Python 不返回 actionId/status，也不执行写入。Java 不信任 proposal�
 
 `POST /internal/v1/chat/stream` 使用相同 header 与 body，返回 `application/x-ndjson`。事件为 `metadata`、`delta`、`complete` 或 `error`，每行一个 JSON 对象。`complete` 可包含 Python `toolProposal`，但不包含 actionId/status；Java 消费并执行与 JSON 入口完全相同的白名单校验和 pending action 持久化。内部流不得直接暴露给浏览器。
 
+V2-01 不改变上述 HTTP schema。Python 在内部 token 校验成功后用 body 的 `requestId`、`projectId` 和实际 `conversationId` 建立 Langfuse 关联；当请求未传 conversationId 时，Python 先生成一次 UUID，并保证 Trace 的 `thread_id`、metadata 事件/JSON 响应的 `conversationId` 一致。Langfuse trace id 不进入公共或内部 API。观测失败不得改变状态码、NDJSON 事件或 Java 的确定性处理。
+
 当 `AGENTFORGE_AGENT_LLM_PROVIDER` 为 `deepseek`、`zhipu` 或 `qwen` 时，`answer` 来自对应 OpenAI-compatible Chat Completions 服务；`disabled` 时为确定性回退回答。`AGENTFORGE_AGENT_LLM_MAX_TOKENS` 统一限制三家模型的最大输出，默认 800、允许 64–4096。provider 缺少 key、模型服务不可达、认证/限流失败或响应不含有效文本时内部入口返回 503，Core API 继续向浏览器输出通用 503，不透传上游正文或凭据。
 
 ## Core API 内部来源入口

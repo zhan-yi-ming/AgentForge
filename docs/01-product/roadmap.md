@@ -1,7 +1,7 @@
 # 三阶段路线图
 
 - 状态：Accepted
-- 当前焦点：V1 / Day 1–Day 7 已完成并通过验收；V2 尚未开始；下一 Node 为 V2-01 Langfuse 基础 Trace
+- 当前焦点：V1 / Day 1–Day 7 与 V2-01 Langfuse 基础 Trace 已完成并通过验收；尚未进入 V2-02
 
 ## V1：能用
 

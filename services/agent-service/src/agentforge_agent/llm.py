@@ -23,10 +23,21 @@ SYSTEM_PROMPT = """你是 AgentForge 项目助手。请优先使用中文简洁�
 
 
 class CompatibleLlmResponder:
-    def __init__(self, model: Any) -> None:
+    def __init__(
+        self,
+        model: Any,
+        provider: str = "unknown",
+        model_name: str = "unknown",
+    ) -> None:
         self.model = model
+        self.provider = provider
+        self.model_name = model_name
 
     def __call__(self, state: ChatState) -> str:
+        return self.respond_observed(state, None)
+
+    def respond_observed(self, state: ChatState, observation) -> str:
+        self._update_model_metadata(observation)
         messages = self._messages(state)
         try:
             response = self.model.invoke(messages)
@@ -36,12 +47,21 @@ class CompatibleLlmResponder:
         content = getattr(response, "content", None)
         if not isinstance(content, str) or not content.strip():
             raise LlmDependencyError("Configured LLM provider returned no valid text.")
+        self._update_usage(observation, response)
         return content.strip()
 
     def stream(self, state: ChatState):
+        yield from self.stream_observed(state, None)
+
+    def stream_observed(self, state: ChatState, observation):
+        self._update_model_metadata(observation)
         emitted = False
+        latest_usage = None
         try:
             for response in self.model.stream(self._messages(state)):
+                usage = _usage_details(response)
+                if usage:
+                    latest_usage = usage
                 content = getattr(response, "content", None)
                 if isinstance(content, str) and content:
                     emitted = True
@@ -50,6 +70,21 @@ class CompatibleLlmResponder:
             raise LlmDependencyError("Configured LLM provider is unavailable.") from exception
         if not emitted:
             raise LlmDependencyError("Configured LLM provider returned no valid text.")
+        if observation is not None and latest_usage:
+            observation.update(usage_details=latest_usage)
+
+    def _update_model_metadata(self, observation) -> None:
+        if observation is not None:
+            observation.update(
+                model=self.model_name,
+                metadata={"provider": self.provider},
+            )
+
+    @staticmethod
+    def _update_usage(observation, response) -> None:
+        usage = _usage_details(response)
+        if observation is not None and usage:
+            observation.update(usage_details=usage)
 
     @staticmethod
     def _messages(state: ChatState):
@@ -81,12 +116,35 @@ def build_responder(
     hostname = (urlparse(base_url).hostname or "").lower()
     if hostname == "openai.com" or hostname.endswith(".openai.com"):
         raise LlmDependencyError("OpenAI service endpoints are not allowed.")
+    model_name = settings.llm_model or default_model
     model = model_factory(
         api_key=api_key,
         base_url=base_url,
-        model=settings.llm_model or default_model,
+        model=model_name,
         timeout=settings.request_timeout_seconds,
         max_retries=0,
         max_tokens=settings.llm_max_tokens,
+        stream_usage=True,
     )
-    return CompatibleLlmResponder(model)
+    return CompatibleLlmResponder(
+        model,
+        provider=settings.llm_provider,
+        model_name=model_name,
+    )
+
+
+def _usage_details(response) -> dict[str, int]:
+    raw = getattr(response, "usage_metadata", None)
+    if not isinstance(raw, dict):
+        return {}
+    mapping = {
+        "input_tokens": "input",
+        "output_tokens": "output",
+        "total_tokens": "total",
+    }
+    usage: dict[str, int] = {}
+    for source, target in mapping.items():
+        value = raw.get(source)
+        if isinstance(value, int) and value >= 0:
+            usage[target] = value
+    return usage

@@ -112,3 +112,10 @@ Day 4 跨进程闭环由仓库脚本执行：
 - Java clean verify、Python pytest、Vitest、Vite production build和完整 Compose 验收全部记录真实退出码、数量和清理证据。
 - V1 禁止因收尾提前引入 V2/V3 组件；生产部署、安全加固和真实生成式模型另立阶段。
 - Day 7 当时经用户明确豁免 Pi，由 Codex 以浏览器真实交互完成最终审核；这是历史单次豁免，不适用于 2026-09-06 起的新变更。
+
+## V2-01 Langfuse 基础 Trace 门槛
+
+- 已约定 seam：Python `/internal/v1/chat` 与 `/internal/v1/chat/stream`、LangGraph 图入口、兼容模型 responder，以及既有 Java/Python HTTP 契约。Langfuse 是外部系统边界，可用 recorder/fake 验证发送的结构化事件；不测试 SDK 私有实现。
+- 每个纵向切片先运行失败测试，再做最小实现。至少覆盖根/Agent/prepare/retriever/tool/generation、三个关联 ID、同步和流式 Token usage、Tool 安全结果摘要、retrieval/LLM 异常闭合、disabled 和 observer 故障 fail-open。
+- V2-01 属于 Agent Runtime 与外部观测 L3 变更：执行 Python 全量 pytest、Java `clean verify`、Web 测试/构建、核心跨进程 smoke、配置解析、敏感信息扫描与节点 Pi Milestone Review。
+- Trace 测试断言敏感正文和原始异常不出现在 observer payload；Token 缺失必须保持缺失，禁止通过字符数估算。

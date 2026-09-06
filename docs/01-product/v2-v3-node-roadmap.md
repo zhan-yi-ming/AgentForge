@@ -1,8 +1,8 @@
 # V2/V3 节点路线图
 
 - 状态：Accepted（路线已确认；各功能在实现前均为 Planned）
-- 当前状态：V1 completed；V2 尚未开始
-- Next Node：V2-01 Langfuse 基础 Trace
+- 当前状态：V1 completed；V2-01 Langfuse 基础 Trace completed；V2-02 尚未授权
+- Current Node：无开发中 Node；下一候选为 V2-02 Context Manager 数据结构，尚未授权
 - 开发协议：`../00-governance/v2-v3-node-development-protocol.md`
 
 本文是 V2/V3 开发顺序与 Node Scope 的唯一来源，同时规定验收标准、DeepSeek Pi Review 重点和 GitHub 展示重点。每次只完成一个 Node，禁止跨节点开发；完成后必须停止并等待用户明确授权下一 Node。

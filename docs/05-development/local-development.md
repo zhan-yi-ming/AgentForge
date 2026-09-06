@@ -53,6 +53,8 @@ AGENTFORGE_AGENT_LLM_API_KEY=只填写你自己的DeepSeek密钥
 
 智谱对应 `AGENTFORGE_AGENT_LLM_PROVIDER=zhipu`，千问对应 `AGENTFORGE_AGENT_LLM_PROVIDER=qwen`，并将同一 `AGENTFORGE_AGENT_LLM_API_KEY` 替换成该厂商的 key。每次切换后运行 `docker compose --env-file .env -f infra/compose.yaml up -d --force-recreate agent-service` 使配置生效。
 
+V2-01 的 Langfuse 默认关闭，不影响无外部账号的本地运行。需要查看基础 Trace 时，在本机 `.env` 设置 `AGENTFORGE_AGENT_LANGFUSE_ENABLED=true`、public key、secret key、host 与 environment，然后重建或重启 Agent Service。secret key 不得打印、写入文档或提交；Trace 只包含关联 ID、节点结果摘要、耗时和 provider 返回的 Token usage，不包含 message、answer、检索正文或 Tool 参数。Langfuse 不可用时 Chat 应继续工作，可用同一个 `requestId` 对照本地日志排查。
+
 切换智谱或千问时只改 provider、key；默认模型和地址如下，也可在本地覆盖 `AGENTFORGE_AGENT_LLM_MODEL` 与 `AGENTFORGE_AGENT_LLM_BASE_URL`：
 
 | provider | 默认模型 | 默认 base URL |
