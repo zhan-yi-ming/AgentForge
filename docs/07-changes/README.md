@@ -14,6 +14,7 @@
 
 ## 索引
 
+- `2026-09-07-workspace-preview-history-agent-resilience.md`：统一 Markdown 预览边界、澄清执行任务语义、增加当前项目对话折叠历史，并缓解 Agent provider 瞬时故障。
 - `2026-09-07-wiki-format-flow-hotfix.md`：修复 AI 整理结果被外层代码围栏渲染成黑色代码块，并补齐应用草稿的滚动定位与保存成功反馈。
 - `2026-09-07-demo-login-hotfix.md`：隐藏登录页体验凭据、统一错误提示，并修复固定 Demo 账号重复初始化时的密码同步。
 - `2026-09-07-v2-01-tls-production-release.md`：把 V2-01、验证流程优化与 TLS 域名兼容合并到 main，并完成生产发布与真实核验。

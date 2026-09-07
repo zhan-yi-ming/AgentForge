@@ -16,19 +16,19 @@ App
 └─ ProjectWorkspace
    ├─ ProjectPicker      项目加载与选择
    ├─ WikiWorkspace      Markdown 草稿、预览、保存
-   ├─ TaskPanel          Task 当前状态列表
-   └─ AgentPanel         Chat、来源、pending action、确认/拒绝
+   ├─ TaskPanel          明确创建并确认的 Task 当前状态列表
+   └─ AgentPanel         当前项目内存问答历史、来源、pending action、确认/拒绝
 ```
 
 - 远端数据通过一个 typed API client 访问；它负责 Bearer header、Problem Details、request ID 与 401 会话失效。
 - V1 使用 React 局部 state 和少量自定义 hook，不引入 Redux/Query 等状态框架；数据量小且请求关系清楚，避免 Day 6 提前承担缓存一致性复杂度。
-- conversationId 在当前项目会话中复用；切换项目时清空 Chat/pending action，避免跨项目拼接上下文。
+- conversationId 在当前项目会话中复用；已完成问答保存在页面内存，最新一条默认展开、旧记录可逐条展开。切换项目时清空 Chat 历史/pending action，避免跨项目拼接上下文。
 - Agent Chat 使用 `fetch` 读取 SSE 字节流；客户端用流式 `TextDecoder` 处理被任意拆分的 UTF-8 和 SSE frame，收到 `delta` 后立即增量渲染 Markdown。切换项目或组件卸载时终止旧请求，旧项目的迟到事件不得写入新项目状态。
 - AI 整理的原始输入、返回 Markdown 和 Wiki 草稿是三个显式状态；只有用户操作才能把返回内容复制到草稿，只有保存按钮才能写入业务数据。
 
 ## V1.2 视觉与演示信息架构
 
-- 登录页以“你好，面试官”为第一屏问候，明确展示 `zhan-yi-ming` 与 AgentForge 的项目归属。登录和介绍合并为居中单卡片；卡片展示受限公开 Demo 凭据并可一键填入，但不把凭据写入 URL、日志、`sessionStorage` 或 `localStorage`。
+- 登录页以“你好，面试官”为第一屏问候，明确展示 `zhan-yi-ming` 与 AgentForge 的项目归属。登录和介绍合并为居中单卡片；只提示账号是简历上的邮箱、密码是微信号，不在页面展示、内置或一键填入凭据，也不把凭据写入 URL、日志、`sessionStorage` 或 `localStorage`。
 - 工作区采用清楚的两层信息结构：顶部产品与身份栏；主体保留左侧项目导航，右侧主内容使用居中、限宽、单列布局。Agent Chat 是首个主要功能，Wiki、Task、整理工具按纵向顺序位于其后，不再与 Chat 左右并排。
 - 首次登录后显示 DOM 可访问的轻量引导，关闭时只在 `localStorage` 保存完成标记；顶栏可重新打开，引导不改变项目、对话或业务状态。
 - 窄屏下项目导航变为横向滚动，主内容仍为单列；引导与登录卡片不得产生横向溢出。
@@ -37,7 +37,7 @@ App
 
 ## Markdown 与安全
 
-Markdown 使用 React 节点渲染器，默认不解析原始 HTML，也不使用 `dangerouslySetInnerHTML`。链接使用安全属性；后端文本、Wiki 内容和 Agent 回答均按不可信输入处理。V1 不支持用户自定义 HTML、脚本、iframe 或远程组件。
+Markdown 使用共用 React 节点渲染器，默认不解析原始 HTML，也不使用 `dangerouslySetInnerHTML`。渲染边界只剥离一个包住全文的 `markdown` / `md` 围栏，使历史 Wiki 与实时草稿保持一致，正文内部代码块不变。链接使用安全属性；后端文本、Wiki 内容和 Agent 回答均按不可信输入处理。V1 不支持用户自定义 HTML、脚本、iframe 或远程组件。
 
 ## 开发与部署
 

@@ -122,7 +122,7 @@ def build_responder(
         base_url=base_url,
         model=model_name,
         timeout=settings.request_timeout_seconds,
-        max_retries=0,
+        max_retries=1,
         max_tokens=settings.llm_max_tokens,
         stream_usage=True,
     )

@@ -115,6 +115,34 @@ describe("App", () => {
     expect(await screen.findByText("Ship UI")).toBeInTheDocument();
   });
 
+  it("explains which actions appear in the execution task list", async () => {
+    await login(api());
+
+    expect(screen.getByRole("heading", { name: "执行任务" })).toBeInTheDocument();
+    expect(screen.getByText(/普通提问和 Wiki 保存不会新增任务/)).toBeInTheDocument();
+  });
+
+  it("keeps the latest project conversation open and older answers expandable", async () => {
+    const streamMock = vi.fn()
+      .mockResolvedValueOnce({ conversationId: "conversation-1", answer: "First answer", requestId: "r-first", sources: [] })
+      .mockResolvedValueOnce({ conversationId: "conversation-1", answer: "Second answer", requestId: "r-second", sources: [] });
+    const user = await login(api({ chatStream: streamMock }));
+
+    await user.type(screen.getByLabelText("给 Agent 的消息"), "First question");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    expect(await screen.findByText("First answer")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("给 Agent 的消息"), "Second question");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    expect(await screen.findByText("Second answer")).toBeInTheDocument();
+    expect(screen.queryByText("First answer")).not.toBeInTheDocument();
+
+    const olderToggle = screen.getByRole("button", { name: /First question/ });
+    expect(olderToggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(olderToggle);
+    expect(screen.getByText("First answer")).toBeInTheDocument();
+  });
+
   it("confirms a pending action through Java before refreshing tasks", async () => {
     const pending: AgentAction = {
       id: "action-1", projectId: project.id, conversationId: "conversation-1", actionType: "CREATE_TASK",

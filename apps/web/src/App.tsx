@@ -1,16 +1,17 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiProblem, createApiClient, type AgentAction, type ApiClient, type Project, type Task, type WikiPage } from "./api";
-import { MarkdownPreview } from "./MarkdownPreview";
+import { MarkdownPreview, normalizeMarkdownContent } from "./MarkdownPreview";
 
 const TOKEN_KEY = "agentforge.accessToken";
 const ONBOARDING_KEY = "agentforge.onboardingComplete";
 const LOGIN_FAILURE_MESSAGE = "请联系我 向我索要体验账号";
 
-function unwrapMarkdownFence(content: string) {
-  const trimmed = content.trim();
-  const fenced = trimmed.match(/^```(?:markdown|md)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i);
-  return fenced ? fenced[1].trim() : content;
-}
+type ChatHistoryItem = {
+  id: string;
+  question: string;
+  answer: string;
+  sources: { title: string; excerpt: string }[];
+};
 
 function hasCompletedOnboarding() {
   try { return localStorage.getItem(ONBOARDING_KEY) === "true"; }
@@ -37,8 +38,8 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const [wikiVersion, setWikiVersion] = useState(0);
   const [chatMessage, setChatMessage] = useState("");
   const [conversationId, setConversationId] = useState<string>();
-  const [answer, setAnswer] = useState("");
-  const [sources, setSources] = useState<{ title: string; excerpt: string }[]>([]);
+  const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
+  const [expandedChatIds, setExpandedChatIds] = useState<Set<string>>(() => new Set());
   const [pendingAction, setPendingAction] = useState<AgentAction>();
   const [formatInput, setFormatInput] = useState("");
   const [formattedText, setFormattedText] = useState("");
@@ -50,6 +51,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const streamAbort = useRef<AbortController | undefined>(undefined);
   const activeProjectId = useRef("");
   const wikiPanel = useRef<HTMLElement | null>(null);
+  const chatSequence = useRef(0);
 
   const report = useCallback((cause: unknown) => {
     if (cause instanceof ApiProblem) {
@@ -91,8 +93,8 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     let active = true;
     setError("");
     setConversationId(undefined);
-    setAnswer("");
-    setSources([]);
+    setChatHistory([]);
+    setExpandedChatIds(new Set());
     setPendingAction(undefined);
     setFormatInput("");
     setFormattedText("");
@@ -146,28 +148,34 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     event.preventDefault();
     if (!projectId || !chatMessage.trim()) return;
     const requestedProjectId = projectId;
+    const question = chatMessage.trim();
+    const historyId = `chat-${++chatSequence.current}`;
     const controller = new AbortController();
     streamAbort.current?.abort();
     streamAbort.current = controller;
-    setStreaming(true); setError(""); setAnswer(""); setSources([]); setPendingAction(undefined);
+    setStreaming(true); setError(""); setPendingAction(undefined);
+    setChatHistory((current) => [...current, { id: historyId, question, answer: "", sources: [] }]);
+    setExpandedChatIds(new Set([historyId]));
     try {
-      const result = await api.chatStream(projectId, chatMessage.trim(), conversationId, {
+      const result = await api.chatStream(projectId, question, conversationId, {
         onMetadata: (metadata) => {
           if (activeProjectId.current !== requestedProjectId) return;
           setConversationId(metadata.conversationId);
-          setSources(metadata.sources);
+          setChatHistory((current) => current.map((item) => item.id === historyId ? { ...item, sources: metadata.sources } : item));
         },
         onDelta: (text) => {
-          if (activeProjectId.current === requestedProjectId) setAnswer((current) => current + text);
+          if (activeProjectId.current === requestedProjectId) {
+            setChatHistory((current) => current.map((item) => item.id === historyId ? { ...item, answer: item.answer + text } : item));
+          }
         },
       }, controller.signal);
       if (activeProjectId.current !== requestedProjectId) return;
       setConversationId(result.conversationId);
-      setAnswer(result.answer);
-      setSources(result.sources);
+      setChatHistory((current) => current.map((item) => item.id === historyId ? { ...item, answer: result.answer, sources: result.sources } : item));
       setPendingAction(result.pendingAction);
       setChatMessage("");
     } catch (cause) {
+      setChatHistory((current) => current.filter((item) => item.id !== historyId));
       if (!(cause instanceof DOMException && cause.name === "AbortError")) report(cause);
     } finally {
       if (streamAbort.current === controller) streamAbort.current = undefined;
@@ -192,7 +200,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setBusy(true); setError("");
     try {
       const result = await api.chat(projectId, `请将以下内容整理为 Markdown，保留事实，不执行写入：\n\n${formatInput.trim()}`);
-      setFormattedText(unwrapMarkdownFence(result.answer));
+      setFormattedText(normalizeMarkdownContent(result.answer));
       if (result.pendingAction) setPendingAction(result.pendingAction);
     } catch (cause) { report(cause); } finally { setBusy(false); }
   }
@@ -224,7 +232,18 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
       <section className="panel agent-panel"><div className="panel-heading"><div><span className="eyebrow">AI COPILOT</span><h2>项目对话</h2></div>{conversationId && <span className="conversation">会话 {conversationId.slice(0, 8)}</span>}</div>
         <div className="agent-welcome"><span className="agent-orb">✦</span><div><strong>你好，我是 AgentForge</strong><p>我会结合当前项目的 Wiki 与任务回答，并在写入前征求你的确认。</p></div></div>
         <form className="chat-form" onSubmit={sendChat}><textarea aria-label="给 Agent 的消息" value={chatMessage} onChange={(event) => setChatMessage(event.target.value)} placeholder="例如：这个项目的架构边界是什么？" /><button aria-label="发送" disabled={busy || streaming || !chatMessage.trim()}>{streaming ? "生成中…" : "发送 ↗"}</button></form>
-        {(answer || streaming) && <div className={streaming ? "answer streaming" : "answer"}><div className="answer-label"><span>AI 回答</span>{streaming && <span className="stream-state"><i /> 正在流式生成</span>}</div>{answer ? <MarkdownPreview content={answer} /> : <div className="typing-dots"><i /><i /><i /></div>}{sources.length > 0 && <div className="sources"><p className="section-label">已引用项目来源</p>{sources.map((source) => <article key={`${source.title}-${source.excerpt}`}><strong>{source.title}</strong><span>{source.excerpt}</span></article>)}</div>}</div>}
+        {chatHistory.length > 0 && <div className="conversation-history">{chatHistory.map((item, index) => {
+          const expanded = expandedChatIds.has(item.id);
+          const isLatest = index === chatHistory.length - 1;
+          return <article className="history-item" key={item.id}>
+            <button type="button" className="history-toggle" aria-expanded={expanded} onClick={() => setExpandedChatIds((current) => {
+              const next = new Set(current);
+              if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
+              return next;
+            })}><span>{item.question}</span><small>{expanded ? "收起" : "展开"}</small></button>
+            {expanded && <div className={streaming && isLatest ? "answer streaming" : "answer"}><div className="answer-label"><span>AI 回答</span>{streaming && isLatest && <span className="stream-state"><i /> 正在流式生成</span>}</div>{item.answer ? <MarkdownPreview content={item.answer} /> : <div className="typing-dots"><i /><i /><i /></div>}{item.sources.length > 0 && <div className="sources"><p className="section-label">已引用项目来源</p>{item.sources.map((source) => <article key={`${source.title}-${source.excerpt}`}><strong>{source.title}</strong><span>{source.excerpt}</span></article>)}</div>}</div>}
+          </article>;
+        })}</div>}
         {pendingAction && <div className="action-card"><span className="eyebrow">等待你的确认</span><h3>{pendingAction.title || pendingAction.actionType}</h3><p>{pendingAction.description || `${pendingAction.taskStatus ?? ""} ${pendingAction.priority ?? ""}`}</p><div><button onClick={() => void decideAction("confirm")} disabled={busy}>确认执行</button><button className="danger" onClick={() => void decideAction("reject")} disabled={busy}>拒绝</button></div></div>}
       </section>
 
@@ -239,7 +258,8 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         </div>
       </section>
 
-      <section className="panel task-panel"><div className="panel-heading"><div><span className="eyebrow">EXECUTION</span><h2>任务脉搏</h2></div><span className="count">{tasks.length}</span></div>
+      <section className="panel task-panel"><div className="panel-heading"><div><span className="eyebrow">EXECUTION</span><h2>执行任务</h2></div><span className="count">{tasks.length}</span></div>
+        <p className="task-explanation">这里只展示明确创建并经你确认的任务；普通提问和 Wiki 保存不会新增任务。</p>
         <div className="task-list">{tasks.map((task) => <article key={task.id}><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><h3>{task.title}</h3><p>{task.description || "暂无描述"}</p><footer><span>{task.status.replace("_", " ")}</span><span>v{task.version}</span></footer></article>)}{!tasks.length && <p className="empty-state">暂无任务，可让 Agent 提出一个。</p>}</div>
       </section>
 

@@ -48,6 +48,15 @@ scripts/deploy/update.sh
 scripts/deploy/rollback.sh
 ```
 
+在 `/opt/agentforge/repo` 下先执行 `source scripts/deploy/common.sh`，即可用项目封装的 Compose 查看实时生产日志：
+
+```bash
+compose logs --tail 200 -f gateway core-api agent-service web
+compose logs --since 30m --no-color agent-service core-api
+```
+
+第一条持续跟随入口、后端、Agent 与 Web；第二条适合排查最近的 Chat 503。停止跟随按 `Ctrl+C`。日志可能包含 requestId、项目 ID 等运维元数据，不得复制或公开包含 Bearer、内部 token 或模型 key 的请求内容。
+
 `update.sh` 先备份，再 fast-forward 拉取部署分支、顺序构建、启动并验收。`rollback.sh` 使用更新前保存的 commit，数据库迁移必须保持向后兼容；脚本不会删除 volume。
 
 ## TLS

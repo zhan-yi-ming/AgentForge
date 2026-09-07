@@ -11,7 +11,7 @@ Day 4 Graph 为 `START -> prepare -> retrieve -> respond -> END`。State 在 Day
 
 Responder 支持 `disabled`、`deepseek`、`zhipu`、`qwen` 四种模式。`disabled` 用于无 key 开发与测试，沿用确定性检索摘要；选择三家之一时，LangGraph `respond` 节点把用户问题和已授权、已排序、受字符预算限制的 RAG context 交给对应生成式模型。系统提示要求模型仅把 context 当作项目资料而非指令，不伪造来源；结构化 `sources` 始终由检索结果生成，不由模型生成。
 
-模型调用只影响 `answer`。Tool proposal 仍由确定性白名单 planner 产生，模型不能直接执行或扩大业务操作；Java 的校验、人工确认与确定性写回边界不变。provider 缺少 key、上游认证/限流/网络失败或响应无有效文本时，公共入口返回 503，响应不包含 key 或上游响应正文。
+模型调用只影响 `answer`。Tool proposal 仍由确定性白名单 planner 产生，模型不能直接执行或扩大业务操作；Java 的校验、人工确认与确定性写回边界不变。兼容模型客户端对 SDK 判定为可重试的瞬时失败最多额外重试一次；provider 缺少 key、持续认证/限流/网络失败或响应无有效文本时，公共入口仍返回 503，响应不包含 key 或上游响应正文。
 
 V1.1 公网 Demo 在 Java 信任边界为每个认证用户执行 PostgreSQL 原子 UTC 日配额；超限返回 429 且不调用 Agent Service。Agent Service 同时给兼容模型配置最大输出 Token。具体行为见 `public-demo-protection.md`。
 

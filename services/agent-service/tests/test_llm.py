@@ -91,6 +91,7 @@ def test_build_responder_maps_provider_to_non_openai_endpoint(
     assert captured["api_key"].get_secret_value() == "local-test-key"
     assert "openai.com" not in captured["base_url"]
     assert captured["max_tokens"] == 800
+    assert captured["max_retries"] == 1
 
 
 def test_build_responder_applies_configured_max_tokens() -> None:
