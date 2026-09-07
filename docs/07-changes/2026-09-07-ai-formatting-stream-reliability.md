@@ -1,7 +1,7 @@
 # AI 文本整理流式可靠性修复
 
 - 日期：2026-09-07
-- 状态：In Progress
+- 状态：Implemented
 - 阶段：V1.2 线上缺陷修复
 - 交付目标：当前分支 / 生产更新
 
@@ -88,6 +88,18 @@
 
 - 合并提交 `b2e2b9661a6e7bcdd43fdd3247ad0565d9522447` 已先推送 `codex/ai-format-main-release`，再快进推送 `main`；两条远端引用均用 `git ls-remote` 核验为相同哈希。
 - 生产 SSH preflight 执行 `ssh -o BatchMode=yes -o ConnectTimeout=10 root@47.76.95.86 "...只读仓库与超时变量检查..."`，退出码 1，返回 `Permission denied (publickey)`，未进入服务器、未读取生产配置。随后执行 `ssh -vvv -o BatchMode=yes -o ConnectTimeout=10 root@47.76.95.86 "exit"`，证明确已建立 TCP 连接并依次提供本机 RSA/ED25519 公钥，但服务器均未接受；因此安全组已放行，阻塞点为 root 的 `authorized_keys` 或登录用户，不是端口规则。
+
+### 生产发布与真实验证
+
+- 用户通过阿里云云助手把本机 ED25519 公钥加入 root `authorized_keys` 后，在仓库根目录执行 `ssh -o BatchMode=yes -o ConnectTimeout=10 -i C:\Users\86134\.ssh\id_ed25519 root@47.76.95.86 "set -eu; cd /opt/agentforge/repo; printf 'HEAD='; git rev-parse HEAD; printf 'BRANCH='; git branch --show-current; printf 'DIRTY_COUNT='; git status --porcelain | wc -l; if grep -q '^AGENTFORGE_AGENT_REQUEST_TIMEOUT_SECONDS=' /opt/agentforge/env/.env; then echo 'AGENT_TIMEOUT_OVERRIDE=present'; else echo 'AGENT_TIMEOUT_OVERRIDE=absent'; fi; if grep -q '^AGENTFORGE_AGENT_READ_TIMEOUT=' /opt/agentforge/env/.env; then echo 'CORE_TIMEOUT_OVERRIDE=present'; else echo 'CORE_TIMEOUT_OVERRIDE=absent'; fi"`，退出码 0；生产仓库为干净 `main@ca4ecfc`，两个超时变量均无私有覆盖。
+- 在仓库根目录执行 `ssh -o BatchMode=yes -i C:\Users\86134\.ssh\id_ed25519 root@47.76.95.86 "cd /opt/agentforge/repo && scripts/deploy/update.sh"`，退出码 0；先创建备份 `/opt/agentforge/backups/agentforge-20260907T112012Z.dump.gz`，再把生产仓库快进到 `b7fc259`，顺序构建并启动 Core API、Agent Service、Web 与 gateway。Web 镜像内部真实执行 `npm run build`，Vite 7.3.6、283 modules transformed；最终 gateway、core-api、agent-service、web、postgres 共 5 个容器全部 healthy，脚本输出 HTTPS 与认证边界健康。
+- 首次附加配置核验把远端 `$(compose ...)` 写进 PowerShell 双引号，导致本机提前展开并退出 1；没有得到配置结论或修改服务器。修正后在仓库根目录执行 `ssh -o BatchMode=yes -i C:\Users\86134\.ssh\id_ed25519 root@47.76.95.86 'set -eu; cd /opt/agentforge/repo; source scripts/deploy/common.sh; request_timeout=$(compose exec -T agent-service printenv AGENTFORGE_AGENT_REQUEST_TIMEOUT_SECONDS); read_timeout=$(compose exec -T core-api printenv AGENTFORGE_AGENT_READ_TIMEOUT); printf "AGENT_REQUEST_TIMEOUT_SECONDS=%s CORE_READ_TIMEOUT=%s\n" "$request_timeout" "$read_timeout"; test "$request_timeout" = 60; test "$read_timeout" = PT75S; scripts/deploy/health-check.sh'`，退出码 0；实际容器值为 Agent `60`、Core `PT75S`，健康检查再次通过。
+- 临时无凭据 smoke 脚本先在仓库根目录执行 `& 'C:\Program Files\Git\bin\bash.exe' -n .production-ai-stream-smoke.sh`，Git Bash 语法检查退出码 0。脚本只在服务器内从私有环境读取 Demo 凭据，把 curl Authorization 配置和响应保存到 `mktemp` 的 `0700` 目录并在退出时删除；没有输出密码、token、项目正文或模型回答。
+- 第一轮执行 `$smokeScript = Get-Content -Raw -Encoding UTF8 '.production-ai-stream-smoke.sh'; $smokeScript | ssh -o BatchMode=yes -i C:\Users\86134\.ssh\id_ed25519 root@47.76.95.86 'bash -s'`，退出码 1 且无输出；增加非敏感阶段标记后确认登录、项目与流 HTTP 均为 200，但初版 grep 只接受 `event: metadata`，没有兼容生产的 `event:metadata`，误计事件为 0 并退出 1。修正事件正则后产品断言全部成功，但 Windows 管道追加的 CRLF 使远端脚本最后执行 `$'\r'` 并退出 1；这些失败不记作通过。
+- 最终先再次执行 `& 'C:\Program Files\Git\bin\bash.exe' -n .production-ai-stream-smoke.sh`，退出码 0；再执行 `$smokeScript = Get-Content -Raw -Encoding UTF8 '.production-ai-stream-smoke.sh'; $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($smokeScript)); $encoded | ssh -o BatchMode=yes -i C:\Users\86134\.ssh\id_ed25519 root@47.76.95.86 'base64 -d | tr -d "\r" | bash -s'`，退出码 0。Base64 解码报告尾部 `invalid input` warning，但完整 Bash smoke 成功执行并输出 `LOGIN_HTTP=200 PROJECTS_HTTP=200 STREAM_HTTP=200 METADATA=1 DELTAS=54 COMPLETE=1 ERRORS=0`；临时服务器目录由 trap 清理。
+- 删除远端分支前第一次用错误的 feature 完整哈希执行祖先检查，Git 退出 128，删除门禁安全停止且没有修改远端。随后从 merge commit `b2e2b96` 的第二父提交解析真实 feature 哈希 `3d903c8972a6a46c7103b00da5c4e396ce9a4566`，执行 `git merge-base --is-ancestor 3d903c8972a6a46c7103b00da5c4e396ce9a4566 b7fc259d0aeef8f2e0996254691a9d61cfb2172d`，退出码 0；执行 `git push ssh://git@ssh.github.com:443/zhan-yi-ming/AgentForge.git --delete feature/centered-chat-onboarding codex/ai-format-main-release`，退出码 0；再执行 `git ls-remote` 查询两个引用，返回 0 行。
+- 本地清理前执行 `git merge-base --is-ancestor main b7fc259d0aeef8f2e0996254691a9d61cfb2172d`，退出码 0，并执行 `git log --oneline main --not b7fc259d0aeef8f2e0996254691a9d61cfb2172d`，返回 0 条独有提交；同时确认用户已修改文档在旧/新基线间无提交差异，未跟踪 DOCX 在 main 中仍未跟踪。随后安全快进本地 main 并执行 `git switch main`，退出码 0；首次 `git branch -d feature/centered-chat-onboarding` 因本地残留的已删除远端跟踪引用而退出 1，没有删除。执行 `git branch --unset-upstream feature/centered-chat-onboarding` 后再次执行 `git branch -d feature/centered-chat-onboarding`，退出码 0；`git branch --list feature/centered-chat-onboarding` 返回 0 条。用户原有修改 `docs/07-changes/2026-09-05-disable-pi-and-day1-day4-audit.md` 与未跟踪 DOCX 均保留，未被暂存或改写。
+- 生产证据回填后在隔离 worktree 根目录执行 `git diff --check; $diffExit=$LASTEXITCODE; $changed=@(git diff --name-only); $diff=git diff; $privateKeys=[regex]::Matches($diff,'(?im)-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----').Count; $bearers=[regex]::Matches($diff,'(?im)Bearer[ \t]+[A-Za-z0-9._~-]{20,}').Count; Write-Output "DIFF_EXIT=$diffExit CHANGED_FILES=$($changed.Count) PRIVATE_KEY_MATCHES=$privateKeys BEARER_CREDENTIAL_MATCHES=$bearers"`，退出码 0；仅本变更记录 1 个文件变化，diff check、私钥头与 Bearer credential 命中均为 0。
 
 ## 风险与回滚
 
