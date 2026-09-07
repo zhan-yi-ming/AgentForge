@@ -60,7 +60,7 @@
 ## 验证结果
 
 - TDD 红：`npm test -- --run tests/app.test.tsx -t "keeps the wiki draft until AI text is explicitly applied"`，退出码 1；1 failed、11 skipped，准确证明旧实现仍调用同步接口，流式 mock 未被消费。
-- TDD 绿：同一命令退出码 0；1 passed、11 skipped。第二切片 `-t "prevents AI formatting while project chat is streaming"` 先退出码 1（按钮未禁用），最小修复后退出码 0（1 passed、12 skipped）。
+- TDD 绿：在 `apps/web` 执行 `npm test -- --run tests/app.test.tsx -t "keeps the wiki draft until AI text is explicitly applied"`，退出码 0；1 passed、11 skipped。第二切片在同一目录执行 `npm test -- --run tests/app.test.tsx -t "prevents AI formatting while project chat is streaming"`，先退出码 1（按钮未禁用），最小修复后使用完整相同命令重跑，退出码 0（1 passed、12 skipped）。
 - Pi 建议对应的第三个 TDD 切片：`-t "discards a partial formatting result when the stream fails"` 先退出码 1（半成品仍可见），清理 partial、收紧 busy 守卫与 AbortError 识别后退出码 0（1 passed、13 skipped）。
 - Web 最终完整回归：`npm test -- --run`，Vitest 3.2.7，退出码 0；3 files、18 tests 全部通过，0 failed、0 skipped。
 - Web 最终生产构建：`npm run build`，TypeScript + Vite 7.3.6，退出码 0；283 modules transformed，产物生成成功。
@@ -77,12 +77,17 @@
 ### 最新 main 集成验证
 
 - 在隔离 worktree 以 `main@ca4ecfc` 为第一父提交执行普通 merge；冲突只出现在本修复与 main 后续同时修改的 Web、文档和 Compose 配置。逐项保留 main 新能力后再叠加流式整理，没有采用旧分支整文件覆盖。
-- `npm test -- --run`：Vitest 3.2.7，修复审核发现后最终退出码 0；3 个测试文件、26 个测试全部通过，0 失败、0 跳过。首次在受限沙箱内复用依赖时，esbuild 因工作树路径访问受限在测试启动前退出 1；相同源码在获准的本地执行环境中重跑成功。
-- `npm run build`：Node.js 24.14.0、npm 11.9.0、TypeScript 与 Vite 7.3.6，退出码 0；283 个模块完成转换。
-- 生产 Compose 以 `.env.production.example` 渲染退出码 0；最终值包含 Agent 请求 `60` 秒、Core 读取 `PT75S`，并保留 main 的 Langfuse 与 Token 上限配置。
+- 在隔离 worktree 的 `apps/web` 执行 `npm test -- --run`：Vitest 3.2.7，修复审核发现后最终退出码 0；3 个测试文件、26 个测试全部通过，0 失败、0 跳过。首次使用同一命令在受限沙箱内复用依赖时，esbuild 因工作树路径访问受限在测试启动前退出 1；获准本地执行后用完整相同命令重跑成功。
+- 在隔离 worktree 的 `apps/web` 执行 `npm run build`：Node.js 24.14.0、npm 11.9.0、TypeScript 与 Vite 7.3.6，退出码 0；283 个模块完成转换。
+- 在仓库根目录执行 `docker compose --env-file .env.production.example -f infra/compose.prod.yaml config`：退出码 0；最终值包含 Agent 请求 `60` 秒、Core 读取 `PT75S`，并保留 main 的 Langfuse 与 Token 上限配置。
 - Pi 集成 Diff Review Attempt 1 返回 `NEEDS_FIX`：确认流式首个 delta 后“应用到 Wiki 草稿”按钮仍可点击，存在把未完成内容复制到草稿的缺口。采纳 M1，并在同一状态边界内一并采纳 S1–S4：完成前禁用应用、旧项目迟到错误不写当前视图、按对象 `name` 识别跨 realm AbortError、旧 Chat finally 只清理自己的流状态，同时补齐双向互斥 DOM 回归测试。
-- 审核修复 TDD：新增“整理流未完成时不可应用且不可发起 Chat”DOM 用例，首次运行退出码 1（1 failed、20 skipped），精确命中应用按钮未禁用；实现最小状态门控后同一命令退出码 0（1 passed、20 skipped），随后完整回归与生产构建再次通过。
+- 审核修复 TDD：在隔离 worktree 的 `apps/web` 执行 `npm test -- --run tests/app.test.tsx -t "prevents applying partial formatting or starting chat while formatting streams"`，首次退出码 1（1 failed、20 skipped），精确命中应用按钮未禁用；实现最小状态门控后使用完整相同命令重跑，退出码 0（1 passed、20 skipped），随后按上列完整命令再次执行全量前端回归与生产构建并通过。
 - Pi 集成 Diff Review Attempt 2 返回 `PASS`，无必须修改项。S1 不采纳：整理按钮在 `busy` 时禁用，当前 UI 不存在同项目并发启动第二次整理的入口，项目切换与 finally 已有 controller 守卫；S2 不采纳：delta 增量可见是本修复的首字节目标，完成前应用已禁用，延迟到 complete 会恢复原等待体验；S3 记录为后续测试增强，当前 ApiClient 的可选 metadata 契约及最终 answer 收口均已有实现边界，不阻塞本次线上修复。
+
+### 远端与生产进度
+
+- 合并提交 `b2e2b9661a6e7bcdd43fdd3247ad0565d9522447` 已先推送 `codex/ai-format-main-release`，再快进推送 `main`；两条远端引用均用 `git ls-remote` 核验为相同哈希。
+- 生产 SSH preflight 执行 `ssh -o BatchMode=yes -o ConnectTimeout=10 root@47.76.95.86 "...只读仓库与超时变量检查..."`，退出码 1，返回 `Permission denied (publickey)`，未进入服务器、未读取生产配置。随后执行 `ssh -vvv -o BatchMode=yes -o ConnectTimeout=10 root@47.76.95.86 "exit"`，证明确已建立 TCP 连接并依次提供本机 RSA/ED25519 公钥，但服务器均未接受；因此安全组已放行，阻塞点为 root 的 `authorized_keys` 或登录用户，不是端口规则。
 
 ## 风险与回滚
 

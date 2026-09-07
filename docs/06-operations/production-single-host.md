@@ -59,6 +59,13 @@ compose logs --since 30m --no-color agent-service core-api
 
 `update.sh` 先备份，再 fast-forward 拉取部署分支、顺序构建、启动并验收。`rollback.sh` 使用更新前保存的 commit，数据库迁移必须保持向后兼容；脚本不会删除 volume。
 
+### SSH 连接排障
+
+- 云安全组 SSH/22 的“来源”填写当前维护端的公网 IP 或受控 CIDR，不是服务器公网 IP；来源 IP 变化时需同步更新规则。
+- `Connection timed out` / 无法建立 TCP 连接时，检查安全组来源、服务器公网 IP、22 端口和主机防火墙。
+- 已出现 `Connection established` 后返回 `Permission denied (publickey)`，说明网络与安全组已放行，问题在登录用户名或服务器 `authorized_keys`，不要继续反复修改安全组。
+- 通过云厂商 Workbench/VNC/云助手恢复公钥时，只追加经过指纹核对的 `.pub` 公钥，保持 `/root/.ssh` 为 `0700`、`authorized_keys` 为 `0600`；禁止上传或复制本机私钥。
+
 ## TLS
 
 首次启动先使用与 `PUBLIC_HOST` 类型匹配的临时自签证书让 gateway 可加载配置，再以 ACME webroot 申请受信证书并 reload gateway。IPv4/IPv6 使用 Certbot `--ip-address` 与 short-lived profile；域名使用 `-d`。当 `PUBLIC_HOST` 是普通根域名时，证书和 Nginx 同时包含该域名与动态派生的 `www.` 子域；当它本身以 `www.` 开头时不再追加，IP 模式也不追加。`PUBLIC_WWW_HOST` 由部署脚本运行时派生，不需要写入服务器 `.env`。证书固定使用 `PUBLIC_HOST` 作为 Certbot cert-name，因此 live 目录始终是 `/opt/agentforge/tls/letsencrypt/live/${PUBLIC_HOST}`，与同步脚本兼容。
