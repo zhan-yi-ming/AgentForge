@@ -6,6 +6,12 @@ const TOKEN_KEY = "agentforge.accessToken";
 const ONBOARDING_KEY = "agentforge.onboardingComplete";
 const LOGIN_FAILURE_MESSAGE = "请联系我 向我索要体验账号";
 
+function unwrapMarkdownFence(content: string) {
+  const trimmed = content.trim();
+  const fenced = trimmed.match(/^```(?:markdown|md)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i);
+  return fenced ? fenced[1].trim() : content;
+}
+
 function hasCompletedOnboarding() {
   try { return localStorage.getItem(ONBOARDING_KEY) === "true"; }
   catch { return false; }
@@ -36,12 +42,14 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const [pendingAction, setPendingAction] = useState<AgentAction>();
   const [formatInput, setFormatInput] = useState("");
   const [formattedText, setFormattedText] = useState("");
+  const [wikiFeedback, setWikiFeedback] = useState("");
   const [busy, setBusy] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState("");
   const [onboardingOpen, setOnboardingOpen] = useState(() => !hasCompletedOnboarding());
   const streamAbort = useRef<AbortController | undefined>(undefined);
   const activeProjectId = useRef("");
+  const wikiPanel = useRef<HTMLElement | null>(null);
 
   const report = useCallback((cause: unknown) => {
     if (cause instanceof ApiProblem) {
@@ -58,6 +66,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   }, [api]);
 
   const selectWiki = useCallback((page?: WikiPage) => {
+    setWikiFeedback("");
     setWikiId(page?.id ?? "");
     setWikiTitle(page?.title ?? "");
     setWikiContent(page?.content ?? "");
@@ -114,15 +123,23 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
 
   async function saveWiki() {
     if (!projectId || !wikiTitle.trim()) return;
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setWikiFeedback("");
     try {
       const saved = wikiId
         ? await api.updateWikiPage(projectId, wikiId, wikiTitle, wikiContent, wikiVersion)
         : await api.createWikiPage(projectId, wikiTitle, wikiContent);
       const pages = await api.listWikiPages(projectId);
       setWikiPages(pages);
-      selectWiki(pages.find((page) => page.id === saved.id) ?? saved);
+      const latest = pages.find((page) => page.id === saved.id) ?? saved;
+      selectWiki(latest);
+      setWikiFeedback(`Wiki 已保存 · v${latest.version}`);
     } catch (cause) { report(cause); } finally { setBusy(false); }
+  }
+
+  function applyFormattedText() {
+    setWikiContent(formattedText);
+    setWikiFeedback("已应用到 Wiki 草稿，请确认后保存");
+    wikiPanel.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function sendChat(event: FormEvent) {
@@ -175,7 +192,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setBusy(true); setError("");
     try {
       const result = await api.chat(projectId, `请将以下内容整理为 Markdown，保留事实，不执行写入：\n\n${formatInput.trim()}`);
-      setFormattedText(result.answer);
+      setFormattedText(unwrapMarkdownFence(result.answer));
       if (result.pendingAction) setPendingAction(result.pendingAction);
     } catch (cause) { report(cause); } finally { setBusy(false); }
   }
@@ -211,12 +228,13 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         {pendingAction && <div className="action-card"><span className="eyebrow">等待你的确认</span><h3>{pendingAction.title || pendingAction.actionType}</h3><p>{pendingAction.description || `${pendingAction.taskStatus ?? ""} ${pendingAction.priority ?? ""}`}</p><div><button onClick={() => void decideAction("confirm")} disabled={busy}>确认执行</button><button className="danger" onClick={() => void decideAction("reject")} disabled={busy}>拒绝</button></div></div>}
       </section>
 
-      <section className="panel wiki-panel">
+      <section className="panel wiki-panel" ref={wikiPanel}>
         <div className="panel-heading"><div><span className="eyebrow">KNOWLEDGE</span><h2>Wiki 工作台</h2></div><button className="ghost" onClick={() => selectWiki()}>新建页面</button></div>
         <div className="wiki-layout"><nav className="wiki-list">{wikiPages.map((page) => <button key={page.id} className={page.id === wikiId ? "active" : ""} onClick={() => selectWiki(page)}>{page.title}</button>)}</nav>
-          <div className="editor"><input aria-label="Wiki 标题" placeholder="页面标题" value={wikiTitle} onChange={(event) => setWikiTitle(event.target.value)} maxLength={200} />
-            <textarea aria-label="Wiki Markdown 草稿" placeholder="# 从这里开始记录…" value={wikiContent} onChange={(event) => setWikiContent(event.target.value)} maxLength={100000} />
-            <button onClick={saveWiki} disabled={busy || !wikiTitle.trim()}>保存 Wiki</button></div>
+          <div className="editor"><input aria-label="Wiki 标题" placeholder="页面标题" value={wikiTitle} onChange={(event) => { setWikiTitle(event.target.value); setWikiFeedback(""); }} maxLength={200} />
+            <textarea aria-label="Wiki Markdown 草稿" placeholder="# 从这里开始记录…" value={wikiContent} onChange={(event) => { setWikiContent(event.target.value); setWikiFeedback(""); }} maxLength={100000} />
+            <button onClick={saveWiki} disabled={busy || !wikiTitle.trim()}>保存 Wiki</button>
+            {wikiFeedback && <p role="status" className="success">{wikiFeedback}</p>}</div>
           <div className="preview"><p className="section-label">实时预览</p><MarkdownPreview content={wikiContent} /></div>
         </div>
       </section>
@@ -227,7 +245,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
 
       <section className="panel format-panel"><div className="panel-heading"><div><span className="eyebrow">DRAFT LAB</span><h2>AI 文本整理</h2></div><span className="safe-note">预览优先 · 不自动写回</span></div>
         <div className="format-grid"><div><label>待整理原文<textarea value={formatInput} onChange={(event) => setFormatInput(event.target.value)} placeholder="粘贴零散会议记录或技术笔记…" /></label><button onClick={() => void formatText()} disabled={busy || !formatInput.trim()}>AI 整理并预览</button></div>
-          <div><p className="section-label">整理结果</p><MarkdownPreview content={formattedText} />{formattedText && <button className="ghost" onClick={() => setWikiContent(formattedText)}>应用到 Wiki 草稿</button>}</div></div>
+          <div><p className="section-label">整理结果</p><MarkdownPreview content={formattedText} />{formattedText && <button className="ghost" onClick={applyFormattedText}>应用到 Wiki 草稿</button>}</div></div>
       </section>
     </main>
     {onboardingOpen && <div className="onboarding-backdrop"><section className="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title"><span className="eyebrow">QUICK START</span><h2 id="onboarding-title">新手引导</h2><p>四步看懂 AgentForge，不需要先研究所有面板。</p><ol><li><strong>选择项目</strong><span>左侧切换项目，所有 Wiki、任务和对话都严格隔离。</span></li><li><strong>从中央对话开始</strong><span>直接询问架构、需求或让 Agent 提出任务。</span></li><li><strong>检查来源与操作</strong><span>回答会带项目来源；业务写入必须由你确认。</span></li><li><strong>需要时再向下探索</strong><span>Wiki、任务和文本整理都保留在对话下方。</span></li></ol><button onClick={completeOnboarding}>开始体验</button></section></div>}

@@ -14,6 +14,7 @@
 
 ## 索引
 
+- `2026-09-07-wiki-format-flow-hotfix.md`：修复 AI 整理结果被外层代码围栏渲染成黑色代码块，并补齐应用草稿的滚动定位与保存成功反馈。
 - `2026-09-07-demo-login-hotfix.md`：隐藏登录页体验凭据、统一错误提示，并修复固定 Demo 账号重复初始化时的密码同步。
 - `2026-09-07-v2-01-tls-production-release.md`：把 V2-01、验证流程优化与 TLS 域名兼容合并到 main，并完成生产发布与真实核验。
 - `2026-09-06-tls-public-host-compatibility.md`：让生产 TLS 首次申请、同步、续期和 Nginx server_name 同时兼容 IP、根域名与已带 `www` 的域名。

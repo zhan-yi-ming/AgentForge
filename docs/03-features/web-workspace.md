@@ -17,19 +17,21 @@
 3. 用户在主内容中央发送 Chat；Web 复用项目内 conversationId，展示回答与来源。
 4. 用户向下选择或新建 Wiki，在编辑区修改 Markdown；预览区安全渲染，保存时发送当前 version。
 5. 响应包含 pending action 时，Web 展示 action 类型、Task、字段和预期 version。确认/拒绝只调用 Java action API；成功后刷新 Task。
-6. “AI 文本整理”保留原始输入，把 Agent 回答展示为 Markdown 预览；点击明确应用后才覆盖 Wiki 草稿，仍需再次点击保存。
+6. “AI 文本整理”保留原始输入；若 Agent 回答被单个完整的 Markdown 代码围栏包裹，Web 先移除该外层围栏再展示预览，正文内部代码块保持不变。点击明确应用后才覆盖 Wiki 草稿，页面滚动到 Wiki 编辑区并显示已应用反馈，仍需再次点击保存。
 
 ## 状态与错误
 
 - loading、empty、success、error 均有可见状态；按钮在请求期间禁用，避免重复提交。
 - 登录提交失败统一展示“请联系我 向我索要体验账号”，避免泄露账号存在性或后台细节；已登录请求返回 401 时清除当前会话并返回登录，其他 403/404/409/503 展示 Problem Details 的安全 detail 和 requestId。
 - Wiki 409 不自动覆盖；提示用户刷新后重新合并。
+- Wiki 保存成功显示明确反馈，并以服务端返回和刷新列表中的最新页面、version 更新当前草稿；失败时只展示错误，不显示成功。
+- 保存 Wiki 不会创建 Task；“任务脉搏”只展示 Task API 数据，用户应以 Wiki 编辑区的保存状态和版本号判断保存结果。
 - confirm/reject 后清除 pending action；confirm 成功刷新 Task 列表。
 - 切换项目清空项目相关草稿、conversation 和 pending action。
 
 ## 测试边界
 
-测试通过 DOM 与网络 client 的公共接口观察行为，不断言私有 state。至少覆盖：登录页不出现凭据明文、只显示简历邮箱与微信号提示、任一凭据错误显示统一联系文案、首次引导关闭/持久化/重新打开、登录后 Chat 是主内容首个功能、项目加载、Markdown 原始 HTML 不成为 DOM、Chat 展示 pending action、确认后刷新 Task、拒绝不写、AI 返回内容必须经用户点击才进入 Wiki 草稿，以及 Problem Details 可见。
+测试通过 DOM 与网络 client 的公共接口观察行为，不断言私有 state。至少覆盖：登录页不出现凭据明文、只显示简历邮箱与微信号提示、任一凭据错误显示统一联系文案、首次引导关闭/持久化/重新打开、登录后 Chat 是主内容首个功能、项目加载、Markdown 原始 HTML 不成为 DOM、完整外层 Markdown 围栏被移除但正文内部代码块保留、AI 返回内容必须经用户点击才进入 Wiki 草稿、应用后滚动定位与反馈、Wiki 保存成功反馈、Chat 展示 pending action、确认后刷新 Task、拒绝不写，以及 Problem Details 可见。
 
 ## 已知限制
 

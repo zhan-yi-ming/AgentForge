@@ -174,9 +174,36 @@ describe("App", () => {
     expect(await screen.findByRole("heading", { name: "Core" })).toBeInTheDocument();
   });
 
+  it("confirms a successful existing Wiki save with the latest version", async () => {
+    const existing: WikiPage = {
+      id: "wiki-1", projectId: project.id, title: "Architecture", content: "# Before", version: 3,
+      createdAt: "2026-09-05T00:00:00Z", updatedAt: "2026-09-05T00:00:00Z",
+    };
+    const saved = { ...existing, content: "# After", version: 4, updatedAt: "2026-09-07T00:00:00Z" };
+    const mockApi = api({
+      listWikiPages: vi.fn().mockResolvedValueOnce([existing]).mockResolvedValueOnce([saved]),
+      updateWikiPage: vi.fn().mockResolvedValue(saved),
+    });
+    const user = await login(mockApi);
+    const editor = screen.getByLabelText("Wiki Markdown 草稿");
+    await waitFor(() => expect(editor).toHaveValue("# Before"));
+    await user.clear(editor);
+    await user.type(editor, "# After");
+    await user.click(screen.getByRole("button", { name: "保存 Wiki" }));
+
+    await waitFor(() => expect(mockApi.updateWikiPage).toHaveBeenCalledWith(
+      project.id, existing.id, existing.title, "# After", 3,
+    ));
+    expect(await screen.findByRole("status")).toHaveTextContent("Wiki 已保存");
+  });
+
   it("keeps the wiki draft until AI text is explicitly applied", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true, value: scrollIntoView,
+    });
     const mockApi = api({ chat: vi.fn().mockResolvedValue({
-      conversationId: "conversation-2", answer: "# Structured\n\nKeep this.", requestId: "r2", sources: [],
+      conversationId: "conversation-2", answer: "```markdown\n# Structured\n\nKeep this.\n```", requestId: "r2", sources: [],
     }) });
     const user = await login(mockApi);
     const editor = screen.getByLabelText("Wiki Markdown 草稿");
@@ -187,6 +214,20 @@ describe("App", () => {
     expect(editor).toHaveValue("Original draft");
     await user.click(screen.getByRole("button", { name: "应用到 Wiki 草稿" }));
     expect(editor).toHaveValue("# Structured\n\nKeep this.");
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    expect(screen.getByRole("status")).toHaveTextContent("已应用到 Wiki 草稿，请确认后保存");
+  });
+
+  it("keeps code blocks inside formatted Markdown", async () => {
+    const mockApi = api({ chat: vi.fn().mockResolvedValue({
+      conversationId: "conversation-code", answer: "# Notes\n\n```ts\nconst answer = 42;\n```", requestId: "r-code", sources: [],
+    }) });
+    const user = await login(mockApi);
+    await user.type(screen.getByLabelText("待整理原文"), "code notes");
+    await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
+
+    expect(await screen.findByRole("heading", { name: "Notes" })).toBeInTheDocument();
+    expect(screen.getByText("const answer = 42;").closest("pre")).toBeInTheDocument();
   });
 
   it("keeps formatting isolated from chat and exposes any proposed action", async () => {
