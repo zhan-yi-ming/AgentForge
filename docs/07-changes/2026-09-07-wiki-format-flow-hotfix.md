@@ -24,7 +24,8 @@ AI 文本整理结果可能被模型整体包在 `markdown` 代码围栏中，�
 - `npm run build`：退出码 0；TypeScript 与 Vite 生产构建通过，283 个模块完成转换。
 - 生产只读诊断：目标页面最近 3 次 `PUT` 与后续 `GET` 均为 200，当前 version 为 3，证明 Core API 已完成保存；本次不修改后端。
 - 提交前检查浏览器构建产物不含固定 Demo 账号、密码或用户提供的 Bearer Token，并检查无残留调试标记。
-- 生产仅重建 Web；部署后验证 Web、gateway 健康与新产物包含围栏规范化、滚动定位和保存反馈逻辑。
+- 生产部署提交：`d392b8852fb2e115a4c146e6d9f47d8fa244cd59`；仅重新构建并替换 Web，Core、Agent 与数据库未重启或修改。
+- 生产验证：HTTPS 健康检查通过，Web 与 gateway 均为 healthy；线上静态产物包含“已应用到 Wiki 草稿，请确认后保存”、“Wiki 已保存”和 `scrollIntoView`，且不含固定 Demo 邮箱或密码明文。
 
 按用户此前要求，本次不运行 Java、Python、Web 或 E2E 全量测试。
 
