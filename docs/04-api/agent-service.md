@@ -22,6 +22,8 @@ data: {"pendingAction":null}
 
 `metadata` 到达不表示回答完成；客户端拼接全部 `delta`。`complete.pendingAction` 只能是 Java 已验证并持久化的待确认操作；没有操作时其值为 `null`，客户端也应兼容 JSON 序列化器省略该可空字段。所有事件禁止包含模型 key、内部 token 或上游原始错误正文。
 
+长文本生成客户端（包括 Web 的“AI 整理并预览”）优先使用该 SSE 入口，使模型在完整回答完成前交付 delta，避免同步 Chat 必须等待全部生成结果。整理调用不携带项目 Chat conversationId；客户端只消费回答文本，并忽略整理语境下意外出现的 pending action。该客户端选择不改变配额、鉴权、项目隔离或同步 JSON 入口的兼容契约。
+
 ## Python 内部入口
 
 `POST /internal/v1/chat`，必须携带 `X-AgentForge-Internal-Token` 与 `X-Request-Id`。Body：`{"projectId":"uuid","userId":"uuid","actorAdmin":false,"message":"...","conversationId":null,"requestId":"uuid"}`。Python 响应在既有字段上新增可空 `toolProposal`：
@@ -44,7 +46,7 @@ Python 不返回 actionId/status，也不执行写入。Java 不信任 proposal�
 
 V2-01 不改变上述 HTTP schema。Python 在内部 token 校验成功后用 body 的 `requestId`、`projectId` 和实际 `conversationId` 建立 Langfuse 关联；当请求未传 conversationId 时，Python 先生成一次 UUID，并保证 Trace 的 `thread_id`、metadata 事件/JSON 响应的 `conversationId` 一致。Langfuse trace id 不进入公共或内部 API。观测失败不得改变状态码、NDJSON 事件或 Java 的确定性处理。
 
-当 `AGENTFORGE_AGENT_LLM_PROVIDER` 为 `deepseek`、`zhipu` 或 `qwen` 时，`answer` 来自对应 OpenAI-compatible Chat Completions 服务；`disabled` 时为确定性回退回答。`AGENTFORGE_AGENT_LLM_MAX_TOKENS` 统一限制三家模型的最大输出，默认 800、允许 64–4096。provider 缺少 key、模型服务不可达、认证/限流失败或响应不含有效文本时内部入口返回 503，Core API 继续向浏览器输出通用 503，不透传上游正文或凭据。
+当 `AGENTFORGE_AGENT_LLM_PROVIDER` 为 `deepseek`、`zhipu` 或 `qwen` 时，`answer` 来自对应 OpenAI-compatible Chat Completions 服务；`disabled` 时为确定性回退回答。`AGENTFORGE_AGENT_LLM_MAX_TOKENS` 统一限制三家模型的最大输出，默认 800、允许 64–4096。`AGENTFORGE_AGENT_REQUEST_TIMEOUT_SECONDS` 限制模型请求和 Core 来源回调的单次等待，应用代码默认 10 秒，Compose 为真实模型显式配置 60 秒；Core 下游读取预算必须更长。provider 缺少 key、模型服务不可达、认证/限流失败、超时或响应不含有效文本时内部入口返回 503，Core API 继续向浏览器输出通用 503，不透传上游正文或凭据。
 
 ## Core API 内部来源入口
 

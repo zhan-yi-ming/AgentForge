@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
-import type { ApiClient, AgentAction, AgentChat, Project, Task, WikiPage } from "../src/api";
+import { ApiProblem, type ApiClient, type AgentAction, type AgentChat, type Project, type Task, type WikiPage } from "../src/api";
 
 const project: Project = {
   id: "project-1", ownerId: "user-1", name: "AgentForge", description: "Workspace",
@@ -230,15 +230,26 @@ describe("App", () => {
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true, value: scrollIntoView,
     });
-    const mockApi = api({ chat: vi.fn().mockResolvedValue({
-      conversationId: "conversation-2", answer: "```markdown\n# Structured\n\nKeep this.\n```", requestId: "r2", sources: [],
-    }) });
+    const formatted = "```markdown\n# Structured\n\nKeep this.\n```";
+    const formatStream = vi.fn().mockImplementation(async (_projectId, _message, _conversationId, callbacks) => {
+      callbacks.onDelta("```markdown\n# Structured");
+      callbacks.onDelta("\n\nKeep this.\n```");
+      return { conversationId: "format-only", answer: formatted, requestId: "r2", sources: [] };
+    });
+    const mockApi = api({ chatStream: formatStream });
     const user = await login(mockApi);
     const editor = screen.getByLabelText("Wiki Markdown 草稿");
     await user.type(editor, "Original draft");
     await user.type(screen.getByLabelText("待整理原文"), "messy notes");
     await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
     expect(await screen.findByRole("heading", { name: "Structured" })).toBeInTheDocument();
+    expect(formatStream).toHaveBeenCalledWith(
+      project.id,
+      expect.stringContaining("messy notes"),
+      undefined,
+      expect.any(Object),
+      expect.any(AbortSignal),
+    );
     expect(editor).toHaveValue("Original draft");
     await user.click(screen.getByRole("button", { name: "应用到 Wiki 草稿" }));
     expect(editor).toHaveValue("# Structured\n\nKeep this.");
@@ -247,8 +258,10 @@ describe("App", () => {
   });
 
   it("keeps code blocks inside formatted Markdown", async () => {
-    const mockApi = api({ chat: vi.fn().mockResolvedValue({
-      conversationId: "conversation-code", answer: "# Notes\n\n```ts\nconst answer = 42;\n```", requestId: "r-code", sources: [],
+    const answer = "# Notes\n\n```ts\nconst answer = 42;\n```";
+    const mockApi = api({ chatStream: vi.fn().mockImplementation(async (_projectId, _message, _conversationId, callbacks) => {
+      callbacks.onDelta(answer);
+      return { conversationId: "conversation-code", answer, requestId: "r-code", sources: [] };
     }) });
     const user = await login(mockApi);
     await user.type(screen.getByLabelText("待整理原文"), "code notes");
@@ -258,33 +271,85 @@ describe("App", () => {
     expect(screen.getByText("const answer = 42;").closest("pre")).toBeInTheDocument();
   });
 
-  it("keeps formatting isolated from chat and exposes any proposed action", async () => {
+  it("keeps formatting isolated from chat and ignores any proposed action", async () => {
     const pending: AgentAction = {
       id: "action-format", projectId: project.id, conversationId: "format-conversation",
       actionType: "CREATE_TASK", status: "PENDING", title: "Unexpected proposal",
       createdAt: "2026-09-05T00:00:00Z",
     };
-    const chatMock = vi.fn().mockResolvedValue({
-      conversationId: "format-conversation", answer: "# Formatted", requestId: "r5", sources: [], pendingAction: pending,
-    });
-    const streamMock = vi.fn().mockResolvedValue({ conversationId: "project-conversation", answer: "Chat answer", requestId: "r4", sources: [] });
-    const mockApi = api({ chat: chatMock, chatStream: streamMock });
+    const streamMock = vi.fn()
+      .mockResolvedValueOnce({ conversationId: "project-conversation", answer: "Chat answer", requestId: "r4", sources: [] })
+      .mockResolvedValueOnce({
+        conversationId: "format-conversation", answer: "# Formatted", requestId: "r5", sources: [], pendingAction: pending,
+      });
+    const mockApi = api({ chatStream: streamMock });
     const user = await login(mockApi);
     await user.type(screen.getByLabelText("给 Agent 的消息"), "project question");
     await user.click(screen.getByRole("button", { name: "发送" }));
     await user.type(screen.getByLabelText("待整理原文"), "format me");
     await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
 
-    await waitFor(() => expect(chatMock).toHaveBeenCalledTimes(1));
-    expect(chatMock.mock.calls[0]?.[2]).toBeUndefined();
-    expect(await screen.findByText("Unexpected proposal")).toBeInTheDocument();
+    await waitFor(() => expect(streamMock).toHaveBeenCalledTimes(2));
+    expect(streamMock.mock.calls[1]?.[2]).toBeUndefined();
+    expect(await screen.findByRole("heading", { name: "Formatted" })).toBeInTheDocument();
+    expect(screen.queryByText("Unexpected proposal")).not.toBeInTheDocument();
     expect(screen.getByText("会话 project-")).toBeInTheDocument();
   });
 
+  it("prevents AI formatting while project chat is streaming", async () => {
+    const streamMock = vi.fn().mockReturnValue(new Promise(() => {}));
+    const mockApi = api({ chatStream: streamMock });
+    const user = await login(mockApi);
+    await user.type(screen.getByLabelText("待整理原文"), "format me");
+    await user.type(screen.getByLabelText("给 Agent 的消息"), "project question");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    expect(screen.getByRole("button", { name: "AI 整理并预览" })).toBeDisabled();
+  });
+
+  it("prevents applying partial formatting or starting chat while formatting streams", async () => {
+    const streamMock = vi.fn().mockImplementation(async (_projectId, _message, _conversationId, callbacks) => {
+      callbacks.onDelta("# Partial");
+      return new Promise(() => {});
+    });
+    const user = await login(api({ chatStream: streamMock }));
+    await user.type(screen.getByLabelText("给 Agent 的消息"), "project question");
+    await user.type(screen.getByLabelText("待整理原文"), "format me");
+    await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
+
+    expect(await screen.findByRole("heading", { name: "Partial" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "应用到 Wiki 草稿" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+  });
+
+  it("discards a partial formatting result when the stream fails", async () => {
+    const mockApi = api({
+      chatStream: vi.fn().mockImplementation(async (_projectId, _message, _conversationId, callbacks) => {
+        callbacks.onDelta("# Incomplete");
+        throw new ApiProblem(503, "AI service is temporarily unavailable.", "request-503");
+      }),
+    });
+    const user = await login(mockApi);
+    await user.type(screen.getByLabelText("待整理原文"), "format me");
+    await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("AI service is temporarily unavailable. · request request-503");
+    expect(screen.queryByRole("heading", { name: "Incomplete" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "应用到 Wiki 草稿" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "AI 整理并预览" })).toBeEnabled();
+  });
+
   it("clears formatting drafts when the selected project changes", async () => {
+    let formatSignal: AbortSignal | undefined;
     const mockApi = api({
       listProjects: vi.fn().mockResolvedValue([project, secondProject]),
-      chat: vi.fn().mockResolvedValue({ conversationId: "format-only", answer: "# Project one", requestId: "r6", sources: [] }),
+      chatStream: vi.fn().mockImplementation(async (_projectId, _message, _conversationId, callbacks, signal) => {
+        formatSignal = signal;
+        callbacks.onDelta("# Project one");
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+        });
+      }),
     });
     const user = await login(mockApi);
     await user.type(screen.getByLabelText("待整理原文"), "project one notes");
@@ -292,6 +357,7 @@ describe("App", () => {
     expect(await screen.findByRole("heading", { name: "Project one" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Second Project/ }));
+    expect(formatSignal?.aborted).toBe(true);
     expect(screen.getByLabelText("待整理原文")).toHaveValue("");
     expect(screen.queryByRole("heading", { name: "Project one" })).not.toBeInTheDocument();
   });

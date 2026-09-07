@@ -35,7 +35,7 @@ scripts/deploy/seed-demo.sh
 
 构建按 core-api、agent-service、web、gateway 顺序执行，避免 2C4G 机器并行构建。Docker Compose v5 使用 `docker compose build <service>`；不要传入已不受支持的 `build --no-deps`，且只有显式指定 `--with-dependencies` 时才会连带构建依赖。Demo 初始化先停止公网 gateway，只在 Core API 容器内部临时开启注册；创建或复用固定 USER workspace，并创建随机备用 USER workspace，恢复注册关闭后才重新开放 gateway。脚本只输出固定邮箱与随机备用凭据，不回显固定密码。
 
-Nginx 对 `/agent/chat/stream` 关闭响应缓冲和缓存，并保持长于模型请求预算的读取超时；其余 API 继续使用默认代理策略。部署后的流式验收必须证明多个 delta 能在 complete 前到达，而不只是最终正文正确。
+Nginx 对 `/agent/chat/stream` 关闭响应缓冲和缓存，并保持长于模型请求预算的读取超时；生产默认超时顺序为 Agent 单次等待 60 秒、Core 下游读取 75 秒、SSE emitter 与 Nginx 120 秒。其余 API 继续使用默认代理策略。部署后的流式验收必须证明多个 delta 能在 complete 前到达，而不只是最终正文正确。
 
 ## 日常命令
 
@@ -94,6 +94,8 @@ scripts/deploy/health-check.sh
 - `docker compose ps`：先看容器健康状态。
 - `scripts/deploy/logs.sh <service>`：只查看指定服务最近日志，禁止复制包含 token 的完整请求。
 - Core API unhealthy：检查 PostgreSQL 健康、Flyway、JWT Base64 长度和内部 token。
-- Agent Chat 503：检查 provider、模型名、余额和 Agent 日志；紧急时把 provider 设为 `disabled`。
+- Agent Chat / AI 整理 503：先用响应 requestId 关联 Core 与 Agent 日志，再依次检查 RAG 回调/数据库、provider key 与余额、模型名、模型请求超时和 Core 下游超时；长文本整理应确认浏览器调用 `/agent/chat/stream` 而非同步 `/agent/chat`。紧急时可把 provider 设为 `disabled`，但这只提供确定性降级，不代表真实模型已恢复。
+- 401：确认 access token 是否过期或被替换；前端会清除当前标签页会话并返回登录。不要把另一个资源的 401 视为已通过认证的 Chat 503 根因。
+- 浏览器 `ERR_INTERNET_DISCONNECTED`：先恢复客户端网络再重试；该错误描述浏览器连接状态，不能单独证明服务器、Nginx、Core API 或 Agent Service 故障。
 - 磁盘不足：检查 `docker system df` 和备份目录；只清理未使用镜像，不删除 named volume。
 - 更新失败：运行 `rollback.sh`，再执行健康检查。
