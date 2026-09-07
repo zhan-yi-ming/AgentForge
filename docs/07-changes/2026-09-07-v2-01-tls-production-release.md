@@ -1,7 +1,7 @@
 # V2-01 与 TLS 域名兼容生产发布
 
 - 日期：2026-09-07
-- 状态：In Progress
+- 状态：Implemented
 - 目标环境：阿里云中国香港单机生产 Demo
 - 集成分支：`codex/v2-01-production-release`
 - 计划发布标签：`v2.0.0-alpha.1`
@@ -49,4 +49,11 @@
 - 清理：隔离 E2E container、network、volume 的精确过滤查询均为空；发布工作树的 Java `target`、Web `dist`、Python cache 与两个临时依赖 junction 已删除，工作树恢复干净。
 - Gitleaks 8.30.1 扫描完整 `origin/main..INDEX` 发布补丁约 274.20 KB，耗时 227 ms，退出码 0、无泄漏；临时扫描目录已清理。
 - Pi DeepSeek V4-pro Milestone Review Attempt 1 返回 `NEEDS_FIX`。其 M-01 声称 Langfuse 4.15.1 的 observation `update()` 不接受 `usage_details`；Codex 用本次实际依赖创建无网络真实 SDK generation，并由 `inspect.signature` 得到显式参数 `usage_details: Dict[str, int] | None`，因此 M-01 及由此推导的 fake seam S-01 均为事实误报，不修改正确实现、不触发复审。S-04 文档状态不一致已修正；host URL 和客户端首次消费前断流为低风险后续建议。
-- 待完成：`dev`/`main`/tag 推送、生产备份部署与公网核验。
+- GitHub：确认 `origin/dev@fee96a9` 是完成链祖先后，非强制快进到 `57772bb`；发布集成分支推送到 `0ed9b5e`，`main` 从 `18064bf` 非强制更新到同一提交；annotated tag `v2.0.0-alpha.1` 已推送。GitHub 22 端口一次 banner 超时后，改用已验证的官方 `ssh.github.com:443` 入口完成推送，没有循环重试或改写历史。
+- 生产连接：默认 SSH key 对 `root@47.76.95.86` 返回 publickey 拒绝；读取本机 `.ssh` 文件名后发现既有 `agentforge-demo-key.pem`，使用 `IdentitiesOnly` 后成功连接，没有读取或输出私钥内容。
+- 生产 preflight：服务器为干净前基线 `main@18064bf` 之前，检测到唯一手工修改 `infra/nginx/production.conf.template`，内容是固定追加 `www.${PUBLIC_HOST}`。新版动态实现完整覆盖且避免 IP / `www.www` 边界，因此先保存为 `/opt/agentforge/backups/pre-v2-alpha1-nginx-manual.patch`（0600）再恢复该文件；生产私有 `.env` 另备份为 `/opt/agentforge/backups/pre-v2-alpha1-env.backup`（0600）。
+- 生产公开配置只读核对发现 `PUBLIC_HOST=zhanyiming.cloud`，但 JWT issuer 仍指向旧 IP；只把该公开 URL 更新为 `https://zhanyiming.cloud/core-api`，没有读取、输出或改动其他密钥。根域名与 `www` 的 A 记录均解析到 `47.76.95.86`，公网 80/443/22 TCP 探测成功。
+- 生产 `scripts/deploy/update.sh` 退出码 0：先创建 `/opt/agentforge/backups/agentforge-20260907T001937Z.dump.gz`，再把服务器 `main` 快进到 `0ed9b5e`；Core API、Agent Service、Web 和 gateway 依次构建/拉取并重建，PostgreSQL 保持运行。脚本最终输出 `AgentForge HTTPS and authentication boundary are healthy at https://zhanyiming.cloud/`。
+- 发布后核验：生产仓库 `HEAD=0ed9b5e2920385c2d23d61121454f6cc2a4b298d`、dirty count 0；postgres/core-api/agent-service/web/gateway 五个服务全部 healthy；根域名和 `www` HTTPS 均返回 200，未认证 `/api/v1/users/me` 返回 401；Langfuse 保持默认 `false`，本次未配置或输出真实平台密钥。
+- TLS：服务器在部署前已经存在 `zhanyiming.cloud` lineage，current 与 live 均是 Let's Encrypt 证书，SAN 同时包含 `zhanyiming.cloud`、`www.zhanyiming.cloud`，有效期为 2026-09-06 至 2026-12-05；`agentforge-tls-renew.timer` 为 enabled/active。因此本次不需要再次执行“首次申请”，新版续期/同步脚本将在后续 timer 运行时接管。
+- 真实公开 Demo 登录/Agent Chat smoke 原计划只输出布尔结果、不输出 token 或回答，但受控执行审批因明文账号和可能产生模型费用在进程创建前拒绝；未绕过，生产没有产生该请求。本地发布候选已通过真实跨服务 smoke，生产公开 HTTPS、认证拒绝边界与容器健康已通过；此项记录为未执行而非 PASS。
