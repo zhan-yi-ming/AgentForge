@@ -109,12 +109,13 @@ def chat(
     finally:
         agent_observation.end()
         request_observation.end()
+    bundle = state["context_bundle"]
     return ChatResponse(
-        conversation_id=state["conversation_id"],
+        conversation_id=bundle.conversation.conversation_id,
         answer=state["answer"],
-        request_id=state["request_id"],
-        sources=state.get("sources", []),
-        tool_proposal=state.get("tool_proposal"),
+        request_id=bundle.project.request_id,
+        sources=list(bundle.retrieved.sources),
+        tool_proposal=bundle.tool.proposal,
     )
 
 
@@ -169,11 +170,13 @@ def chat_stream(
             yield encode(
                 {
                     "type": "metadata",
-                    "conversationId": str(state["conversation_id"]),
-                    "requestId": state["request_id"],
+                    "conversationId": str(
+                        state["context_bundle"].conversation.conversation_id
+                    ),
+                    "requestId": state["context_bundle"].project.request_id,
                     "sources": [
                         source.model_dump(mode="json", by_alias=True)
-                        for source in state.get("sources", [])
+                        for source in state["context_bundle"].retrieved.sources
                     ],
                 }
             )
@@ -186,7 +189,7 @@ def chat_stream(
             for chunk in chunks:
                 if isinstance(chunk, str) and chunk:
                     yield encode({"type": "delta", "text": chunk})
-            proposal = state.get("tool_proposal")
+            proposal = state["context_bundle"].tool.proposal
             yield encode(
                 {
                     "type": "complete",

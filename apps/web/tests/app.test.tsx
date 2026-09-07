@@ -257,6 +257,86 @@ describe("App", () => {
     expect(screen.getByRole("status")).toHaveTextContent("已应用到 Wiki 草稿，请确认后保存");
   });
 
+  it("shows real formatting deltas before completion without a full-page code block", async () => {
+    let completeStream!: (value: AgentChat) => void;
+    const answer = "```markdown\n# Streaming title\n\nBody\n```";
+    const streamMock = vi.fn().mockImplementation(async (_projectId, _message, _conversationId, callbacks) => {
+      callbacks.onDelta("```markdown\n# Streaming title");
+      return new Promise<AgentChat>((resolve) => { completeStream = resolve; });
+    });
+    const user = await login(api({ chatStream: streamMock }));
+
+    await user.type(screen.getByLabelText("待整理原文"), "stream these notes");
+    await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
+
+    expect(await screen.findByText("# Streaming title")).toBeInTheDocument();
+    expect(document.querySelector(".format-panel pre")).toBeNull();
+    expect(screen.getByRole("button", { name: "应用到 Wiki 草稿" })).toBeDisabled();
+
+    completeStream({ conversationId: "format-stream", answer, requestId: "r-stream", sources: [] });
+    expect(await screen.findByRole("heading", { name: "Streaming title" })).toBeInTheDocument();
+  });
+
+  it("applies formatted text as a titled new wiki page and never overwrites the selected page", async () => {
+    const existing: WikiPage = {
+      id: "wiki-existing", projectId: project.id, title: "Existing page", content: "# Existing", version: 4,
+      createdAt: "2026-09-05T00:00:00Z", updatedAt: "2026-09-05T00:00:00Z",
+    };
+    const created: WikiPage = {
+      id: "wiki-created", projectId: project.id, title: "Generated title", content: "# Generated title\n\nBody", version: 0,
+      createdAt: "2026-09-07T00:00:00Z", updatedAt: "2026-09-07T00:00:00Z",
+    };
+    const answer = "# Generated title\n\nBody";
+    const mockApi = api({
+      listWikiPages: vi.fn().mockResolvedValueOnce([existing]).mockResolvedValueOnce([existing, created]),
+      chatStream: vi.fn().mockImplementation(async (_projectId, _message, _conversationId, callbacks) => {
+        callbacks.onDelta(answer);
+        return { conversationId: "format-new-page", answer, requestId: "r-new-page", sources: [] };
+      }),
+      createWikiPage: vi.fn().mockResolvedValue(created),
+      updateWikiPage: vi.fn(),
+    });
+    const user = await login(mockApi);
+    await waitFor(() => expect(screen.getByLabelText("Wiki 标题")).toHaveValue("Existing page"));
+
+    await user.type(screen.getByLabelText("待整理原文"), "generate a new page");
+    await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
+    expect(mockApi.chatStream).toHaveBeenCalledWith(
+      project.id,
+      expect.stringContaining("一级标题"),
+      undefined,
+      expect.any(Object),
+      expect.any(AbortSignal),
+    );
+    await user.click(await screen.findByRole("button", { name: "应用到 Wiki 草稿" }));
+
+    expect(screen.getByLabelText("Wiki 标题")).toHaveValue("Generated title");
+    expect(screen.getByLabelText("Wiki Markdown 草稿")).toHaveValue(answer);
+    expect(screen.getByRole("button", { name: "应用到 Wiki 草稿" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "保存 Wiki" }));
+    await waitFor(() => expect(mockApi.createWikiPage).toHaveBeenCalledWith(
+      project.id, "Generated title", answer,
+    ));
+    expect(mockApi.updateWikiPage).not.toHaveBeenCalled();
+  });
+
+  it("uses the default wiki title when hash text only appears inside a code fence", async () => {
+    const answer = "Notes without a heading.\n\n```sh\n# not-a-heading\necho ok\n```";
+    const mockApi = api({
+      chatStream: vi.fn().mockImplementation(async (_projectId, _message, _conversationId, callbacks) => {
+        callbacks.onDelta(answer);
+        return { conversationId: "format-default-title", answer, requestId: "r-default-title", sources: [] };
+      }),
+    });
+    const user = await login(mockApi);
+
+    await user.type(screen.getByLabelText("待整理原文"), "notes with code");
+    await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
+    await user.click(await screen.findByRole("button", { name: "应用到 Wiki 草稿" }));
+
+    expect(screen.getByLabelText("Wiki 标题")).toHaveValue("AI 整理文档");
+  });
+
   it("keeps code blocks inside formatted Markdown", async () => {
     const answer = "# Notes\n\n```ts\nconst answer = 42;\n```";
     const mockApi = api({ chatStream: vi.fn().mockImplementation(async (_projectId, _message, _conversationId, callbacks) => {
@@ -317,7 +397,7 @@ describe("App", () => {
     await user.type(screen.getByLabelText("待整理原文"), "format me");
     await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
 
-    expect(await screen.findByRole("heading", { name: "Partial" })).toBeInTheDocument();
+    expect(await screen.findByText("# Partial")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "应用到 Wiki 草稿" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
   });
@@ -354,11 +434,11 @@ describe("App", () => {
     const user = await login(mockApi);
     await user.type(screen.getByLabelText("待整理原文"), "project one notes");
     await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
-    expect(await screen.findByRole("heading", { name: "Project one" })).toBeInTheDocument();
+    expect(await screen.findByText("# Project one")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Second Project/ }));
     expect(formatSignal?.aborted).toBe(true);
     expect(screen.getByLabelText("待整理原文")).toHaveValue("");
-    expect(screen.queryByRole("heading", { name: "Project one" })).not.toBeInTheDocument();
+    expect(screen.queryByText("# Project one")).not.toBeInTheDocument();
   });
 });

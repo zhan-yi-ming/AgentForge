@@ -46,6 +46,8 @@ Python 不返回 actionId/status，也不执行写入。Java 不信任 proposal�
 
 V2-01 不改变上述 HTTP schema。Python 在内部 token 校验成功后用 body 的 `requestId`、`projectId` 和实际 `conversationId` 建立 Langfuse 关联；当请求未传 conversationId 时，Python 先生成一次 UUID，并保证 Trace 的 `thread_id`、metadata 事件/JSON 响应的 `conversationId` 一致。Langfuse trace id 不进入公共或内部 API。观测失败不得改变状态码、NDJSON 事件或 Java 的确定性处理。
 
+V2-02 同样不改变 HTTP schema。上述请求字段在 Python prepare 阶段构建内部 `ContextBundle`；同步与流式路径共用 Working、Conversation、Project、Retrieved、Tool Context 的生产过程。ContextBundle 不序列化到响应，既有 conversationId、requestId、sources、answer/toolProposal 语义保持不变。
+
 当 `AGENTFORGE_AGENT_LLM_PROVIDER` 为 `deepseek`、`zhipu` 或 `qwen` 时，`answer` 来自对应 OpenAI-compatible Chat Completions 服务；`disabled` 时为确定性回退回答。`AGENTFORGE_AGENT_LLM_MAX_TOKENS` 统一限制三家模型的最大输出，默认 800、允许 64–4096。`AGENTFORGE_AGENT_REQUEST_TIMEOUT_SECONDS` 限制模型请求和 Core 来源回调的单次等待，应用代码默认 10 秒，Compose 为真实模型显式配置 60 秒；Core 下游读取预算必须更长。provider 缺少 key、模型服务不可达、认证/限流失败、超时或响应不含有效文本时内部入口返回 503，Core API 继续向浏览器输出通用 503，不透传上游正文或凭据。
 
 ## Core API 内部来源入口

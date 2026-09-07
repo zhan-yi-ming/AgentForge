@@ -1,7 +1,7 @@
 # 三阶段路线图
 
 - 状态：Accepted
-- 当前焦点：V1 / Day 1–Day 7 与 V2-01 Langfuse 基础 Trace 已完成并通过验收；尚未进入 V2-02
+- 当前焦点：V1 / Day 1–Day 7、V2-01 Langfuse 基础 Trace 与 V2-02 Context Manager 已完成并通过验收；下一候选为 V2-03，尚未授权
 
 ## V1：能用
 

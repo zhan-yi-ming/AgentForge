@@ -11,6 +11,7 @@
 - `review-orchestration.md`：当前提交前一次性 Pi 只读审核，以及已停用的历史自动编排方案。
 - `agent-chat.md`：Day 3 项目内 Chat、LangGraph 状态流与 Java-Python 边界，已实现。
 - `observability.md`：V2-01 Langfuse 基础 Trace、字段白名单、异常闭合与 fail-open 边界，已实现。
+- `context-management.md`：V2-02 ContextBundle、State/Context 分离及上下文生产者/消费者，已实现并完成节点审核。
 - `rag-retrieval.md`：Day 4 Wiki/Task Chunk、Embedding、BM25、RRF、Context 与来源引用，已实现并通过真实 pgvector 与跨进程验证。
 - `tool-calling-and-confirmation.md`：Day 5 create/update task 意图、待确认 action 与 Java 确定性写回，已实现。
 - `web-workspace.md`：Day 6 登录、项目选择、Wiki/Task、AI Chat、人工确认与 Markdown 预览，已实现并在 Day 7 完成真实浏览器验收。
@@ -20,4 +21,4 @@
 
 以下文档尚未创建，表示功能也不应开始实现：
 
-- V2 的 Context Manager、Memory Namespace、完整 RBAC、审计、幂等和可恢复执行尚未建立功能文档，也不得提前实现。
+- V2 的 Conversation Summary/Token Budget、Memory Namespace、完整 RBAC、审计、幂等和可恢复执行尚未建立功能文档，也不得提前实现；Context Manager 已在 V2-02 完成。

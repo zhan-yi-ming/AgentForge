@@ -33,7 +33,7 @@ app.dependency_overrides[get_retrieval_service] = lambda: FakeRetrievalService()
 
 
 def fake_llm_responder(state) -> str:
-    return f"AI answer for: {state['normalized_message']}"
+    return f"AI answer for: {state['context_bundle'].working.message}"
 
 
 class FakeStreamingResponder:

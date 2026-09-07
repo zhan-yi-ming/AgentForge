@@ -128,3 +128,10 @@ Day 4 跨进程闭环由仓库脚本执行：
 - 每个纵向切片先运行失败测试，再做最小实现。至少覆盖根/Agent/prepare/retriever/tool/generation、三个关联 ID、同步和流式 Token usage、Tool 安全结果摘要、retrieval/LLM 异常闭合、disabled 和 observer 故障 fail-open。
 - V2-01 属于 Agent Runtime 与外部观测 L3 变更：执行 Python 全量 pytest、Java `clean verify`、Web 测试/构建、核心跨进程 smoke、配置解析、敏感信息扫描与节点 Pi Milestone Review。
 - Trace 测试断言敏感正文和原始异常不出现在 observer payload；Token 缺失必须保持缺失，禁止通过字符数估算。
+
+## V2-02 Context Manager 门槛
+
+- 约定 seam 为 Python FastAPI `/internal/v1/chat`、`/internal/v1/chat/stream`、LangGraph 构建入口、LLM responder boundary，以及 Web DOM 与 typed API client。
+- Context 测试必须覆盖 Working/Conversation/Project/Retrieved/Tool 五部分的生产者与消费者、显式 project 传递、同步/流式一致性、Tool proposal 不进入模型 messages，以及空 Summary 不改变现有 Prompt。
+- Web 测试必须让 stream promise 在首个 delta 后保持 pending，证明 complete 前 delta 已进入 DOM；未闭合全文 fence 不得渲染成整块代码区域。应用完成结果后必须清空旧 Wiki identity、生成 title，并在保存时调用 create 而非 update。
+- V2-02 作为 Agent 全局 Context/State L3 节点，运行 Agent Service 全量 pytest、Web 全量测试与生产构建、Java `clean verify`、必要跨进程 Chat/SSE smoke、敏感扫描和 Pi Milestone Review。Pi 只审核 diff，不能替代 Codex 的机器证据。

@@ -24,19 +24,19 @@ describe("API client", () => {
 
   it("parses fragmented UTF-8 SSE frames and reports deltas immediately", async () => {
     const encoder = new TextEncoder();
-    const payload = [
+    const initialPayload = [
       'event: metadata\ndata: {"conversationId":"conversation-1","requestId":"r1","sources":[]}\n\n',
       'event: delta\ndata: {"text":"你"}\n\n',
       'event: delta\ndata: {"text":"好"}\n\n',
-      'event: complete\ndata: {"pendingAction":null}\n\n',
     ].join("");
-    const bytes = encoder.encode(payload);
+    const bytes = encoder.encode(initialPayload);
+    let streamController!: ReadableStreamDefaultController<Uint8Array>;
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
+        streamController = controller;
         controller.enqueue(bytes.slice(0, 101));
         controller.enqueue(bytes.slice(101, 127));
         controller.enqueue(bytes.slice(127));
-        controller.close();
       },
     });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, {
@@ -44,11 +44,14 @@ describe("API client", () => {
     })));
     const deltas: string[] = [];
 
-    const result = await createApiClient(() => "token-123").chatStream(
+    const resultPromise = createApiClient(() => "token-123").chatStream(
       "project-1", "hello", undefined, { onDelta: (text) => deltas.push(text) },
     );
 
-    expect(deltas).toEqual(["你", "好"]);
+    await vi.waitFor(() => expect(deltas).toEqual(["你", "好"]));
+    streamController.enqueue(encoder.encode('event: complete\ndata: {"pendingAction":null}\n\n'));
+    streamController.close();
+    const result = await resultPromise;
     expect(result).toMatchObject({ conversationId: "conversation-1", answer: "你好", requestId: "r1" });
   });
 });

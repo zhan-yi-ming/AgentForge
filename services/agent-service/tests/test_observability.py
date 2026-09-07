@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from agentforge_agent.api import get_observability, get_responder, get_retrieval_service
 from agentforge_agent.config import Settings
+from agentforge_agent.context import ContextManager
 from agentforge_agent.graph import build_chat_graph
 from agentforge_agent.llm import CompatibleLlmResponder
 from agentforge_agent.main import app
@@ -417,10 +418,18 @@ def test_llm_generation_records_provider_model_and_reported_token_usage() -> Non
         UsageModel(), provider="deepseek", model_name="deepseek-v4-flash"
     )
 
-    answer = responder.respond_observed(
-        {"normalized_message": "private message", "retrieved_context": "private context"},
-        generation,
+    bundle = ContextManager.build(
+        project_id=uuid4(),
+        user_id=uuid4(),
+        actor_admin=False,
+        message="private message",
+        conversation_id=uuid4(),
+        request_id="request-usage",
     )
+    bundle = ContextManager.with_retrieval(
+        bundle, RetrievalResult(context="private context", sources=[])
+    )
+    answer = responder.respond_observed({"context_bundle": bundle}, generation)
 
     assert answer == "private model answer"
     assert client.spans[1].updates == [

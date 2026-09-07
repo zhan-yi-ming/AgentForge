@@ -88,10 +88,11 @@ class CompatibleLlmResponder:
 
     @staticmethod
     def _messages(state: ChatState):
-        context = state.get("retrieved_context", "").strip()
+        bundle = state["context_bundle"]
+        context = bundle.retrieved.content.strip()
         context_text = context or "（未检索到相关项目资料）"
         prompt = (
-            f"用户问题：\n{state['normalized_message']}\n\n"
+            f"用户问题：\n{bundle.working.message}\n\n"
             f"项目检索上下文：\n{context_text}"
         )
         return [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)]
