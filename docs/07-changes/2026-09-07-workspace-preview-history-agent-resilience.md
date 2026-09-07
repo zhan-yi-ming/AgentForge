@@ -2,7 +2,7 @@
 
 ## 状态
 
-In Progress
+Implemented
 
 ## 背景与证据
 
@@ -36,6 +36,14 @@ In Progress
 - 本机系统 Python 缺少项目依赖，首次 `pytest` 在 collection 阶段因缺少 `psycopg` 退出 2，未作为行为测试结论。随后复用项目 Python 3.14.7 Agent 镜像并在一次性容器中临时安装 pytest 8.4.2，`python -m pytest tests/test_llm.py -q` 退出码 0，12 个测试通过，0 失败、0 跳过；容器结束后已自动删除。
 - Node.js 24.14.0、npm 11.9.0；定向敏感信息扫描未发现 JWT、私钥或常见 API key 形式，`git diff --check` 退出码 0。
 - Pi `deepseek/deepseek-v4-pro` Diff Review Attempt 1：`PASS`。无阻塞缺陷；并发流守卫与 pending action 历史化属于后续独立交互设计，围栏尾随空格已由匹配前 `trim()` 覆盖，因此不扩大本次热修。
+
+## 提交与生产验证
+
+- 实现、测试和审核提交：`bd9ebecef54561c8d511f927be554028b4f44ef1`，已快进推送 GitHub `main`，并通过最小 Git bundle 快进同步生产仓库。
+- 生产按顺序执行 `compose build agent-service`、`compose build web` 和 `compose up -d agent-service web gateway`，退出码 0；只替换 Agent Service 与 Web，Core API、PostgreSQL 未重建。
+- `scripts/deploy/health-check.sh` 退出码 0；gateway、core-api、agent-service、web、postgres 共 5 个容器均为 `healthy`。
+- Web 容器静态产物包含“执行任务”新版本标记；真实生产登录、项目读取和 Core → RAG → Agent → DeepSeek JSON Chat smoke 返回 `FULL_CHAT_HTTP=200`，回答长度 38。
+- 前两次生产 smoke 包装命令分别因 BusyBox `grep` 嵌套参数和 Windows → SSH Python 行内引号转义退出 1，均在发起 Chat 前终止，不是产品失败。最终改用不含凭据的临时脚本成功验证；本地与服务器的脚本及 bundle 临时文件均已删除并返回清理成功标记。
 
 ## 风险与回滚
 
