@@ -17,20 +17,21 @@
 3. 用户在主内容中央发送 Chat；Web 复用项目内 conversationId，展示回答与来源。
 4. 用户向下选择或新建 Wiki，在编辑区修改 Markdown；预览区安全渲染，保存时发送当前 version。
 5. 响应包含 pending action 时，Web 展示 action 类型、Task、字段和预期 version。确认/拒绝只调用 Java action API；成功后刷新 Task。
-6. “AI 文本整理”保留原始输入，把 Agent 回答展示为 Markdown 预览；点击明确应用后才覆盖 Wiki 草稿，仍需再次点击保存。
+6. “AI 文本整理”保留原始输入，通过独立、无 conversationId 的 SSE 请求增量展示 Markdown 预览；整理期间与项目 Chat 互斥，点击明确应用后才覆盖 Wiki 草稿，仍需再次点击保存。整理结果不改变项目 Chat 状态，也不接受 tool proposal。
 
 ## 状态与错误
 
-- loading、empty、success、error 均有可见状态；按钮在请求期间禁用，避免重复提交。
+- loading、empty、success、error 均有可见状态；Chat 和整理按钮在任一生成请求期间互斥禁用，避免重复提交和 pending action 竞态。
 - 401 清除当前会话并返回登录；403/404/409/503 展示 Problem Details 的安全 detail 和 requestId。
+- 整理流在 complete 前发生非取消错误时清除半成品，避免失败内容仍可应用到 Wiki；项目切换等主动取消不显示错误。
 - Wiki 409 不自动覆盖；提示用户刷新后重新合并。
 - confirm/reject 后清除 pending action；confirm 成功刷新 Task 列表。
-- 切换项目清空项目相关草稿、conversation 和 pending action。
+- 切换项目取消 Chat 与整理流，并清空项目相关草稿、conversation 和 pending action；旧项目迟到事件不可写入当前视图。
 
 ## 测试边界
 
-测试通过 DOM 与网络 client 的公共接口观察行为，不断言私有 state。至少覆盖：公开 Demo 凭据可见且可一键填入、首次引导关闭/持久化/重新打开、登录后 Chat 是主内容首个功能、项目加载、Markdown 原始 HTML 不成为 DOM、Chat 展示 pending action、确认后刷新 Task、拒绝不写、AI 返回内容必须经用户点击才进入 Wiki 草稿，以及 Problem Details 可见。
+测试通过 DOM 与网络 client 的公共接口观察行为，不断言私有 state。至少覆盖：公开 Demo 凭据可见且可一键填入、首次引导关闭/持久化/重新打开、登录后 Chat 是主内容首个功能、项目加载、Markdown 原始 HTML 不成为 DOM、Chat 展示 pending action、确认后刷新 Task、拒绝不写、AI 整理使用无 conversationId 的流式接口并增量预览、与 Chat 互斥、项目切换取消旧流、意外 proposal 不污染 Chat，以及返回内容必须经用户点击才进入 Wiki 草稿。
 
 ## 已知限制
 
-当前没有 refresh token、多标签引导同步、复杂路由、分页、自动保存或聊天历史持久化。引导完成标记只属于当前浏览器 profile；清除站点数据后会再次显示。AI 整理复用现有 Agent Chat；文本质量取决于服务器配置的真实模型。
+当前没有 refresh token、多标签引导同步、复杂路由、分页、自动保存或聊天历史持久化。引导完成标记只属于当前浏览器 profile；清除站点数据后会再次显示。AI 整理复用现有流式 Agent Chat，仍消费一次用户日配额；文本质量与首段延迟取决于服务器配置的真实模型。

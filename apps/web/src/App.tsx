@@ -17,6 +17,10 @@ function rememberOnboardingComplete() {
   catch { /* The in-memory dialog can still close when storage is unavailable. */ }
 }
 
+function isAbortError(cause: unknown) {
+  return cause instanceof Error && cause.name === "AbortError";
+}
+
 export function App({ api: injectedApi }: { api?: ApiClient }) {
   const api = useMemo(() => injectedApi ?? createApiClient(() => sessionStorage.getItem(TOKEN_KEY)), [injectedApi]);
   const [authenticated, setAuthenticated] = useState(() => Boolean(sessionStorage.getItem(TOKEN_KEY)));
@@ -42,6 +46,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const [error, setError] = useState("");
   const [onboardingOpen, setOnboardingOpen] = useState(() => !hasCompletedOnboarding());
   const streamAbort = useRef<AbortController | undefined>(undefined);
+  const formatAbort = useRef<AbortController | undefined>(undefined);
   const activeProjectId = useRef("");
 
   const report = useCallback((cause: unknown) => {
@@ -80,6 +85,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     if (!projectId) return;
     activeProjectId.current = projectId;
     streamAbort.current?.abort();
+    formatAbort.current?.abort();
     let active = true;
     setError("");
     setConversationId(undefined);
@@ -95,7 +101,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         setTasks(loadedTasks);
         selectWiki(pages[0]);
       }).catch(report);
-    return () => { active = false; streamAbort.current?.abort(); };
+    return () => { active = false; streamAbort.current?.abort(); formatAbort.current?.abort(); };
   }, [api, projectId, report, selectWiki]);
 
   async function login(event: FormEvent) {
@@ -157,7 +163,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
       setPendingAction(result.pendingAction);
       setChatMessage("");
     } catch (cause) {
-      if (!(cause instanceof DOMException && cause.name === "AbortError")) report(cause);
+      if (!isAbortError(cause)) report(cause);
     } finally {
       if (streamAbort.current === controller) streamAbort.current = undefined;
       setStreaming(false);
@@ -178,12 +184,39 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
 
   async function formatText() {
     if (!projectId || !formatInput.trim()) return;
+    const requestedProjectId = projectId;
+    const controller = new AbortController();
+    formatAbort.current?.abort();
+    formatAbort.current = controller;
     setBusy(true); setError("");
+    setFormattedText("");
     try {
-      const result = await api.chat(projectId, `请将以下内容整理为 Markdown，保留事实，不执行写入：\n\n${formatInput.trim()}`);
+      const result = await api.chatStream(
+        projectId,
+        `请将以下内容整理为 Markdown，保留事实，不执行写入：\n\n${formatInput.trim()}`,
+        undefined,
+        {
+          onDelta: (text) => {
+            if (activeProjectId.current === requestedProjectId) {
+              setFormattedText((current) => current + text);
+            }
+          },
+        },
+        controller.signal,
+      );
+      if (activeProjectId.current !== requestedProjectId) return;
       setFormattedText(result.answer);
-      if (result.pendingAction) setPendingAction(result.pendingAction);
-    } catch (cause) { report(cause); } finally { setBusy(false); }
+    } catch (cause) {
+      if (!isAbortError(cause)) {
+        setFormattedText("");
+        report(cause);
+      }
+    } finally {
+      if (formatAbort.current === controller) {
+        formatAbort.current = undefined;
+        setBusy(false);
+      }
+    }
   }
 
   if (!authenticated) {
@@ -233,7 +266,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
       </section>
 
       <section className="panel format-panel"><div className="panel-heading"><div><span className="eyebrow">DRAFT LAB</span><h2>AI 文本整理</h2></div><span className="safe-note">预览优先 · 不自动写回</span></div>
-        <div className="format-grid"><div><label>待整理原文<textarea value={formatInput} onChange={(event) => setFormatInput(event.target.value)} placeholder="粘贴零散会议记录或技术笔记…" /></label><button onClick={() => void formatText()} disabled={busy || !formatInput.trim()}>AI 整理并预览</button></div>
+        <div className="format-grid"><div><label>待整理原文<textarea value={formatInput} onChange={(event) => setFormatInput(event.target.value)} placeholder="粘贴零散会议记录或技术笔记…" /></label><button onClick={() => void formatText()} disabled={busy || streaming || !formatInput.trim()}>AI 整理并预览</button></div>
           <div><p className="section-label">整理结果</p><MarkdownPreview content={formattedText} />{formattedText && <button className="ghost" onClick={() => setWikiContent(formattedText)}>应用到 Wiki 草稿</button>}</div></div>
       </section>
     </main>

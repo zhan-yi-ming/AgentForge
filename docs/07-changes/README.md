@@ -14,6 +14,7 @@
 
 ## 索引
 
+- `2026-09-07-ai-formatting-stream-reliability.md`：把长文本 AI 整理迁移到独立 SSE 流，隔离 Chat 状态并细化 401/503/离线排障。
 - `2026-09-06-centered-chat-onboarding-and-public-demo-account.md`：V2-01 前的独立体验切片，采用居中单栏聊天、首次新手引导和受限公开 Demo 账号。
 - `2026-09-06-v2-v3-development-governance.md`：V2/V3 节点路线、Start/Close Gate、节点边界与 GitHub 维护真实性规则。
 - `2026-09-06-risk-based-validation-and-review.md`：L0–L3 风险分级、低风险累计触发和 Pi Diff/Milestone 双模式审核。
