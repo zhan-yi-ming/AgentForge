@@ -27,7 +27,10 @@ Implemented
 - `bash -n scripts/deploy/seed-demo-v12.sh`：退出码 0。
 - 发送 Pi 前定向扫描暂存差异，未发现固定账号明文、私钥或高风险凭据模式；本机未安装 `gitleaks`，已如实记录，Pi 入口的内置敏感扫描亦未阻止审核。
 - Pi `deepseek/deepseek-v4-pro` Diff Review Attempt 1：PASS；建议项评估记录见对应审核报告。
-- 生产验证在提交部署后执行：正确凭据应返回 200、错误凭据应返回 401，页面应不含明文凭据且包含新提示，Compose 服务应保持健康。
+- 生产发布前数据库备份：`/opt/agentforge/backups/agentforge-20260907T072112Z.dump.gz`。
+- 生产部署提交：`52b2facfb513d084640b8384fea655073c12fd85`；服务器到 GitHub 443 超时后，使用本机创建并验证的单提交 Git bundle 经 SSH 上传，服务器执行 `git fetch` 与 `git merge --ff-only`，未改写历史。
+- 生产验证：正确凭据登录返回 200、错误凭据返回 401；Web 容器产物不含固定邮箱或密码明文，新登录提示存在；gateway、web、core-api、agent-service、postgres 均恢复运行，最终 gateway 为 healthy。
+- 工具版本：Node.js `v24.14.0`、npm `11.9.0`、PowerShell `7.6.5`、Git `2.23.0.windows.1`、生产 Docker Compose `5.5.1`。
 
 按用户指令，本次不运行 Java、Python、Web 或 E2E 全量测试。
 
