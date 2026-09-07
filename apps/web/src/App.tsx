@@ -4,8 +4,7 @@ import { MarkdownPreview } from "./MarkdownPreview";
 
 const TOKEN_KEY = "agentforge.accessToken";
 const ONBOARDING_KEY = "agentforge.onboardingComplete";
-const PUBLIC_DEMO_EMAIL = "210168y@gmail.com";
-const PUBLIC_DEMO_PASSWORD = "Z1060168";
+const LOGIN_FAILURE_MESSAGE = "请联系我 向我索要体验账号";
 
 function hasCompletedOnboarding() {
   try { return localStorage.getItem(ONBOARDING_KEY) === "true"; }
@@ -105,12 +104,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
       const result = await api.login(email.trim(), password);
       sessionStorage.setItem(TOKEN_KEY, result.accessToken);
       setAuthenticated(true);
-    } catch (cause) { report(cause); } finally { setBusy(false); }
-  }
-
-  function fillDemoAccount() {
-    setEmail(PUBLIC_DEMO_EMAIL);
-    setPassword(PUBLIC_DEMO_PASSWORD);
+    } catch { setError(LOGIN_FAILURE_MESSAGE); } finally { setBusy(false); }
   }
 
   function completeOnboarding() {
@@ -190,8 +184,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     return <main className="auth-shell">
       <section className="login-card">
         <div className="auth-copy"><span className="author-chip">Built by zhan-yi-ming</span><span className="eyebrow">AGENTFORGE / AI ENGINEERING WORKSPACE</span><h1>你好，面试官 👋</h1><p className="auth-lead">从一次真实的项目对话开始。</p><p>Agent 会读取项目 Wiki 与任务、流式回答，并在任何业务写入前等待你的确认。</p></div>
-        <div className="login-heading"><div className="mark">AF</div><div><span className="eyebrow">LIVE DEMO</span><h2>进入 AgentForge</h2></div></div><p className="login-note">请使用我提供的面试体验账号登录。</p>
-        <div className="demo-credentials" aria-label="公开体验账号"><div><span>邮箱</span><code>{PUBLIC_DEMO_EMAIL}</code></div><div><span>密码</span><code>{PUBLIC_DEMO_PASSWORD}</code></div><button type="button" className="ghost" onClick={fillDemoAccount}>填入体验账号</button></div>
+        <div className="login-heading"><div className="mark">AF</div><div><span className="eyebrow">LIVE DEMO</span><h2>进入 AgentForge</h2></div></div><p className="login-note">账号是简历上的邮箱，密码是微信号</p>
         <form className="login-form" onSubmit={login}>
           <label>邮箱<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
           <label>密码<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} /></label>

@@ -46,16 +46,28 @@ describe("App", () => {
     expect(screen.getByText(/zhan-yi-ming/)).toBeInTheDocument();
   });
 
-  it("shows the public demo account and fills it with one action", async () => {
-    const user = userEvent.setup();
+  it("hides demo credentials and explains where to find them", () => {
     render(<App api={api()} />);
 
-    expect(screen.getByText("210168y@gmail.com")).toBeInTheDocument();
-    expect(screen.getByText("Z1060168")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "填入体验账号" }));
+    expect(screen.getByText("账号是简历上的邮箱，密码是微信号")).toBeInTheDocument();
+    expect(screen.queryByText("210168y@gmail.com")).not.toBeInTheDocument();
+    expect(screen.queryByText("Z1060168")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "填入体验账号" })).not.toBeInTheDocument();
+  });
 
-    expect(screen.getByLabelText("邮箱")).toHaveValue("210168y@gmail.com");
-    expect(screen.getByLabelText("密码")).toHaveValue("Z1060168");
+  it.each([
+    ["wrong@example.com", "password-123"],
+    ["owner@example.com", "wrong-password"],
+  ])("shows the same contact message when a login credential is wrong", async (email, password) => {
+    const user = userEvent.setup();
+    const mockApi = api({ login: vi.fn().mockRejectedValue(new Error("invalid credentials")) });
+    render(<App api={mockApi} />);
+
+    await user.type(screen.getByLabelText("邮箱"), email);
+    await user.type(screen.getByLabelText("密码"), password);
+    await user.click(screen.getByRole("button", { name: "登录" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("请联系我 向我索要体验账号");
   });
 
   it("guides first-time users and lets them reopen the guide", async () => {

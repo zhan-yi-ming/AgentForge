@@ -31,6 +31,20 @@ api_post() {
     fi
 }
 
+synchronize_fixed_account_password() {
+    local email="$1"
+    local password="$2"
+    compose exec -T postgres psql -X --set=ON_ERROR_STOP=1 \
+        -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
+        --set=demo_email="${email}" --set=demo_password="${password}" >/dev/null <<'SQL'
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+UPDATE app_user
+SET password_hash = '{bcrypt}' || crypt(:'demo_password', gen_salt('bf', 10)),
+    updated_at = now()
+WHERE email=lower(:'demo_email') AND role='USER';
+SQL
+}
+
 authenticate_or_register() {
     local email="$1"
     local password="$2"
@@ -84,6 +98,8 @@ for _ in $(seq 1 30); do
 done
 [[ "${CORE_READY}" == "true" ]] || { echo "Core API did not become healthy in time." >&2; exit 1; }
 
+synchronize_fixed_account_password "${AGENTFORGE_DEMO_FIXED_EMAIL}" \
+    "${AGENTFORGE_DEMO_FIXED_PASSWORD}"
 FIXED_AUTH="$(authenticate_or_register "${AGENTFORGE_DEMO_FIXED_EMAIL}" \
     "${AGENTFORGE_DEMO_FIXED_PASSWORD}" 'AgentForge Interview Demo')"
 seed_workspace "${FIXED_AUTH}" 'Stable interview workspace maintained by zhan-yi-ming'
