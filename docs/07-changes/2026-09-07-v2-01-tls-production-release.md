@@ -1,7 +1,7 @@
 # V2-01 与 TLS 域名兼容生产发布
 
 - 日期：2026-09-07
-- 状态：Proposed
+- 状态：In Progress
 - 目标环境：阿里云中国香港单机生产 Demo
 - 集成分支：`codex/v2-01-production-release`
 - 计划发布标签：`v2.0.0-alpha.1`
@@ -38,4 +38,15 @@
 
 ## 实施与证据
 
-待合并、验证、审核和生产发布后回填。
+- Git preflight：最新 `origin/main` 为 `18064bf`（`v1.2.1`）；`codex/tls-public-host-compat@57772bb` 的提交链包含 `382ac71` V2-01、`431d705` 验证流程优化与 `57772bb` TLS 兼容。用户工作树中的历史文档修改和 DOCX 未进入隔离发布工作树。
+- 文档先行提交 `ef99426` 后执行 non-fast-forward 合并；唯一冲突位于 `docs/07-changes/README.md` 的新增索引相邻行，保留双方全部条目后形成集成提交 `f002914`。`57772bb..f002914` 的内容差异只有本发布记录与索引，没有业务实现漂移。
+- 门禁规划器对 `origin/main..HEAD` 给出 L3、AgentService / Deployment / Docs / Governance / TLS，ReviewMode 为 Milestone。
+- Java Temurin 21.0.12.1：`mvnw.cmd clean verify` 退出码 0，83 tests、0 failures、0 errors、7 skipped；Testcontainers 使用 PostgreSQL 17.11 并验证 5 个迁移，`BUILD SUCCESS`。
+- Python 3.14.3 / pytest 8.4.2：复用锁定依赖环境并用发布工作树 `PYTHONPATH` 执行 `pytest -q --cache-clear`，退出码 0，44 passed、0 failed、0 skipped、2 个既有弃用 warning。
+- Web Node 24.14.0 / npm 11.9.0 / Vite 7.3.6：通过临时 junction 复用锁文件一致的依赖；Vitest 3 files / 16 tests 全部通过，production build 转换 283 modules，两条命令均退出码 0。
+- 配置与 TLS：gate planner 15 项契约、V2-prep Demo 契约、本地/生产 Compose `config --quiet`、生产端口/日志边界、TLS IPv4/IPv6/根域名/已带 www 合约、真实 Nginx 三场景 `nginx -T`、Bash `-n` 与 ShellCheck 0.11.0 全部退出码 0。
+- 跨服务 smoke 前两次在 Compose 启动前分别因未预置内部测试 token、JWT secret 而退出 1，脚本 finally 均完成清理；列齐既有前置配置后第三次退出码 0：Wiki/Task source 各 1、更新版本 1、删除 Task chunk 0、unmatched 0、cross-project 0。
+- 清理：隔离 E2E container、network、volume 的精确过滤查询均为空；发布工作树的 Java `target`、Web `dist`、Python cache 与两个临时依赖 junction 已删除，工作树恢复干净。
+- Gitleaks 8.30.1 扫描完整 `origin/main..INDEX` 发布补丁约 274.20 KB，耗时 227 ms，退出码 0、无泄漏；临时扫描目录已清理。
+- Pi DeepSeek V4-pro Milestone Review Attempt 1 返回 `NEEDS_FIX`。其 M-01 声称 Langfuse 4.15.1 的 observation `update()` 不接受 `usage_details`；Codex 用本次实际依赖创建无网络真实 SDK generation，并由 `inspect.signature` 得到显式参数 `usage_details: Dict[str, int] | None`，因此 M-01 及由此推导的 fake seam S-01 均为事实误报，不修改正确实现、不触发复审。S-04 文档状态不一致已修正；host URL 和客户端首次消费前断流为低风险后续建议。
+- 待完成：`dev`/`main`/tag 推送、生产备份部署与公网核验。
