@@ -246,8 +246,58 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "发送" }));
     expect(await screen.findByText("Review auth")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "确认执行" }));
-    await waitFor(() => expect(mockApi.confirmAction).toHaveBeenCalledWith(project.id, pending.id));
+    await waitFor(() => expect(mockApi.confirmAction).toHaveBeenCalledWith(
+      project.id, pending.id, expect.any(String),
+    ));
     expect(mockApi.listTasks).toHaveBeenCalledTimes(2);
+  });
+
+  it("reuses the same idempotency key when a confirmation is retried", async () => {
+    const pending: AgentAction = {
+      id: "action-retry", projectId: project.id, conversationId: "conversation-retry",
+      actionType: "CREATE_TASK", status: "PENDING", title: "Retry safely", createdAt: "2026-09-05T00:00:00Z",
+    };
+    const confirmAction = vi.fn()
+      .mockRejectedValueOnce(new Error("response lost"))
+      .mockResolvedValueOnce({ ...pending, status: "EXECUTED", resultTask: task });
+    const mockApi = api({
+      chatStream: vi.fn().mockResolvedValue({
+        conversationId: "conversation-retry", answer: "Review", requestId: "r-retry", sources: [], pendingAction: pending,
+      }),
+      confirmAction,
+    });
+    const user = await login(mockApi);
+    await user.type(screen.getByLabelText("给 Agent 的消息"), "create task");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    await user.click(await screen.findByRole("button", { name: "确认执行" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("response lost");
+    await user.click(screen.getByRole("button", { name: "确认执行" }));
+
+    await waitFor(() => expect(confirmAction).toHaveBeenCalledTimes(2));
+    expect(confirmAction.mock.calls[0][2]).toBeTruthy();
+    expect(confirmAction.mock.calls[1][2]).toBe(confirmAction.mock.calls[0][2]);
+  });
+
+  it("shows a stable failure result without refreshing tasks", async () => {
+    const pending: AgentAction = {
+      id: "action-failed", projectId: project.id, conversationId: "conversation-failed",
+      actionType: "UPDATE_TASK", status: "PENDING", taskId: task.id, expectedVersion: task.version,
+      title: "Stale update", createdAt: "2026-09-05T00:00:00Z",
+    };
+    const mockApi = api({
+      chatStream: vi.fn().mockResolvedValue({
+        conversationId: "conversation-failed", answer: "Review", requestId: "r-failed", sources: [], pendingAction: pending,
+      }),
+      confirmAction: vi.fn().mockResolvedValue({ ...pending, status: "FAILED", decidedAt: "2026-09-08T00:00:00Z" }),
+    });
+    const user = await login(mockApi);
+    await user.type(screen.getByLabelText("给 Agent 的消息"), "update task");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    await user.click(await screen.findByRole("button", { name: "确认执行" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("执行失败");
+    expect(mockApi.listTasks).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Stale update")).not.toBeInTheDocument();
   });
 
   it("rejects a pending action without refreshing tasks", async () => {
@@ -264,7 +314,9 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "发送" }));
     await user.click(await screen.findByRole("button", { name: "拒绝" }));
 
-    await waitFor(() => expect(mockApi.rejectAction).toHaveBeenCalledWith(project.id, pending.id));
+    await waitFor(() => expect(mockApi.rejectAction).toHaveBeenCalledWith(
+      project.id, pending.id, expect.any(String),
+    ));
     expect(mockApi.listTasks).toHaveBeenCalledTimes(1);
     expect(screen.queryByText("Do not create")).not.toBeInTheDocument();
   });

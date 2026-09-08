@@ -110,6 +110,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const wikiPanel = useRef<HTMLElement | null>(null);
   const chatSequence = useRef(0);
   const chatModeRef = useRef(false);
+  const decisionKeys = useRef(new Map<string, string>());
 
   const resetWorkspaceState = useCallback(() => {
     streamAbort.current?.abort();
@@ -117,6 +118,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     streamAbort.current = undefined;
     formatAbort.current = undefined;
     activeProjectId.current = "";
+    decisionKeys.current.clear();
     setProjects([]);
     setProjectId("");
     setWikiPages([]);
@@ -407,12 +409,25 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
 
   async function decideAction(decision: "confirm" | "reject") {
     if (!projectId || !pendingAction) return;
+    const actionId = pendingAction.id;
+    let idempotencyKey = decisionKeys.current.get(actionId);
+    if (!idempotencyKey) {
+      idempotencyKey = crypto.randomUUID();
+      decisionKeys.current.set(actionId, idempotencyKey);
+    }
     setBusy(true); setError("");
     try {
       if (decision === "confirm") {
-        await api.confirmAction(projectId, pendingAction.id);
+        const result = await api.confirmAction(projectId, actionId, idempotencyKey);
+        if (result.status === "FAILED") {
+          decisionKeys.current.delete(actionId);
+          setPendingAction(undefined);
+          setError("审批已记录，但执行失败。请刷新目标后重新发起。");
+          return;
+        }
         await loadTasks(projectId);
-      } else await api.rejectAction(projectId, pendingAction.id);
+      } else await api.rejectAction(projectId, actionId, idempotencyKey);
+      decisionKeys.current.delete(actionId);
       setPendingAction(undefined);
     } catch (cause) { report(cause); } finally { setBusy(false); }
   }

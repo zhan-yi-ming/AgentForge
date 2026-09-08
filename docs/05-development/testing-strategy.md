@@ -99,6 +99,14 @@ Day 4 跨进程闭环由仓库脚本执行：
 - Web ApiClient/DOM 覆盖历史入口、项目切换、选择恢复及 conversationId 复用。
 - Agent pytest 与 Java→Python 契约证明 Python 只提供 Intent，服务端 Metadata 不可伪造。
 
+## V2-06 质量门槛
+
+- Core Application 公共 seam 覆盖五态迁移、执行前 RBAC/Risk 复核、同 key replay、不同 key 冲突、拒绝后不可执行和业务失败终态。
+- Core HTTP seam 覆盖必需且受限的 `Idempotency-Key`、统一 Problem Details、401/403/404/409 和安全响应字段。
+- PostgreSQL/Testcontainers 覆盖 V7、JPA validate、幂等唯一索引、悲观行锁、双线程 confirm 只写一次，以及 Approval/Task/Audit 原子事实。
+- Web API/DOM 覆盖 Idempotency-Key 请求头、网络失败后复用同 key、`EXECUTED` 成功刷新 Task、`FAILED` 不误刷新及拒绝不写。
+- 回归 Agent proposal/Java→Python 契约，证明 Python 仍只产生 Intent；V2-06 不引入 checkpoint/resume。
+
 ## 2026-09-05 历史决定：曾停用 Pi
 
 用户曾撤销 Pi 审查与测试授权，该决定及 Day 1–4 复核保留在 `docs/07-changes/2026-09-05-disable-pi-and-day1-day4-audit.md` 供历史追溯。随后用户重新授权每阶段一次性 Pi 只读代码审核，但没有恢复 Pi 测试、monitor、OnCodexWake 或自动阶段推进；Codex 始终直接执行并记录全部测试证据。

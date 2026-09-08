@@ -24,3 +24,4 @@ ADR 保存影响长期结构的决定。编号只增不减，Accepted 记录不�
 - `ADR-0018-process-local-memory-namespace.md`：用完整 Memory Namespace 与强制 lease 隔离 tenant/workspace/project/user/thread，不提前建立业务 Workspace 数据模型。
 - `ADR-0019-centralized-java-tool-policy.md`：Java 以服务端 Metadata 集中执行 Tool Role、Risk 与 Approval 策略。
 - `ADR-0020-core-owned-conversation-display-history.md`：Core API 持久化授权范围内的会话展示历史，不提前实现 Agent checkpoint。
+- `ADR-0021-durable-approval-idempotency-audit.md`：Java 持久化五态 Approval、显式幂等执行与追加式审计事实。

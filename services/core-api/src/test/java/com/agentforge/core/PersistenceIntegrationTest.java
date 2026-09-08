@@ -6,6 +6,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.time.Instant;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.RollbackException;
@@ -172,8 +175,10 @@ class PersistenceIntegrationTest {
                 .orElseThrow();
 
         assertThat(taskService.list(project.id(), actor)).isEmpty();
-        var executed = agentActionService.confirm(project.id(), pending.id(), actor);
-        var repeated = agentActionService.confirm(project.id(), pending.id(), actor);
+        var executed = agentActionService.confirm(
+                project.id(), pending.id(), actor, "integration-confirm-key", "integration-request-1");
+        var repeated = agentActionService.confirm(
+                project.id(), pending.id(), actor, "integration-confirm-key", "integration-request-2");
 
         assertThat(executed.resultTask().id()).isEqualTo(repeated.resultTask().id());
         assertThat(taskService.list(project.id(), actor)).hasSize(1);
@@ -182,8 +187,88 @@ class PersistenceIntegrationTest {
                 String.class,
                 pending.id())).isEqualTo("EXECUTED");
         assertThat(jdbcTemplate.queryForObject(
+                "select idempotency_key from agent_task_action where id = ?",
+                String.class,
+                pending.id())).isEqualTo("integration-confirm-key");
+        assertThat(jdbcTemplate.queryForList(
+                "select event_type from agent_action_audit_event where approval_id = ? order by created_at, id",
+                String.class,
+                pending.id())).containsExactlyInAnyOrder("REQUESTED", "APPROVED", "EXECUTED");
+        assertThat(jdbcTemplate.queryForObject(
                 "select count(*) from flyway_schema_history where success = true",
-                Integer.class)).isGreaterThanOrEqualTo(4);
+                Integer.class)).isGreaterThanOrEqualTo(7);
+    }
+
+    @Test
+    void approvedActionPersistsFailedStateWhenTheTargetVersionChanged() {
+        var authentication = authenticationService.register(
+                "agent-action-failure@example.com", "Agent Action Failure", "integration-password");
+        var actor = new AuthenticatedActor(authentication.user().id(), false);
+        var project = projectService.createProject(actor, "Failed Approval Project", null);
+        var task = taskService.create(project.id(), actor, "Original", null, null, null);
+        var proposal = new ToolProposal(
+                "UPDATE_TASK", task.id(), task.version(), "Approved title", null, null, null);
+        var pending = agentActionService.createPending(
+                project.id(), actor, java.util.UUID.randomUUID(), proposal, "failure-requested")
+                .orElseThrow();
+        taskService.update(
+                project.id(), task.id(), actor, "Changed elsewhere", null,
+                task.status(), task.priority(), task.version());
+
+        var failed = agentActionService.confirm(
+                project.id(), pending.id(), actor, "failure-key", "failure-confirm");
+        var replayed = agentActionService.confirm(
+                project.id(), pending.id(), actor, "failure-key", "failure-replay");
+
+        assertThat(failed.status()).isEqualTo(com.agentforge.core.agent.domain.AgentActionStatus.FAILED);
+        assertThat(replayed.status()).isEqualTo(com.agentforge.core.agent.domain.AgentActionStatus.FAILED);
+        assertThat(taskService.get(project.id(), task.id(), actor).title()).isEqualTo("Changed elsewhere");
+        assertThat(jdbcTemplate.queryForObject(
+                "select status from agent_task_action where id = ?", String.class, pending.id()))
+                .isEqualTo("FAILED");
+        assertThat(jdbcTemplate.queryForList(
+                "select event_type from agent_action_audit_event where approval_id = ? order by created_at, id",
+                String.class, pending.id()))
+                .containsExactlyInAnyOrder("REQUESTED", "APPROVED", "FAILED");
+    }
+
+    @Test
+    void concurrentConfirmationCreatesOneTaskAndOneExecutionAuditEvent() throws Exception {
+        var authentication = authenticationService.register(
+                "agent-action-concurrent@example.com", "Concurrent Approval", "integration-password");
+        var actor = new AuthenticatedActor(authentication.user().id(), false);
+        var project = projectService.createProject(actor, "Concurrent Approval Project", null);
+        var pending = agentActionService.createPending(
+                project.id(), actor, java.util.UUID.randomUUID(),
+                new ToolProposal("CREATE_TASK", null, null, "Create once", null, "TODO", "MEDIUM"),
+                "concurrent-requested").orElseThrow();
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> {
+                ready.countDown();
+                start.await(10, TimeUnit.SECONDS);
+                return agentActionService.confirm(
+                        project.id(), pending.id(), actor, "concurrent-key", "concurrent-1");
+            });
+            var second = executor.submit(() -> {
+                ready.countDown();
+                start.await(10, TimeUnit.SECONDS);
+                return agentActionService.confirm(
+                        project.id(), pending.id(), actor, "concurrent-key", "concurrent-2");
+            });
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            assertThat(first.get(20, TimeUnit.SECONDS).resultTask().id())
+                    .isEqualTo(second.get(20, TimeUnit.SECONDS).resultTask().id());
+        }
+
+        assertThat(taskService.list(project.id(), actor)).hasSize(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from agent_action_audit_event where approval_id = ? and event_type = 'EXECUTED'",
+                Integer.class, pending.id())).isEqualTo(1);
     }
 
     @Test

@@ -6,7 +6,7 @@ export type Task = { id: string; projectId: string; title: string; description?:
 export type AgentSource = { sourceType: string; sourceId: string; title: string; excerpt: string };
 export type AgentAction = {
   id: string; projectId: string; conversationId: string; actionType: "CREATE_TASK" | "UPDATE_TASK";
-  status: "PENDING" | "EXECUTED" | "REJECTED"; taskId?: string; expectedVersion?: number;
+  status: "PENDING" | "APPROVED" | "EXECUTED" | "REJECTED" | "FAILED"; taskId?: string; expectedVersion?: number;
   title?: string; description?: string; taskStatus?: string; priority?: string;
   resultTask?: Task; createdAt: string; decidedAt?: string;
 };
@@ -42,8 +42,8 @@ export interface ApiClient {
   getConversation(projectId: string, conversationId: string): Promise<ConversationDetail>;
   chat(projectId: string, message: string, conversationId?: string): Promise<AgentChat>;
   chatStream(projectId: string, message: string, conversationId: string | undefined, callbacks: AgentStreamCallbacks, signal?: AbortSignal): Promise<AgentChat>;
-  confirmAction(projectId: string, actionId: string): Promise<AgentAction>;
-  rejectAction(projectId: string, actionId: string): Promise<AgentAction>;
+  confirmAction(projectId: string, actionId: string, idempotencyKey: string): Promise<AgentAction>;
+  rejectAction(projectId: string, actionId: string, idempotencyKey: string): Promise<AgentAction>;
 }
 
 type Json = Record<string, unknown> | unknown[];
@@ -160,7 +160,11 @@ export function createApiClient(getToken: () => string | null): ApiClient {
     getConversation: (projectId, conversationId) => request(`/api/v1/projects/${projectId}/agent/conversations/${conversationId}`),
     chat: (projectId, message, conversationId) => request(`/api/v1/projects/${projectId}/agent/chat`, { method: "POST", body: JSON.stringify({ message, conversationId }) }),
     chatStream,
-    confirmAction: (projectId, actionId) => request(`/api/v1/projects/${projectId}/agent/actions/${actionId}/confirm`, { method: "POST" }),
-    rejectAction: (projectId, actionId) => request(`/api/v1/projects/${projectId}/agent/actions/${actionId}/reject`, { method: "POST" }),
+    confirmAction: (projectId, actionId, idempotencyKey) => request(`/api/v1/projects/${projectId}/agent/actions/${actionId}/confirm`, {
+      method: "POST", headers: { "Idempotency-Key": idempotencyKey },
+    }),
+    rejectAction: (projectId, actionId, idempotencyKey) => request(`/api/v1/projects/${projectId}/agent/actions/${actionId}/reject`, {
+      method: "POST", headers: { "Idempotency-Key": idempotencyKey },
+    }),
   };
 }

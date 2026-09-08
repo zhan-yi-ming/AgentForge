@@ -37,7 +37,7 @@ Java 只信任认证 JWT、数据库中的 Project/资源归属和服务端 Tool
 | `update_task`, Wiki/Task 普通修改 | MEDIUM | USER | yes for Agent intent |
 | Wiki/Task delete | HIGH | ADMIN | yes；V2-05 不开放 Agent 删除 Tool |
 
-`need_approval` 描述 Agent 自动执行边界；用户直接调用明确的写 API 仍必须经过相同角色与风险检查，但不创建伪造的 Agent approval。
+`need_approval` 描述 Agent 自动执行边界；用户直接调用明确的写 API 仍必须经过相同角色与风险检查，但不创建伪造的 Agent approval。V2-06 已为 Agent Task Action 增加五态 Approval、显式幂等确认和追加式审计。
 
 ## 接口与数据
 
@@ -56,4 +56,4 @@ Java 只信任认证 JWT、数据库中的 Project/资源归属和服务端 Tool
 
 ## 已知限制与后续计划
 
-当前角色仍为 USER/ADMIN 与 owner-or-admin 项目模型。V2-06 增加通用 Approval/Audit/Idempotency；V3 MCP 也必须复用该 Java 策略。
+当前角色仍为 USER/ADMIN 与 owner-or-admin 项目模型；Approval payload 首版仅覆盖 CREATE_TASK/UPDATE_TASK。V3 MCP 也必须复用该 Java 策略。

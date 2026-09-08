@@ -149,7 +149,7 @@ class AgentChatServiceTest {
         ToolProposal proposal = new ToolProposal(
                 "CREATE_TASK", null, null, "Interview task", null, "TODO", "HIGH");
         AgentActionView pending = org.mockito.Mockito.mock(AgentActionView.class);
-        when(actionService.createPending(projectId, actor, conversationId, proposal))
+        when(actionService.createPending(projectId, actor, conversationId, proposal, "request-proposal"))
                 .thenReturn(Optional.of(pending));
         org.mockito.Mockito.doAnswer(invocation -> {
             java.util.function.Consumer<AgentStreamEvent> sink = invocation.getArgument(6);
@@ -166,7 +166,7 @@ class AgentChatServiceTest {
 
         assertThat(events.getLast().pendingAction()).isSameAs(pending);
         assertThat(events.getLast().toolProposal()).isNull();
-        verify(actionService).createPending(projectId, actor, conversationId, proposal);
+        verify(actionService).createPending(projectId, actor, conversationId, proposal, "request-proposal");
     }
 
     @Test
@@ -207,7 +207,8 @@ class AgentChatServiceTest {
         AgentActionView pending = org.mockito.Mockito.mock(AgentActionView.class);
         when(client.chat(projectId, userId, false, "create", null, "request-2"))
                 .thenReturn(new AgentChatResult(conversationId, "Please confirm", "request-2", java.util.List.of(), proposal, null));
-        when(actionService.createPending(projectId, actor, conversationId, proposal)).thenReturn(Optional.of(pending));
+        when(actionService.createPending(projectId, actor, conversationId, proposal, "request-2"))
+                .thenReturn(Optional.of(pending));
 
         AgentChatResult result = service.chat(projectId, actor, "create", null, "request-2");
 
@@ -229,7 +230,8 @@ class AgentChatServiceTest {
         ToolProposal proposal = new ToolProposal("CREATE_TASK", null, null, "x".repeat(201), null, "TODO", "HIGH");
         when(client.chat(projectId, userId, false, "create", null, "request-3"))
                 .thenReturn(new AgentChatResult(conversationId, "Ordinary answer", "request-3", java.util.List.of(), proposal, null));
-        when(actionService.createPending(projectId, actor, conversationId, proposal)).thenReturn(Optional.empty());
+        when(actionService.createPending(projectId, actor, conversationId, proposal, "request-3"))
+                .thenReturn(Optional.empty());
 
         AgentChatResult result = service.chat(projectId, actor, "create", null, "request-3");
 

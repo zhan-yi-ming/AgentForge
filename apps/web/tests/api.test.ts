@@ -2,6 +2,20 @@ import { describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../src/api";
 
 describe("API client", () => {
+  it("sends the caller idempotency key when confirming an action", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: "EXECUTED" }), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createApiClient(() => "token-123").confirmAction("project-1", "action-1", "decision-key-1");
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/projects/project-1/agent/actions/action-1/confirm");
+    expect(init.method).toBe("POST");
+    expect((init.headers as Headers).get("Idempotency-Key")).toBe("decision-key-1");
+  });
+
   it("loads conversation history from the current project scope", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([]), {
       status: 200, headers: { "Content-Type": "application/json" },

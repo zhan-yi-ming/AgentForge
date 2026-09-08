@@ -14,6 +14,7 @@
 - `context-management.md`：V2-02 ContextBundle、V2-03 Conversation Summary/Token Budget 与 V2-04 Memory Namespace 隔离。
 - `security-and-risk.md`：V2-05 Java 集中式 RBAC、Tool Metadata 与 Risk Engine。
 - `conversation-history.md`：V2-05 受 Project/User/Thread 隔离保护的持久化历史会话。
+- `approval-idempotency-and-audit.md`：V2-06 五态 Approval、幂等执行与追加式审计，开发中。
 - `rag-retrieval.md`：Day 4 Wiki/Task Chunk、Embedding、BM25、RRF、Context 与来源引用，已实现并通过真实 pgvector 与跨进程验证。
 - `tool-calling-and-confirmation.md`：Day 5 create/update task 意图、待确认 action 与 Java 确定性写回，已实现。
 - `web-workspace.md`：Day 6 登录、项目选择、Wiki/Task、AI Chat、人工确认与 Markdown 预览，已实现并在 Day 7 完成真实浏览器验收。

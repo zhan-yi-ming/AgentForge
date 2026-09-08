@@ -73,7 +73,7 @@ public class TaskService {
                 .toList();
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = ConflictException.class)
     public TaskView update(
             UUID projectId,
             UUID taskId,

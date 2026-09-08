@@ -65,7 +65,8 @@ public class AgentChatService {
                 projectId,
                 actor,
                 result.conversationId(),
-                result.toolProposal())
+                result.toolProposal(),
+                requestId)
                 .map(result::withPendingAction)
                 .orElseGet(result::withoutToolProposal);
         persist(command(projectId, actor, message, conversationId, requestId), finalized);
@@ -140,7 +141,8 @@ public class AgentChatService {
                     command.projectId(),
                     command.actor(),
                     conversationId,
-                    event.toolProposal())
+                    event.toolProposal(),
+                    command.requestId())
                     .orElse(null);
         }
         return AgentStreamEvent.completed(pendingAction);

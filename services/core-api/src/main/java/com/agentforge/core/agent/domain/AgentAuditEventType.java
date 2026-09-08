@@ -1,9 +1,9 @@
 package com.agentforge.core.agent.domain;
 
-public enum AgentActionStatus {
-    PENDING,
+public enum AgentAuditEventType {
+    REQUESTED,
     APPROVED,
-    EXECUTED,
     REJECTED,
+    EXECUTED,
     FAILED
 }

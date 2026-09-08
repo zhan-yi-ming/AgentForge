@@ -54,6 +54,8 @@ V2-04 继续保持 HTTP schema 不变。Python 把服务端配置的 deployment 
 
 V2-05 不改变 Python Chat HTTP schema，也不让 Python 接收或决定 Tool Policy。Python `toolProposal` 仍只包含动作名与业务参数；Java 忽略任何未声明的权限 Metadata，并按服务端注册表重新确定 role/risk/approval。持久化展示历史由 Core API 在完整成功边界写入 PostgreSQL，Agent Service 的进程内 Context Memory 不读取该表。
 
+V2-06 仍不改变 Python Chat HTTP schema。Approval 五态、Idempotency Key、执行前权限复核与 Audit Event 全部位于 Java/Core API；Python 继续只生成不可信 `toolProposal`，不接收或回传可信 approval、actor、risk、idempotency 或 audit 字段。
+
 最终模型输入受 `AGENTFORGE_AGENT_CONTEXT_TOKEN_BUDGET` 限制；最近轮数、摘要预算和最大 session 数分别由 `AGENTFORGE_AGENT_CONTEXT_RECENT_TURNS`、`AGENTFORGE_AGENT_CONTEXT_SUMMARY_TOKEN_BUDGET`、`AGENTFORGE_AGENT_CONTEXT_MAX_SESSIONS` 控制。预算只影响 Python 内部 Prompt，不改变响应字段、Java 授权、配额或 Tool confirmation 契约。
 
 当 `AGENTFORGE_AGENT_LLM_PROVIDER` 为 `deepseek`、`zhipu` 或 `qwen` 时，`answer` 来自对应 OpenAI-compatible Chat Completions 服务；`disabled` 时为确定性回退回答。`AGENTFORGE_AGENT_LLM_MAX_TOKENS` 统一限制三家模型的最大输出，默认 800、允许 64–4096。`AGENTFORGE_AGENT_REQUEST_TIMEOUT_SECONDS` 限制模型请求和 Core 来源回调的单次等待，应用代码默认 10 秒，Compose 为真实模型显式配置 60 秒；Core 下游读取预算必须更长。provider 缺少 key、模型服务不可达、认证/限流失败、超时或响应不含有效文本时内部入口返回 503，Core API 继续向浏览器输出通用 503，不透传上游正文或凭据。

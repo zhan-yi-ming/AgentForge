@@ -241,11 +241,13 @@ V1.1 在转发给 Agent Service 前原子消费一次用户 UTC 日配额；达�
 
 ### `POST /api/v1/projects/{projectId}/agent/actions/{actionId}/confirm`
 
-无 body。重新校验 JWT、project、action 发起者和目标 Task version。成功返回 action 预览、`status=EXECUTED` 与 `resultTask`。同一 action 重复确认返回同一结果且不重复写入。已拒绝 action 或 stale update 返回 409；路径不匹配返回 404；其他用户返回 403。
+无 body；必须发送 1–100 字符的 `Idempotency-Key`，字符限于字母、数字、点、下划线、冒号和连字符。重新校验 JWT、project、action 发起者、服务端 Tool Policy 和目标 Task version。状态按 `PENDING → APPROVED → EXECUTED | FAILED` 变化。相同 key 重放返回既有结果且不重复写入；不同 key replay、已拒绝 action 返回 409；路径不匹配返回 404；其他用户返回 403。确认前已可见的业务版本冲突返回 `status=FAILED`、`resultTask=null`；flush 期并发乐观锁冲突回滚为 `PENDING` 并返回 409。若已执行结果 Task 后续被删除，同 key replay 仍返回 `status=EXECUTED`，但 `resultTask=null`。
 
 ### `POST /api/v1/projects/{projectId}/agent/actions/{actionId}/reject`
 
-无 body。成功返回 `status=REJECTED`，`resultTask=null`；Task 不变。重复 reject 返回同一结果；已执行 action 返回 409。
+无 body；`Idempotency-Key` 约束与 confirm 相同。成功返回 `status=REJECTED`，`resultTask=null`；Task 不变。相同 key 重放返回既有结果；不同 key replay 或非 PENDING action 返回 409。
+
+V2-06 的 action status 枚举为 `PENDING / APPROVED / REJECTED / EXECUTED / FAILED`。每次请求、批准、拒绝、执行成功或业务失败由 Java 在同一事务中追加审计事实；HTTP 不接受 actor、状态、risk、result 或审计字段。
 
 ## V2-05 Tool Policy 与历史会话
 

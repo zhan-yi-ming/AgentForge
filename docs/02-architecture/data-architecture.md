@@ -90,9 +90,9 @@ Flyway V3 迁移启用 `vector` 扩展并创建 `rag_chunk`。该表可从 Wiki/
 
 唯一键为 `(source_type, source_id, source_version, chunk_index)`；查询索引覆盖 `project_id`，向量使用 cosine HNSW。Python 只访问此表，不访问业务表。来源版本变化时整组替换，来源删除时删除对应 Chunk。
 
-## Day 5 待确认 Task 动作
+## V2-06 Approval 与审计
 
-`agent_task_action` 是 Java 管理的业务确认票据，不是 Python 可写的派生数据。
+`agent_task_action` 是 Java 管理的 Approval payload，不是 Python 可写的派生数据。V2-06 在 Day 5 表上做兼容迁移，不重建已发布数据。
 
 | 字段 | 类型 | 约束 | 含义 |
 | --- | --- | --- | --- |
@@ -105,12 +105,15 @@ Flyway V3 迁移启用 `vector` 扩展并创建 `rag_chunk`。该表可从 Wiki/
 | `title` / `description` | VARCHAR/TEXT | 可空、应用层长度校验 | 创建参数或更新补丁 |
 | `task_status` / `priority` | VARCHAR(20) | Task 枚举 | 创建参数或更新补丁 |
 | `expected_task_version` | BIGINT | update 必填、非负 | 确认时的乐观锁基线 |
-| `status` | VARCHAR(16) | `PENDING` / `EXECUTED` / `REJECTED` | 决策状态 |
+| `status` | VARCHAR(16) | `PENDING` / `APPROVED` / `REJECTED` / `EXECUTED` / `FAILED` | 审批与执行状态 |
 | `result_task_id` | UUID | executed 后填写 | 已创建/更新 Task |
+| `idempotency_key` | VARCHAR(100) | requester 范围内部分唯一 | 首次决策绑定的幂等键 |
 | `version` | BIGINT | 非空 | action 乐观锁 |
-| `created_at` / `decided_at` | TIMESTAMPTZ | created 非空 | 生命周期时间 |
+| `created_at` / `approved_at` / `decided_at` | TIMESTAMPTZ | created 非空 | 生命周期时间 |
 
-confirm/reject 在事务内锁定 action。同一 action 已为 `EXECUTED` 时返回既有 Task，不再次写入；stale update 的事务回滚后 action 仍为 `PENDING`。
+confirm/reject 在事务内悲观锁定 action。同 key 的终态请求返回既有事实，不同 key 冲突；确认前已可见的业务前置条件冲突落为 `FAILED`，flush 期乐观锁或未知基础设施异常回滚整个事务为 `PENDING` 并保持可安全重试。`(requested_by_user_id, idempotency_key)` 部分唯一索引防止同一用户跨 Approval 误用 key。Audit 的首版公共契约不承诺同一事务内事件的独立全序查询；测试验证完整事件集合与状态机约束，不依赖相同 timestamp 下的随机 UUID 排序。
+
+`agent_action_audit_event` 是追加式审计事实，包含 `project_id`、`approval_id`、`actor_user_id`、`action_type`、`target_id`、`event_type`、`result`、`request_id`、`idempotency_key` 和 `created_at`。外键保证 Project/User/Approval 真实存在；业务状态与对应事件在同一 Java 事务提交，不记录 token、Prompt 或密码。
 
 ## 隔离与并发
 

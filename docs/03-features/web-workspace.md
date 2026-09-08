@@ -16,7 +16,7 @@
 2. Web 加载用户自己的项目，选择项目后并行加载 Wiki 和 Task；首次登录显示可关闭的新手引导，完成标记保存在 `localStorage`，顶栏可重新打开。
 3. 用户在主内容中央发送 Chat；Web 复用项目内 conversationId，并在当前项目的浏览器内存会话中保留问答。最新一条默认展开，旧记录默认收起且可逐条展开；切换项目或刷新页面后清空。
 4. 用户向下选择或新建 Wiki，在编辑区修改 Markdown；预览区安全渲染，保存时发送当前 version。
-5. 响应包含 pending action 时，Web 展示 action 类型、Task、字段和预期 version。确认/拒绝只调用 Java action API；成功后刷新 Task。
+5. 响应包含 pending action 时，Web 展示 action 类型、Task、字段和预期 version。确认/拒绝只调用 Java action API，并为该 action 生成稳定 Idempotency Key；网络失败重试复用该 key。只有 `EXECUTED` 成功才刷新 Task，`FAILED` 显示稳定失败信息。
 6. “AI 文本整理”保留原始输入，通过独立、无 conversationId 的 SSE 请求在 complete 前真实展示已到达的 delta。未闭合的全文 Markdown 围栏以流式安全文本展示，避免整个文档变成深色代码块；complete 后再交给共用 Markdown 渲染器。整理与项目 Chat 互斥，结果不改变 Chat 状态或接受 tool proposal。
 7. 点击“应用到 Wiki 草稿”总是进入新的未保存页面：清空旧页面 ID/version，以 fenced code block 外的第一个 H1 作为 title，无真实 H1 时使用默认标题，并滚动到 Wiki 编辑区。原页面保持不变；本次结果应用后按钮禁用，防止保存后重复应用造成重复页面；用户再次点击保存时调用 create API。
 
@@ -29,13 +29,13 @@
 - Wiki 409 不自动覆盖；提示用户刷新后重新合并。
 - Wiki 保存成功显示明确反馈，并以服务端返回和刷新列表中的最新页面、version 更新当前草稿；失败时只展示错误，不显示成功。
 - 保存 Wiki 不会创建 Task；“执行任务”只展示 Task API 数据，并在界面明确说明只有 Agent 提出且用户确认的任务操作才会改变这里。用户应以 Wiki 编辑区的保存状态和版本号判断保存结果。
-- confirm/reject 后清除 pending action；confirm 成功刷新 Task 列表。
+- confirm/reject 达到终态后清除 pending action 与本地 key；confirm 返回 `EXECUTED` 才刷新 Task，返回 `FAILED` 时显示失败且不误刷新；网络失败保留两者供安全重试。
 - 切换项目取消 Chat 与整理流，并清空项目相关草稿、conversation 和 pending action；旧项目迟到事件不可写入当前视图。
 - V2-05 左侧历史入口按当前项目加载认证用户自己的持久化会话。选择历史后进入聊天内容页、恢复已完成消息并复用 conversationId；切换项目会丢弃已加载详情并重新查询，前端不提交 userId 或权限 Metadata。
 
 ## 测试边界
 
-测试通过 DOM 与网络 client 的公共接口观察行为，不断言私有 state。至少覆盖：登录页不出现凭据明文、只显示简历邮箱与微信号提示、任一凭据错误显示统一联系文案、首次引导关闭/持久化/重新打开、登录后 Chat 是主内容首个功能、项目加载、Markdown 原始 HTML 不成为 DOM、完整外层 Markdown 围栏被移除但正文内部代码块保留、项目对话最新展开且旧记录可展开、执行任务语义说明、AI 整理在 stream promise 完成前展示真实 delta、未闭合 fence 不产生整页代码块、与 Chat 互斥、项目切换取消旧流、失败半成品不可应用、意外 proposal 不污染 Chat、应用后形成带标题的新 Wiki 草稿并在保存时调用 create API、滚动定位与反馈、Wiki 保存成功反馈、Chat 展示 pending action、确认后刷新 Task、拒绝不写，以及 Problem Details 可见。
+测试通过 DOM 与网络 client 的公共接口观察行为，不断言私有 state。至少覆盖：登录页不出现凭据明文、只显示简历邮箱与微信号提示、任一凭据错误显示统一联系文案、首次引导关闭/持久化/重新打开、登录后 Chat 是主内容首个功能、项目加载、Markdown 原始 HTML 不成为 DOM、完整外层 Markdown 围栏被移除但正文内部代码块保留、项目对话最新展开且旧记录可展开、执行任务语义说明、AI 整理在 stream promise 完成前展示真实 delta、未闭合 fence 不产生整页代码块、与 Chat 互斥、项目切换取消旧流、失败半成品不可应用、意外 proposal 不污染 Chat、应用后形成带标题的新 Wiki 草稿并在保存时调用 create API、滚动定位与反馈、Wiki 保存成功反馈、Chat 展示 pending action、确认请求携带稳定 key、网络重试复用 key、`EXECUTED` 后刷新 Task、`FAILED` 不误刷新、拒绝不写，以及 Problem Details 可见。
 
 ## 已知限制
 

@@ -12,6 +12,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import com.agentforge.core.agent.domain.AgentActionStatus;
 import com.agentforge.core.agent.domain.AgentActionType;
+import com.agentforge.core.agent.domain.AgentAuditEvent;
+import com.agentforge.core.agent.domain.AgentAuditEventRepository;
+import com.agentforge.core.agent.domain.AgentAuditEventType;
 import com.agentforge.core.agent.domain.AgentTaskAction;
 import com.agentforge.core.agent.domain.AgentTaskActionRepository;
 import com.agentforge.core.project.ProjectAccess;
@@ -30,6 +33,7 @@ import com.agentforge.core.task.domain.TaskStatus;
 public class AgentActionService {
 
     private final AgentTaskActionRepository actions;
+    private final AgentAuditEventRepository auditEvents;
     private final ProjectAccess projectAccess;
     private final ToolRiskEngine riskEngine;
     private final TaskService taskService;
@@ -40,17 +44,28 @@ public class AgentActionService {
             ProjectAccess projectAccess,
             TaskService taskService,
             Clock clock) {
-        this(actions, projectAccess, new ToolRiskEngine(projectAccess), taskService, clock);
+        this(actions, event -> event, projectAccess, taskService, clock);
+    }
+
+    public AgentActionService(
+            AgentTaskActionRepository actions,
+            AgentAuditEventRepository auditEvents,
+            ProjectAccess projectAccess,
+            TaskService taskService,
+            Clock clock) {
+        this(actions, auditEvents, projectAccess, new ToolRiskEngine(projectAccess), taskService, clock);
     }
 
     @Autowired
     public AgentActionService(
             AgentTaskActionRepository actions,
+            AgentAuditEventRepository auditEvents,
             ProjectAccess projectAccess,
             ToolRiskEngine riskEngine,
             TaskService taskService,
             Clock clock) {
         this.actions = actions;
+        this.auditEvents = auditEvents;
         this.projectAccess = projectAccess;
         this.riskEngine = riskEngine;
         this.taskService = taskService;
@@ -63,6 +78,16 @@ public class AgentActionService {
             AuthenticatedActor actor,
             UUID conversationId,
             ToolProposal proposal) {
+        return createPending(projectId, actor, conversationId, proposal, "internal");
+    }
+
+    @Transactional
+    public Optional<AgentActionView> createPending(
+            UUID projectId,
+            AuthenticatedActor actor,
+            UUID conversationId,
+            ToolProposal proposal,
+            String requestId) {
         projectAccess.requireAccess(projectId, actor);
         NormalizedProposal normalized;
         try {
@@ -94,39 +119,124 @@ public class AgentActionService {
                 normalized.priority(),
                 normalized.expectedVersion(),
                 Instant.now(clock));
-        return Optional.of(AgentActionView.from(actions.save(action), null));
+        AgentTaskAction saved = actions.save(action);
+        auditEvents.save(AgentAuditEvent.record(
+                saved, actor.userId(), AgentAuditEventType.REQUESTED,
+                requestId, null, Instant.now(clock)));
+        return Optional.of(AgentActionView.from(saved, null));
     }
 
     @Transactional
     public AgentActionView confirm(UUID projectId, UUID actionId, AuthenticatedActor actor) {
+        return confirm(projectId, actionId, actor, "legacy-" + actionId, "internal");
+    }
+
+    @Transactional
+    public AgentActionView confirm(
+            UUID projectId,
+            UUID actionId,
+            AuthenticatedActor actor,
+            String idempotencyKey,
+            String requestId) {
         projectAccess.requireAccess(projectId, actor);
         AgentTaskAction action = findForDecision(projectId, actionId, actor);
+        ToolOperation operation = operationFor(action);
+        riskEngine.authorize(operation, projectId, actor);
         if (action.getStatus() == AgentActionStatus.REJECTED) {
             throw new ConflictException("The Agent action was rejected.");
         }
         if (action.getStatus() == AgentActionStatus.EXECUTED) {
-            return AgentActionView.from(action, taskService.get(projectId, action.getResultTaskId(), actor));
+            requireMatchingKey(action, idempotencyKey);
+            return AgentActionView.from(action, replayResult(projectId, action, actor));
+        }
+        if (action.getStatus() == AgentActionStatus.FAILED) {
+            requireMatchingKey(action, idempotencyKey);
+            return AgentActionView.from(action, null);
         }
 
-        TaskView result = action.getActionType() == AgentActionType.CREATE_TASK
-                ? executeCreate(projectId, actor, action)
-                : executeUpdate(projectId, actor, action);
+        if (action.getStatus() == AgentActionStatus.PENDING) {
+            action.approve(idempotencyKey, Instant.now(clock));
+            actions.save(action);
+            auditEvents.save(AgentAuditEvent.record(
+                    action, actor.userId(), AgentAuditEventType.APPROVED,
+                    requestId, idempotencyKey, Instant.now(clock)));
+        }
+        else {
+            requireMatchingKey(action, idempotencyKey);
+        }
+
+        TaskView result;
+        try {
+            result = action.getActionType() == AgentActionType.CREATE_TASK
+                    ? executeCreate(projectId, actor, action)
+                    : executeUpdate(projectId, actor, action);
+        }
+        catch (ConflictException exception) {
+            action.markFailed(Instant.now(clock));
+            AgentActionView failed = AgentActionView.from(actions.save(action), null);
+            auditEvents.save(AgentAuditEvent.record(
+                    action, actor.userId(), AgentAuditEventType.FAILED,
+                    requestId, idempotencyKey, Instant.now(clock)));
+            return failed;
+        }
         action.markExecuted(result.id(), Instant.now(clock));
-        return AgentActionView.from(actions.save(action), result);
+        AgentActionView executed = AgentActionView.from(actions.save(action), result);
+        auditEvents.save(AgentAuditEvent.record(
+                action, actor.userId(), AgentAuditEventType.EXECUTED,
+                requestId, idempotencyKey, Instant.now(clock)));
+        return executed;
+    }
+
+    private void requireMatchingKey(AgentTaskAction action, String idempotencyKey) {
+        if (!StringUtils.hasText(idempotencyKey) || !action.hasIdempotencyKey(idempotencyKey)) {
+            throw new ConflictException("The approval was already decided with another idempotency key.");
+        }
     }
 
     @Transactional
     public AgentActionView reject(UUID projectId, UUID actionId, AuthenticatedActor actor) {
+        return reject(projectId, actionId, actor, "legacy-" + actionId, "internal");
+    }
+
+    @Transactional
+    public AgentActionView reject(
+            UUID projectId,
+            UUID actionId,
+            AuthenticatedActor actor,
+            String idempotencyKey,
+            String requestId) {
         projectAccess.requireAccess(projectId, actor);
         AgentTaskAction action = findForDecision(projectId, actionId, actor);
-        if (action.getStatus() == AgentActionStatus.EXECUTED) {
-            throw new ConflictException("The Agent action was already executed.");
+        riskEngine.authorize(operationFor(action), projectId, actor);
+        if (action.getStatus() == AgentActionStatus.REJECTED) {
+            requireMatchingKey(action, idempotencyKey);
+            return AgentActionView.from(action, null);
         }
-        if (action.getStatus() == AgentActionStatus.PENDING) {
-            action.reject(Instant.now(clock));
-            actions.save(action);
+        if (action.getStatus() != AgentActionStatus.PENDING) {
+            throw new ConflictException("The Agent action can no longer be rejected.");
         }
-        return AgentActionView.from(action, null);
+        action.reject(idempotencyKey, Instant.now(clock));
+        AgentActionView rejected = AgentActionView.from(actions.save(action), null);
+        auditEvents.save(AgentAuditEvent.record(
+                action, actor.userId(), AgentAuditEventType.REJECTED,
+                requestId, idempotencyKey, Instant.now(clock)));
+        return rejected;
+    }
+
+    private ToolOperation operationFor(AgentTaskAction action) {
+        return switch (action.getActionType()) {
+            case CREATE_TASK -> ToolOperation.CREATE_TASK;
+            case UPDATE_TASK -> ToolOperation.UPDATE_TASK;
+        };
+    }
+
+    private TaskView replayResult(UUID projectId, AgentTaskAction action, AuthenticatedActor actor) {
+        try {
+            return taskService.get(projectId, action.getResultTaskId(), actor);
+        }
+        catch (ResourceNotFoundException exception) {
+            return null;
+        }
     }
 
     private TaskView executeCreate(UUID projectId, AuthenticatedActor actor, AgentTaskAction action) {

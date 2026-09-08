@@ -72,6 +72,12 @@ public class AgentTaskAction {
     @Column(name = "decided_at")
     private Instant decidedAt;
 
+    @Column(name = "idempotency_key", length = 100)
+    private String idempotencyKey;
+
+    @Column(name = "approved_at")
+    private Instant approvedAt;
+
     protected AgentTaskAction() {
     }
 
@@ -134,7 +140,32 @@ public class AgentTaskAction {
         this.decidedAt = Objects.requireNonNull(decidedAt);
     }
 
-    public void reject(Instant decidedAt) {
+    public void markFailed(Instant decidedAt) {
+        if (status != AgentActionStatus.APPROVED) {
+            throw new IllegalStateException("Only approved actions can fail execution.");
+        }
+        this.status = AgentActionStatus.FAILED;
+        this.decidedAt = Objects.requireNonNull(decidedAt);
+    }
+
+    public void approve(String idempotencyKey, Instant approvedAt) {
+        if (status != AgentActionStatus.PENDING) {
+            throw new IllegalStateException("Only pending actions can be approved.");
+        }
+        this.idempotencyKey = Objects.requireNonNull(idempotencyKey);
+        this.status = AgentActionStatus.APPROVED;
+        this.approvedAt = Objects.requireNonNull(approvedAt);
+    }
+
+    public boolean hasIdempotencyKey(String candidate) {
+        return Objects.equals(idempotencyKey, candidate);
+    }
+
+    public void reject(String idempotencyKey, Instant decidedAt) {
+        if (status != AgentActionStatus.PENDING) {
+            throw new IllegalStateException("Only pending actions can be rejected.");
+        }
+        this.idempotencyKey = Objects.requireNonNull(idempotencyKey);
         this.status = AgentActionStatus.REJECTED;
         this.decidedAt = Objects.requireNonNull(decidedAt);
     }
@@ -155,4 +186,6 @@ public class AgentTaskAction {
     public long getVersion() { return version; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getDecidedAt() { return decidedAt; }
+    public String getIdempotencyKey() { return idempotencyKey; }
+    public Instant getApprovedAt() { return approvedAt; }
 }

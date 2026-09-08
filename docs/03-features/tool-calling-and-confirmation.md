@@ -18,18 +18,18 @@
 
 1. Core API 完成 JWT 与 Project 权限校验后调用 Python Chat。
 2. Python 先执行 Day 4 RAG，再生成可选 `toolProposal`；此时没有业务写入。
-3. Java 白名单校验并保存 action，Chat response 返回 `pendingAction.status=PENDING`。
+3. Java 白名单校验并保存 action，Chat response 返回 `pendingAction.status=PENDING`，同时追加 REQUESTED 审计。
 4. 用户调用 confirm 或 reject。Java 再校验 actor/project/action 归属。
-5. confirm 锁定 action并复用 `TaskService` 创建或更新；update 同时校验 Task 当前 version。
-6. 成功返回 `EXECUTED` 和 resultTask；reject 返回 `REJECTED` 且不写 Task。
+5. confirm 携带 `Idempotency-Key`，锁定 action、重新执行 Tool Policy/RBAC 后进入 `APPROVED`，再复用 `TaskService` 创建或更新；update 同时校验 Task 当前 version。
+6. 成功返回 `EXECUTED` 和 resultTask；业务冲突返回稳定 `FAILED`；reject 返回 `REJECTED` 且不写 Task。每次状态变化均追加结构化审计。
 
 ## 安全与并发
 
 - 客户端和 Python 不能指定 action owner/project；Java 从认证上下文与路径注入。
 - Python 提供的枚举、长度、组合和 UUID 由 Java 再校验，不可信字段返回普通 Chat 且不保存 action，或在公共 action API 返回 400/409。
 - action 必须用 `projectId + actionId` 查询；普通用户还必须匹配 `requestedByUserId`。
-- 同一 action 并发/重复确认最多执行一次；执行结果持久化后重复 confirm 返回同一结果。
-- stale update 返回 409 且不改变 Task；用户应读取最新 Task 后重新发起提案。
+- 同一 action 并发/重复确认最多执行一次；同一 key 在响应丢失后返回既有结果，不同 key replay 返回 409。
+- proposal 创建时已 stale 返回 409 且不保存；批准后发生的版本冲突记录为 `FAILED` 且不改变 Task。
 
 ## 测试边界
 
@@ -40,4 +40,4 @@
 
 ## 已知限制
 
-没有删除 Tool、通用工具注册、过期时间、人工审批人分派、完整审计事件或跨重启 LangGraph resume；没有真实 LLM provider。Day 6 才提供 Web 确认界面。
+没有删除 Tool、通用工具注册、过期时间、人工审批人分派、多级审批、审计查询 UI 或跨重启 LangGraph resume；没有真实 LLM provider。
