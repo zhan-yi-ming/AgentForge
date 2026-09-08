@@ -92,7 +92,6 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const [error, setError] = useState("");
   const [onboardingOpen, setOnboardingOpen] = useState(() => !hasCompletedOnboarding());
   const [activePanel, setActivePanel] = useState<WorkspacePanel | null>(null);
-  const [lastPanel, setLastPanel] = useState<WorkspacePanel>("wiki");
   const [chatMode, setChatMode] = useState(false);
   const [chatExpanded, setChatExpanded] = useState(true);
   const [projectsOpen, setProjectsOpen] = useState(false);
@@ -211,7 +210,6 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
 
   function openPanel(panel: WorkspacePanel) {
     setActivePanel(panel);
-    setLastPanel(panel);
     setChatMode(false);
     setChatExpanded(false);
     setProjectsOpen(false);
@@ -272,7 +270,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     streamAbort.current = controller;
     setStreaming(true); setError(""); setPendingAction(undefined);
     setChatHistory((current) => [...current, { id: historyId, question, answer: "", sources: [] }]);
-    setExpandedChatIds(new Set([historyId]));
+    setExpandedChatIds((current) => new Set([...current, historyId]));
     try {
       const result = await api.chatStream(projectId, question, conversationId, {
         onMetadata: (metadata) => {
@@ -355,6 +353,10 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     }
   }
 
+  function renderChatComposer() {
+    return <form className="chat-composer" onSubmit={(event) => { event.stopPropagation(); void sendChat(event); }}><textarea aria-label="给 Agent 的消息" value={chatMessage} onChange={(event) => setChatMessage(event.target.value)} placeholder="向 Agent 提问，探索项目上下文…" /><div className="composer-footer"><span>Agent 会基于当前项目 Wiki 与任务回答</span><button type="button" className="expand-chat-button" aria-label={chatExpanded ? "缩小聊天输入框" : "放大聊天输入框"} onClick={() => setChatExpanded((expanded) => !expanded)}><Icon name={chatExpanded ? "shrink" : "expand"} /></button><button aria-label="发送" disabled={busy || streaming || !chatMessage.trim()}>{streaming ? "生成中…" : "发送"}<span>↗</span></button></div></form>;
+  }
+
   if (!authenticated) {
     return <main className="auth-shell">
       <section className="login-card">
@@ -382,9 +384,9 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     {tasksOpen && <aside className="floating-drawer tasks-drawer"><div className="drawer-heading"><div><span className="section-label">EXECUTION</span><strong>执行任务</strong></div><button className="drawer-close" aria-label="关闭执行任务" onClick={() => setTasksOpen(false)}>×</button></div><div className="task-list">{tasks.map((task) => <article key={task.id}><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><h3>{task.title}</h3><p>{task.description || "暂无描述"}</p><footer><span>{task.status.replace("_", " ")}</span><span>v{task.version}</span></footer></article>)}{!tasks.length && <p className="empty-state">暂无任务，可让 Agent 提出一个。</p>}</div></aside>}
     <main className="workspace centered-workspace">
       {error && <p role="alert" className="error banner">{error}</p>}
-      <section className={activePanel ? "panel agent-panel chat-collapsed" : "panel agent-panel chat-expanded"}><div className="panel-heading"><div><span className="eyebrow">AI COPILOT</span><h2>项目对话</h2></div>{conversationId && <span className="conversation">会话 {conversationId.slice(0, 8)}</span>}</div>
-        {!activePanel && <div className="agent-welcome"><span className="agent-orb">✦</span><div><strong>你好，我是 AgentForge</strong><p>我会结合当前项目的 Wiki 与任务回答，并在写入前征求你的确认。</p></div></div>}
-        <form className="chat-composer" onSubmit={(event) => { event.stopPropagation(); void sendChat(event); }}><textarea aria-label="给 Agent 的消息" value={chatMessage} onChange={(event) => { event.stopPropagation(); setChatMessage(event.target.value); }} placeholder="向 Agent 提问，探索项目上下文…" /><div className="composer-footer"><span>Agent 会基于当前项目 Wiki 与任务回答</span><button type="button" className="expand-chat-button" aria-label={chatExpanded ? "缩小聊天输入框" : "放大聊天输入框"} onClick={(event) => { event.stopPropagation(); setChatExpanded((expanded) => !expanded); }}><Icon name={chatExpanded ? "shrink" : "expand"} /></button><button aria-label="发送" disabled={busy || streaming || !chatMessage.trim()}>{streaming ? "生成中…" : "发送"}<span>↗</span></button></div></form>
+      <section className={chatMode ? `panel agent-panel chat-session${chatExpanded ? " composer-expanded" : ""}` : activePanel ? `panel agent-panel chat-collapsed${chatExpanded ? " composer-expanded" : ""}` : "panel agent-panel home-chat composer-expanded"}><div className="panel-heading"><div><span className="eyebrow">AI COPILOT</span><h2>项目对话</h2></div>{conversationId && <span className="conversation">会话 {conversationId.slice(0, 8)}</span>}</div>
+        {!activePanel && !chatMode && <div className="agent-welcome"><span className="agent-orb">✦</span><div><strong>你好，我是 AgentForge</strong><p>我会结合当前项目的 Wiki 与任务回答，并在写入前征求你的确认。</p></div></div>}
+        {!chatMode && renderChatComposer()}
         {chatHistory.length > 0 && <div className="conversation-history">{chatHistory.map((item, index) => {
           const expanded = expandedChatIds.has(item.id);
           const isLatest = index === chatHistory.length - 1;
@@ -398,6 +400,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
           </article>;
         })}</div>}
         {pendingAction && <div className="action-card"><span className="eyebrow">等待你的确认</span><h3>{pendingAction.title || pendingAction.actionType}</h3><p>{pendingAction.description || `${pendingAction.taskStatus ?? ""} ${pendingAction.priority ?? ""}`}</p><div><button onClick={() => void decideAction("confirm")} disabled={busy}>确认执行</button><button className="danger" onClick={() => void decideAction("reject")} disabled={busy}>拒绝</button></div></div>}
+        {chatMode && renderChatComposer()}
       </section>
 
       <section className={chatMode ? "workspace-panel workspace-hidden" : "workspace-panel"} ref={wikiPanel}>

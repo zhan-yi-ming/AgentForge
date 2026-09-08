@@ -659,8 +659,6 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 .chat-collapsed .expand-chat-button:hover { background: var(--hover); color: var(--ink); }
 .chat-collapsed .expand-chat-button .ui-icon { width: 16px; height: 16px; }
 .chat-collapsed .composer-footer button[aria-label="发送"] { margin-left: auto; }
-.chat-expanded .chat-composer textarea { min-height: 140px; height: auto; text-align: center; padding-top: 1.2rem; }
-.chat-expanded .composer-footer { justify-content: flex-end; }
 
 @media (max-width: 720px) {
   .topbar-right { gap: .05rem; }
@@ -672,4 +670,37 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
   .topbar .logout-button { font-size: 0; }
   .topbar .logout-button .ui-icon { width: 17px; height: 17px; }
   .chat-tools-rail { left: .65rem; }
+}
+
+/* ---------- Composer states and dedicated conversation view ---------- */
+.chat-composer textarea { text-align: left; }
+.chat-composer textarea::placeholder { text-align: center; }
+.home-chat .chat-composer textarea { min-height: 58px; height: 58px; padding: .65rem .25rem; }
+.chat-collapsed .chat-composer { grid-template-columns: minmax(0, 1fr) auto auto; }
+.chat-collapsed .composer-footer button[aria-label="发送"] { margin-left: 0; }
+.chat-collapsed.composer-expanded .chat-composer { grid-template-columns: 1fr; align-items: stretch; padding: .65rem .75rem .55rem; border-radius: 14px; }
+.chat-collapsed.composer-expanded .chat-composer textarea { min-height: 92px; height: 92px; padding: .75rem .25rem; text-align: left; }
+.chat-collapsed.composer-expanded .composer-footer { display: flex; justify-content: flex-end; gap: .35rem; }
+.chat-collapsed.composer-expanded .composer-footer > span { display: none; }
+.chat-collapsed.composer-expanded .composer-footer button { height: 32px; }
+
+.chat-session { min-height: calc(100vh - 96px); display: flex; flex-direction: column; gap: .5rem; padding: 0 0 .75rem; border: 0; background: transparent; box-shadow: none; }
+.chat-session .panel-heading, .chat-session .agent-welcome { display: none; }
+.chat-session .conversation-history { flex: 1; min-height: 0; max-height: calc(100vh - 250px); overflow: auto; margin: 0; padding: .5rem .35rem 1rem; align-content: start; }
+.chat-session .history-item { display: grid; gap: .55rem; border: 0; border-radius: 0; background: transparent; overflow: visible; }
+.chat-session .history-toggle { width: fit-content; max-width: 78%; justify-self: end; border-radius: 14px 14px 4px 14px; padding: .65rem .9rem; background: var(--active-bg); }
+.chat-session .history-toggle:hover:not(:disabled) { background: var(--hover); }
+.chat-session .history-toggle small { display: none; }
+.chat-session .history-item .answer { width: min(88%, 760px); border: 0; border-top: 0; border-radius: 0; padding: .6rem .15rem 1rem; background: transparent; }
+.chat-session .chat-composer { position: sticky; bottom: .35rem; width: min(100%, 820px); margin: auto auto 0; padding: .65rem .75rem .55rem; border-radius: 16px; box-shadow: 0 8px 28px rgba(28,28,26,.08); }
+.chat-session .chat-composer textarea { min-height: 36px; height: 36px; padding: .45rem .25rem; text-align: left; }
+.chat-session.composer-expanded .chat-composer textarea { min-height: 92px; height: 92px; padding: .7rem .25rem; }
+.chat-session .composer-footer { justify-content: flex-end; gap: .35rem; }
+.chat-session .composer-footer > span { margin-right: auto; }
+
+@media (max-width: 720px) {
+  .chat-session { min-height: calc(100vh - 86px); padding-left: 3.2rem; }
+  .chat-session .conversation-history { max-height: calc(100vh - 235px); }
+  .chat-session .history-toggle { max-width: 90%; }
+  .chat-session .history-item .answer { width: 100%; }
 }
