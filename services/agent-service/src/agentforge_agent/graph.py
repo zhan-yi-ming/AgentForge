@@ -1,21 +1,19 @@
 from collections.abc import Callable
 from typing import TypedDict
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from langgraph.graph import END, START, StateGraph
 
-from .context import ContextBundle, ContextManager, ConversationMemory
+from .context import ContextBundle, ContextManager, ConversationMemory, MemoryNamespace
 from .observability import NullObservation
 from .retrieval import RetrievalResult
 from .tool_planner import plan_tool
 
 
 class ChatState(TypedDict, total=False):
-    project_id: UUID
-    user_id: UUID
+    namespace: MemoryNamespace
     actor_admin: bool
     message: str
-    conversation_id: UUID
     request_id: str
     context_bundle: ContextBundle
     answer: str
@@ -98,23 +96,17 @@ def _context_nodes(
 ):
     def prepare(state: ChatState) -> dict[str, object]:
         def operation() -> dict[str, object]:
-            conversation_id = state.get("conversation_id") or uuid4()
+            namespace = state["namespace"]
             conversation = (
-                conversation_memory.load(
-                    conversation_id,
-                    state["project_id"],
-                    state["user_id"],
-                )
+                conversation_memory.load(namespace)
                 if conversation_memory is not None
                 else None
             )
             return {
                 "context_bundle": ContextManager.build(
-                    project_id=state["project_id"],
-                    user_id=state["user_id"],
+                    namespace=namespace,
                     actor_admin=state["actor_admin"],
                     message=state["message"],
-                    conversation_id=conversation_id,
                     request_id=state["request_id"],
                     conversation=conversation,
                 )

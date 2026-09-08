@@ -50,6 +50,8 @@ V2-02 同样不改变 HTTP schema。上述请求字段在 Python prepare 阶段�
 
 V2-03 仍不改变 HTTP schema。Python 把相同 conversationId 的已完成 user/assistant exchange 放入进程内有界 store，并在下一次请求中组合 Recent Messages 与 Conversation Summary。conversationId 首次使用时绑定 projectId/userId；同一 ID 被其他作用域复用，或 load 后在生成期间被 LRU 淘汰/重绑时，同步入口返回 422。流式响应若已开始则输出通用 `error` 并终止，不发送 `complete`。回答失败或 generation 冲突不提交历史。进程重启、session 淘汰或切换实例会丢失该历史，这是当前节点的显式限制。
 
+V2-04 继续保持 HTTP schema 不变。Python 把服务端配置的 deployment tenant/workspace 与请求中的 projectId、userId、实际 conversationId 组合成内部 Memory Namespace；tenant/workspace 不接受客户端字段。相同 conversationId 位于不同 project/user 时属于不同空 session，不能读取或覆盖其他 Namespace 的历史。每次 load 返回绑定 Namespace 与 generation 的内部 lease，完成提交必须携带该 lease；淘汰或重建后的陈旧提交同步返回 422，已开始的流以通用 `error` 结束。Namespace 只提供记忆归属，不能替代 Java 的项目授权。
+
 最终模型输入受 `AGENTFORGE_AGENT_CONTEXT_TOKEN_BUDGET` 限制；最近轮数、摘要预算和最大 session 数分别由 `AGENTFORGE_AGENT_CONTEXT_RECENT_TURNS`、`AGENTFORGE_AGENT_CONTEXT_SUMMARY_TOKEN_BUDGET`、`AGENTFORGE_AGENT_CONTEXT_MAX_SESSIONS` 控制。预算只影响 Python 内部 Prompt，不改变响应字段、Java 授权、配额或 Tool confirmation 契约。
 
 当 `AGENTFORGE_AGENT_LLM_PROVIDER` 为 `deepseek`、`zhipu` 或 `qwen` 时，`answer` 来自对应 OpenAI-compatible Chat Completions 服务；`disabled` 时为确定性回退回答。`AGENTFORGE_AGENT_LLM_MAX_TOKENS` 统一限制三家模型的最大输出，默认 800、允许 64–4096。`AGENTFORGE_AGENT_REQUEST_TIMEOUT_SECONDS` 限制模型请求和 Core 来源回调的单次等待，应用代码默认 10 秒，Compose 为真实模型显式配置 60 秒；Core 下游读取预算必须更长。provider 缺少 key、模型服务不可达、认证/限流失败、超时或响应不含有效文本时内部入口返回 503，Core API 继续向浏览器输出通用 503，不透传上游正文或凭据。

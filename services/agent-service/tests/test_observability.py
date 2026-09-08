@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from agentforge_agent.api import get_observability, get_responder, get_retrieval_service
 from agentforge_agent.config import Settings
-from agentforge_agent.context import ContextManager
+from agentforge_agent.context import ContextManager, MemoryNamespace
 from agentforge_agent.graph import build_chat_graph
 from agentforge_agent.llm import CompatibleLlmResponder
 from agentforge_agent.main import app
@@ -49,6 +49,16 @@ class FakeLangfuseClient:
 
     def shutdown(self) -> None:
         self.shutdown_called = True
+
+
+def memory_namespace(project_id=None, thread_id=None) -> MemoryNamespace:
+    return MemoryNamespace(
+        tenant_id="agentforge",
+        workspace_id="default",
+        project_id=project_id or uuid4(),
+        user_id=uuid4(),
+        thread_id=thread_id or uuid4(),
+    )
 
 
 def test_langfuse_observability_preserves_request_hierarchy_and_safe_ids() -> None:
@@ -169,11 +179,9 @@ def test_chat_graph_records_each_agent_node_without_sensitive_content() -> None:
     )
     result = graph.invoke(
         {
-            "project_id": project_id,
-            "user_id": uuid4(),
+            "namespace": memory_namespace(project_id, thread_id),
             "actor_admin": False,
             "message": "private user message",
-            "conversation_id": thread_id,
             "request_id": "request-graph",
         }
     )
@@ -219,11 +227,9 @@ def test_failed_graph_node_closes_with_sanitized_error_type() -> None:
     with pytest.raises(RuntimeError, match="secret details"):
         graph.invoke(
             {
-                "project_id": uuid4(),
-                "user_id": uuid4(),
+                "namespace": memory_namespace(),
                 "actor_admin": False,
                 "message": "private user message",
-                "conversation_id": uuid4(),
                 "request_id": "request-error",
             }
         )
@@ -419,11 +425,15 @@ def test_llm_generation_records_provider_model_and_reported_token_usage() -> Non
     )
 
     bundle = ContextManager.build(
-        project_id=uuid4(),
-        user_id=uuid4(),
+        namespace=MemoryNamespace(
+            tenant_id="agentforge",
+            workspace_id="default",
+            project_id=uuid4(),
+            user_id=uuid4(),
+            thread_id=uuid4(),
+        ),
         actor_admin=False,
         message="private message",
-        conversation_id=uuid4(),
         request_id="request-usage",
     )
     bundle = ContextManager.with_retrieval(

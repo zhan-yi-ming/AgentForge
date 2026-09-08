@@ -20,3 +20,5 @@ ADR 保存影响长期结构的决定。编号只增不减，Accepted 记录不�
 - `ADR-0014-streaming-agent-and-demo-credentials.md`：用内部 NDJSON、公共 SSE 实现真实流式 Agent，并把固定 Demo 凭据限制在服务器。
 - `ADR-0015-public-demo-credential-and-centered-chat.md`：把固定面试账号定义为受限公开 Demo 凭据，并以居中对话和首次引导降低体验门槛。
 - `ADR-0016-langfuse-fail-open-observability.md`：由 Python 集中建立脱敏、fail-open 的 Langfuse Agent Trace，不改变 Java 确定性业务边界。
+- `ADR-0017-process-local-bounded-conversation-context.md`：用进程内有界 store 提供 Conversation Summary 与 Token Budget，并保留显式恢复限制。
+- `ADR-0018-process-local-memory-namespace.md`：用完整 Memory Namespace 与强制 lease 隔离 tenant/workspace/project/user/thread，不提前建立业务 Workspace 数据模型。

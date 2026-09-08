@@ -1,5 +1,7 @@
+from dataclasses import replace
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from agentforge_agent.api import (
@@ -7,7 +9,8 @@ from agentforge_agent.api import (
     get_responder,
     get_retrieval_service,
 )
-from agentforge_agent.context import ConversationMemory, TokenCounter
+from agentforge_agent.config import Settings, get_settings
+from agentforge_agent.context import ConversationMemory, MemoryNamespace, TokenCounter
 from agentforge_agent.errors import LlmDependencyError
 from agentforge_agent.main import app
 from agentforge_agent.retrieval import RetrievalResult
@@ -16,6 +19,16 @@ from agentforge_agent.schemas import ChatSource
 
 client = TestClient(app)
 TOKEN = "test-only-internal-token"
+
+
+def api_namespace(project_id, user_id, conversation_id) -> MemoryNamespace:
+    return MemoryNamespace(
+        tenant_id="agentforge",
+        workspace_id="default",
+        project_id=UUID(str(project_id)),
+        user_id=UUID(str(user_id)),
+        thread_id=UUID(str(conversation_id)),
+    )
 
 
 class FakeRetrievalService:
@@ -156,6 +169,40 @@ def test_chat_preserves_conversation_id() -> None:
     assert response.json()["conversationId"] == conversation_id
 
 
+def test_chat_namespace_uses_server_configuration_not_request_fields() -> None:
+    configured = Settings(
+        internal_token=TOKEN,
+        AGENTFORGE_CORE_INTERNAL_TOKEN="test-only-core-token",
+        rag_db_dsn="postgresql://agentforge:agentforge@localhost:5432/agentforge",
+        namespace_tenant="server-tenant",
+        namespace_workspace="server-workspace",
+    )
+    captured = []
+
+    def recording_responder(state):
+        captured.append(state["context_bundle"].conversation.namespace)
+        return "isolated"
+
+    payload = chat_request()
+    payload["namespaceTenant"] = "client-tenant"
+    payload["namespaceWorkspace"] = "client-workspace"
+    app.dependency_overrides[get_settings] = lambda: configured
+    app.dependency_overrides[get_responder] = lambda: recording_responder
+    try:
+        response = client.post(
+            "/internal/v1/chat",
+            headers={"X-AgentForge-Internal-Token": TOKEN},
+            json=payload,
+        )
+    finally:
+        app.dependency_overrides.pop(get_responder, None)
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    assert captured[0].tenant_id == "server-tenant"
+    assert captured[0].workspace_id == "server-workspace"
+
+
 def test_chat_reuses_only_completed_exchange_for_same_conversation() -> None:
     memory = ConversationMemory(
         recent_turns=1,
@@ -257,37 +304,54 @@ def test_chat_failure_does_not_commit_partial_exchange() -> None:
         app.dependency_overrides.pop(get_conversation_memory, None)
 
     assert response.status_code == 503
-    assert memory.load(conversation_id, project_id, user_id).recent_messages == ()
+    assert (
+        memory.load(api_namespace(project_id, user_id, conversation_id)).recent_messages
+        == ()
+    )
 
 
-def test_chat_rejects_conversation_id_reused_by_another_project() -> None:
+@pytest.mark.parametrize("changed_field", ["project_id", "user_id", "conversation_id"])
+def test_chat_isolates_project_user_and_thread_namespaces(changed_field) -> None:
     memory = ConversationMemory(
         recent_turns=2,
         summary_token_budget=200,
         max_sessions=10,
         token_counter=TokenCounter(),
     )
-    conversation_id = str(uuid4())
-    user_id = str(uuid4())
+    original = {
+        "project_id": str(uuid4()),
+        "user_id": str(uuid4()),
+        "conversation_id": str(uuid4()),
+    }
+    isolated = {**original, changed_field: str(uuid4())}
+    seen = []
+
+    def recording_responder(state):
+        seen.append(state["context_bundle"].conversation.recent_messages)
+        return f"answer-{len(seen)}"
+
     app.dependency_overrides[get_conversation_memory] = lambda: memory
-    app.dependency_overrides[get_responder] = lambda: fake_llm_responder
+    app.dependency_overrides[get_responder] = lambda: recording_responder
     try:
         first = client.post(
             "/internal/v1/chat",
             headers={"X-AgentForge-Internal-Token": TOKEN},
             json=chat_request(
-                project_id=str(uuid4()),
-                user_id=user_id,
-                conversation_id=conversation_id,
+                **original,
             ),
         )
         second = client.post(
             "/internal/v1/chat",
             headers={"X-AgentForge-Internal-Token": TOKEN},
             json=chat_request(
-                project_id=str(uuid4()),
-                user_id=user_id,
-                conversation_id=conversation_id,
+                **isolated,
+            ),
+        )
+        third = client.post(
+            "/internal/v1/chat",
+            headers={"X-AgentForge-Internal-Token": TOKEN},
+            json=chat_request(
+                **original,
             ),
         )
     finally:
@@ -295,10 +359,11 @@ def test_chat_rejects_conversation_id_reused_by_another_project() -> None:
         app.dependency_overrides.pop(get_conversation_memory, None)
 
     assert first.status_code == 200
-    assert second.status_code == 422
-    assert second.json() == {
-        "detail": "conversation scope does not match project and user"
-    }
+    assert second.status_code == 200
+    assert third.status_code == 200
+    assert seen[0] == ()
+    assert seen[1] == ()
+    assert [item.content for item in seen[2]] == ["hello", "answer-1"]
 
 
 def test_chat_returns_422_when_session_is_evicted_and_rebound_during_generation() -> None:
@@ -309,13 +374,13 @@ def test_chat_returns_422_when_session_is_evicted_and_rebound_during_generation(
         token_counter=TokenCounter(),
     )
     project_id = uuid4()
-    other_project_id = uuid4()
     user_id = uuid4()
     conversation_id = uuid4()
 
     def rebinding_responder(state):
-        memory.load(uuid4(), project_id, user_id)
-        memory.load(conversation_id, other_project_id, user_id)
+        original = state["context_bundle"].conversation.namespace
+        memory.load(replace(original, thread_id=uuid4()))
+        memory.load(original)
         return "answer generated from stale snapshot"
 
     app.dependency_overrides[get_conversation_memory] = lambda: memory
@@ -336,7 +401,7 @@ def test_chat_returns_422_when_session_is_evicted_and_rebound_during_generation(
 
     assert response.status_code == 422
     assert "conversation" in response.json()["detail"]
-    rebound = memory.load(conversation_id, other_project_id, user_id)
+    rebound = memory.load(api_namespace(project_id, user_id, conversation_id))
     assert rebound.recent_messages == ()
 
 
@@ -369,11 +434,7 @@ def test_chat_stream_commits_only_after_complete_generation() -> None:
 
     assert response.status_code == 200
     assert '"type":"complete"' in response.text
-    context = memory.load(
-        UUID(conversation_id),
-        UUID(project_id),
-        UUID(user_id),
-    )
+    context = memory.load(api_namespace(project_id, user_id, conversation_id))
     assert [(item.role, item.content) for item in context.recent_messages] == [
         ("user", "stream question"),
         ("assistant", "第一段，第二段"),
@@ -414,7 +475,10 @@ def test_chat_stream_failure_does_not_commit_partial_delta() -> None:
     assert response.status_code == 200
     assert '"type":"error"' in response.text
     assert '"type":"complete"' not in response.text
-    assert memory.load(conversation_id, project_id, user_id).recent_messages == ()
+    assert (
+        memory.load(api_namespace(project_id, user_id, conversation_id)).recent_messages
+        == ()
+    )
 
 
 def test_chat_stream_emits_error_when_session_is_rebound_before_commit() -> None:
@@ -425,14 +489,14 @@ def test_chat_stream_emits_error_when_session_is_rebound_before_commit() -> None
         token_counter=TokenCounter(),
     )
     project_id = uuid4()
-    other_project_id = uuid4()
     user_id = uuid4()
     conversation_id = uuid4()
 
     class RebindingStream:
         def stream(self, state):
-            memory.load(uuid4(), project_id, user_id)
-            memory.load(conversation_id, other_project_id, user_id)
+            original = state["context_bundle"].conversation.namespace
+            memory.load(replace(original, thread_id=uuid4()))
+            memory.load(original)
             yield "stale answer"
 
     app.dependency_overrides[get_conversation_memory] = lambda: memory
@@ -455,7 +519,7 @@ def test_chat_stream_emits_error_when_session_is_rebound_before_commit() -> None
     assert '"type":"error"' in response.text
     assert '"type":"complete"' not in response.text
     assert memory.load(
-        conversation_id, other_project_id, user_id
+        api_namespace(project_id, user_id, conversation_id)
     ).recent_messages == ()
 
 

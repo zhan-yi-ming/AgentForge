@@ -6,8 +6,10 @@ import pytest
 from agentforge_agent.config import Settings
 from agentforge_agent.context import (
     ConversationContext,
+    ConversationLease,
     ConversationMessage,
     ContextManager,
+    MemoryNamespace,
     TokenCounter,
 )
 from agentforge_agent.errors import LlmDependencyError
@@ -46,13 +48,24 @@ def settings(**overrides) -> Settings:
     return Settings(**values)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("namespace_tenant", "Tenant With Spaces"),
+        ("namespace_workspace", "../workspace"),
+    ],
+)
+def test_settings_reject_invalid_namespace_scope(field, value) -> None:
+    with pytest.raises(ValueError):
+        settings(**{field: value})
+
+
 def context_state(message="hello", retrieved_context="", proposal=None):
+    scoped = memory_namespace()
     bundle = ContextManager.build(
-        project_id=uuid4(),
-        user_id=uuid4(),
+        namespace=scoped,
         actor_admin=False,
         message=message,
-        conversation_id=uuid4(),
         request_id="request-llm",
     )
     bundle = ContextManager.with_retrieval(
@@ -60,6 +73,25 @@ def context_state(message="hello", retrieved_context="", proposal=None):
     )
     bundle = ContextManager.with_tool(bundle, proposal)
     return {"context_bundle": bundle}
+
+
+def memory_namespace(project_id=None, user_id=None, thread_id=None):
+    return MemoryNamespace(
+        tenant_id="agentforge",
+        workspace_id="default",
+        project_id=project_id or uuid4(),
+        user_id=user_id or uuid4(),
+        thread_id=thread_id or uuid4(),
+    )
+
+
+def conversation(scoped, *, summary=None, recent_messages=()):
+    return ConversationContext(
+        namespace=scoped,
+        lease=ConversationLease(scoped, uuid4()),
+        summary=summary,
+        recent_messages=recent_messages,
+    )
 
 
 def test_compatible_responder_sends_question_and_retrieved_context() -> None:
@@ -113,15 +145,14 @@ def test_prompt_composer_enforces_total_budget_and_protects_retrieval() -> None:
     conversation_id = uuid4()
     project_id = uuid4()
     user_id = uuid4()
+    scoped = memory_namespace(project_id, user_id, conversation_id)
     bundle = ContextManager.build(
-        project_id=project_id,
-        user_id=user_id,
+        namespace=scoped,
         actor_admin=False,
         message="当前请求",
-        conversation_id=conversation_id,
         request_id="request-budget",
-        conversation=ConversationContext(
-            conversation_id=conversation_id,
+        conversation=conversation(
+            scoped,
             summary="旧摘要 " * 200,
             recent_messages=(
                 ConversationMessage("user", "较旧消息 " * 100),
@@ -153,15 +184,14 @@ def test_prompt_composer_enforces_total_budget_and_protects_retrieval() -> None:
 
 def test_prompt_composer_keeps_summary_and_recent_messages_in_separate_sections() -> None:
     conversation_id = uuid4()
+    scoped = memory_namespace(thread_id=conversation_id)
     bundle = ContextManager.build(
-        project_id=uuid4(),
-        user_id=uuid4(),
+        namespace=scoped,
         actor_admin=False,
         message="current question",
-        conversation_id=conversation_id,
         request_id="request-sections",
-        conversation=ConversationContext(
-            conversation_id=conversation_id,
+        conversation=conversation(
+            scoped,
             summary="用户：旧约束是 Java 负责业务写入",
             recent_messages=(
                 ConversationMessage("user", "latest question"),
@@ -184,15 +214,14 @@ def test_prompt_composer_drops_last_recent_exchange_atomically() -> None:
     conversation_id = uuid4()
 
     def bundle_with(messages):
+        scoped = memory_namespace(thread_id=conversation_id)
         return ContextManager.build(
-            project_id=uuid4(),
-            user_id=uuid4(),
+            namespace=scoped,
             actor_admin=False,
             message="current",
-            conversation_id=conversation_id,
             request_id="request-atomic",
-            conversation=ConversationContext(
-                conversation_id=conversation_id,
+            conversation=conversation(
+                scoped,
                 recent_messages=messages,
             ),
         )

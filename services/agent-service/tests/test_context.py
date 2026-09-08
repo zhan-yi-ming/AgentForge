@@ -3,9 +3,11 @@ from uuid import uuid4
 import pytest
 
 from agentforge_agent.context import (
+    ConversationLease,
     ConversationContext,
     ConversationMemory,
     ContextManager,
+    MemoryNamespace,
     TokenCounter,
 )
 from agentforge_agent.graph import build_chat_graph
@@ -13,10 +15,29 @@ from agentforge_agent.retrieval import RetrievalResult
 from agentforge_agent.schemas import ChatSource, ToolProposal
 
 
+def namespace(project_id=None, user_id=None, thread_id=None) -> MemoryNamespace:
+    return MemoryNamespace(
+        tenant_id="agentforge",
+        workspace_id="default",
+        project_id=project_id or uuid4(),
+        user_id=user_id or uuid4(),
+        thread_id=thread_id or uuid4(),
+    )
+
+
+def commit(memory, scoped, user_message, assistant_message) -> None:
+    memory.commit_exchange(
+        memory.load(scoped).lease,
+        user_message,
+        assistant_message,
+    )
+
+
 def test_context_manager_builds_and_updates_one_explicit_bundle() -> None:
     project_id = uuid4()
     user_id = uuid4()
     conversation_id = uuid4()
+    scoped = namespace(project_id, user_id, conversation_id)
     source = ChatSource(
         source_type="WIKI",
         source_id=uuid4(),
@@ -32,11 +53,9 @@ def test_context_manager_builds_and_updates_one_explicit_bundle() -> None:
     )
 
     initial = ContextManager.build(
-        project_id=project_id,
-        user_id=user_id,
+        namespace=scoped,
         actor_admin=False,
         message="  explain the architecture  ",
-        conversation_id=conversation_id,
         request_id="request-context",
     )
     retrieved = ContextManager.with_retrieval(
@@ -60,15 +79,18 @@ def test_context_manager_builds_and_updates_one_explicit_bundle() -> None:
 
 
 def test_context_manager_rejects_mismatched_conversation_snapshot() -> None:
-    with pytest.raises(ValueError, match="conversation id"):
+    scoped = namespace()
+    other = namespace()
+    with pytest.raises(ValueError, match="namespace"):
         ContextManager.build(
-            project_id=uuid4(),
-            user_id=uuid4(),
+            namespace=scoped,
             actor_admin=False,
             message="hello",
-            conversation_id=uuid4(),
             request_id="request-mismatch",
-            conversation=ConversationContext(conversation_id=uuid4()),
+            conversation=ConversationContext(
+                namespace=other,
+                lease=ConversationLease(other, uuid4()),
+            ),
         )
 
 
@@ -76,6 +98,7 @@ def test_chat_graph_nodes_share_context_bundle_across_project_boundaries() -> No
     project_id = uuid4()
     user_id = uuid4()
     conversation_id = uuid4()
+    scoped = namespace(project_id, user_id, conversation_id)
     captured = {}
 
     def retriever(received_project_id, received_user_id, actor_admin, query, request_id):
@@ -94,11 +117,9 @@ def test_chat_graph_nodes_share_context_bundle_across_project_boundaries() -> No
 
     result = build_chat_graph(retriever, responder).invoke(
         {
-            "project_id": project_id,
-            "user_id": user_id,
+            "namespace": scoped,
             "actor_admin": False,
             "message": "  explain context  ",
-            "conversation_id": conversation_id,
             "request_id": "request-graph-context",
         }
     )
@@ -128,24 +149,23 @@ def test_conversation_memory_moves_only_completed_raw_exchange_into_summary() ->
     project_id = uuid4()
     user_id = uuid4()
     conversation_id = uuid4()
+    scoped = namespace(project_id, user_id, conversation_id)
 
-    assert memory.load(conversation_id, project_id, user_id).summary is None
-    memory.commit_exchange(
-        conversation_id,
-        project_id,
-        user_id,
+    assert memory.load(scoped).summary is None
+    commit(
+        memory,
+        scoped,
         "必须保留 Java 负责业务写入",
         "已记录该约束",
     )
-    memory.commit_exchange(
-        conversation_id,
-        project_id,
-        user_id,
+    commit(
+        memory,
+        scoped,
         "最近的问题",
         "最近的回答",
     )
 
-    context = memory.load(conversation_id, project_id, user_id)
+    context = memory.load(scoped)
     assert [(message.role, message.content) for message in context.recent_messages] == [
         ("user", "最近的问题"),
         ("assistant", "最近的回答"),
@@ -156,7 +176,7 @@ def test_conversation_memory_moves_only_completed_raw_exchange_into_summary() ->
     assert "最近的问题" not in context.summary
 
 
-def test_conversation_memory_rejects_cross_scope_conversation_reuse() -> None:
+def test_conversation_memory_separates_cross_scope_conversation_reuse() -> None:
     memory = ConversationMemory(
         recent_turns=2,
         summary_token_budget=100,
@@ -166,13 +186,19 @@ def test_conversation_memory_rejects_cross_scope_conversation_reuse() -> None:
     project_id = uuid4()
     user_id = uuid4()
     conversation_id = uuid4()
+    scoped = namespace(project_id, user_id, conversation_id)
 
-    memory.load(conversation_id, project_id, user_id)
+    commit(memory, scoped, "private", "answer")
 
-    with pytest.raises(ValueError, match="scope"):
-        memory.load(conversation_id, uuid4(), user_id)
-    with pytest.raises(ValueError, match="scope"):
-        memory.load(conversation_id, project_id, uuid4())
+    assert (
+        memory.load(namespace(uuid4(), user_id, conversation_id)).recent_messages
+        == ()
+    )
+    assert (
+        memory.load(namespace(project_id, uuid4(), conversation_id)).recent_messages
+        == ()
+    )
+    assert memory.load(scoped).recent_messages
 
 
 def test_conversation_memory_evicts_least_recently_used_session() -> None:
@@ -187,14 +213,17 @@ def test_conversation_memory_evicts_least_recently_used_session() -> None:
     first = uuid4()
     second = uuid4()
     third = uuid4()
-    memory.commit_exchange(first, project_id, user_id, "first", "answer-first")
-    memory.commit_exchange(second, project_id, user_id, "second", "answer-second")
-    memory.load(first, project_id, user_id)
+    first_scope = namespace(project_id, user_id, first)
+    second_scope = namespace(project_id, user_id, second)
+    third_scope = namespace(project_id, user_id, third)
+    commit(memory, first_scope, "first", "answer-first")
+    commit(memory, second_scope, "second", "answer-second")
+    memory.load(first_scope)
 
-    memory.commit_exchange(third, project_id, user_id, "third", "answer-third")
+    commit(memory, third_scope, "third", "answer-third")
 
-    assert memory.load(first, project_id, user_id).recent_messages
-    assert memory.load(second, project_id, user_id).recent_messages == ()
+    assert memory.load(first_scope).recent_messages
+    assert memory.load(second_scope).recent_messages == ()
 
 
 def test_conversation_summary_respects_its_own_budget() -> None:
@@ -208,16 +237,16 @@ def test_conversation_summary_respects_its_own_budget() -> None:
     project_id = uuid4()
     user_id = uuid4()
     conversation_id = uuid4()
+    scoped = namespace(project_id, user_id, conversation_id)
     for index in range(5):
-        memory.commit_exchange(
-            conversation_id,
-            project_id,
-            user_id,
+        commit(
+            memory,
+            scoped,
             f"constraint-{index}",
             f"answer-{index}",
         )
 
-    summary = memory.load(conversation_id, project_id, user_id).summary
+    summary = memory.load(scoped).summary
 
     assert summary is not None
     assert counter.count_text(summary) <= 32
@@ -235,15 +264,15 @@ def test_conversation_memory_caps_each_stored_message() -> None:
     project_id = uuid4()
     user_id = uuid4()
     conversation_id = uuid4()
+    scoped = namespace(project_id, user_id, conversation_id)
 
-    memory.commit_exchange(
-        conversation_id,
-        project_id,
-        user_id,
+    commit(
+        memory,
+        scoped,
         "user-content-that-is-too-long",
         "assistant-content-that-is-too-long",
     )
 
-    context = memory.load(conversation_id, project_id, user_id)
+    context = memory.load(scoped)
     assert len(context.recent_messages) == 2
     assert all(counter.count_text(item.content) <= 16 for item in context.recent_messages)

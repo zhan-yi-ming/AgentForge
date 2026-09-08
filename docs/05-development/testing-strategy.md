@@ -142,3 +142,11 @@ Day 4 跨进程闭环由仓库脚本执行：
 - TDD 必须覆盖多轮 Recent/Summary 分离、关键旧约束可见、Tool/检索内容不进入摘要、跨 project/user conversationId 拒绝、session/summary 有界，以及最终 System + Human 输入计数不超过配置预算。
 - 同步与流式分别验证成功后提交完整 exchange；LLM 失败或不完整 stream 不得提交历史。Retrieval Context 必须在历史超预算时仍保留，最近消息必须作为独立 section 而不是被 Summary 替换。
 - V2-03 属于 Agent 全局 Context/State L3；执行 Agent Service 全量 pytest、Java `clean verify`、真实 Java/Python chat 与 stream 契约 smoke、配置解析、敏感扫描和 Pi Milestone Review。HTTP schema 未变化且 Web 不读取内部上下文，因此不把 Web 全量测试列为最低门禁；若实现扩散到 Web 或公共字段则立即补跑。
+
+## V2-04 Memory Namespace 隔离门槛
+
+- 约定 seam 为 `MemoryNamespace`/Conversation store 公共接口、ContextBundle、FastAPI `/internal/v1/chat` 与 `/internal/v1/chat/stream`、Retriever/RagStore 公开适配器及不变的 Java/Python HTTP 契约。
+- TDD 必须逐一改变 tenant、workspace、project、user、thread，证明另一个 Namespace 得到空历史且不能覆盖原历史；不得只测试正向相等。
+- load 必须返回不可省略的 lease，commit 必须同时匹配完整 Namespace 与 generation。LRU 淘汰、session 重建、同步失败和不完整 stream 不得写入陈旧或跨 Namespace 回答。
+- Retriever 只能使用 ContextBundle 中同一个 Namespace 的 project/user；真实 pgvector 测试继续证明查询、替换和删除均受 projectId 限定。
+- V2-04 属于隔离和 Agent 状态 L3；执行 Agent Service 全量 pytest、真实 pgvector 测试、Java→Python chat/stream 契约 smoke、配置解析、敏感扫描和 Pi Milestone Review。若 HTTP schema、Java 或 Web 实现发生变化，按实际影响追加对应完整门禁。

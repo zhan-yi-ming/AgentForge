@@ -21,23 +21,55 @@ class ConversationMessage:
 
 
 @dataclass(frozen=True)
+class MemoryNamespace:
+    tenant_id: str
+    workspace_id: str
+    project_id: UUID
+    user_id: UUID
+    thread_id: UUID
+
+    def __post_init__(self) -> None:
+        tenant_id = (self.tenant_id or "").strip()
+        workspace_id = (self.workspace_id or "").strip()
+        if not tenant_id:
+            raise ValueError("tenant namespace must not be blank")
+        if not workspace_id:
+            raise ValueError("workspace namespace must not be blank")
+        object.__setattr__(self, "tenant_id", tenant_id)
+        object.__setattr__(self, "workspace_id", workspace_id)
+
+
+@dataclass(frozen=True)
+class ConversationLease:
+    namespace: MemoryNamespace
+    session_generation: UUID
+
+
+@dataclass(frozen=True)
 class ConversationContext:
-    conversation_id: UUID
+    namespace: MemoryNamespace
+    lease: ConversationLease
     summary: str | None = None
     recent_messages: tuple[ConversationMessage, ...] = ()
-    session_generation: UUID | None = field(
-        default=None,
-        repr=False,
-        compare=False,
-    )
+
+    @property
+    def conversation_id(self) -> UUID:
+        return self.namespace.thread_id
 
 
 @dataclass(frozen=True)
 class ProjectContext:
-    project_id: UUID
-    user_id: UUID
+    namespace: MemoryNamespace
     actor_admin: bool
     request_id: str
+
+    @property
+    def project_id(self) -> UUID:
+        return self.namespace.project_id
+
+    @property
+    def user_id(self) -> UUID:
+        return self.namespace.user_id
 
 
 @dataclass(frozen=True)
@@ -86,8 +118,6 @@ class TokenCounter:
 
 @dataclass
 class _ConversationSession:
-    project_id: UUID
-    user_id: UUID
     generation: UUID = field(default_factory=uuid4)
     recent_messages: list[ConversationMessage] = field(default_factory=list)
     summary_messages: list[ConversationMessage] = field(default_factory=list)
@@ -115,32 +145,29 @@ class ConversationMemory:
         self._max_sessions = max_sessions
         self._token_counter = token_counter
         self._message_token_budget = message_token_budget
-        self._sessions: OrderedDict[UUID, _ConversationSession] = OrderedDict()
+        self._sessions: OrderedDict[
+            MemoryNamespace, _ConversationSession
+        ] = OrderedDict()
         self._lock = RLock()
 
     def load(
         self,
-        conversation_id: UUID,
-        project_id: UUID,
-        user_id: UUID,
+        namespace: MemoryNamespace,
     ) -> ConversationContext:
         with self._lock:
-            session = self._session(conversation_id, project_id, user_id)
+            session = self._session(namespace)
             return ConversationContext(
-                conversation_id=conversation_id,
+                namespace=namespace,
+                lease=ConversationLease(namespace, session.generation),
                 summary=self._render_summary(session.summary_messages),
                 recent_messages=tuple(session.recent_messages),
-                session_generation=session.generation,
             )
 
     def commit_exchange(
         self,
-        conversation_id: UUID,
-        project_id: UUID,
-        user_id: UUID,
+        lease: ConversationLease,
         user_message: str,
         assistant_message: str,
-        expected_session_generation: UUID | None = None,
     ) -> None:
         normalized_user = user_message.strip()
         normalized_assistant = assistant_message.strip()
@@ -155,12 +182,7 @@ class ConversationMemory:
             self._message_token_budget,
         )
         with self._lock:
-            session = self._session_for_commit(
-                conversation_id,
-                project_id,
-                user_id,
-                expected_session_generation,
-            )
+            session = self._session_for_commit(lease)
             session.recent_messages.extend(
                 (
                     ConversationMessage("user", normalized_user),
@@ -175,40 +197,29 @@ class ConversationMemory:
 
     def _session_for_commit(
         self,
-        conversation_id: UUID,
-        project_id: UUID,
-        user_id: UUID,
-        expected_generation: UUID | None,
+        lease: ConversationLease,
     ) -> _ConversationSession:
-        if expected_generation is None:
-            return self._session(conversation_id, project_id, user_id)
-        session = self._sessions.get(conversation_id)
+        session = self._sessions.get(lease.namespace)
         if (
             session is None
-            or session.project_id != project_id
-            or session.user_id != user_id
-            or session.generation != expected_generation
+            or session.generation != lease.session_generation
         ):
             raise ValueError("conversation changed before completion")
-        self._sessions.move_to_end(conversation_id)
+        self._sessions.move_to_end(lease.namespace)
         return session
 
     def _session(
         self,
-        conversation_id: UUID,
-        project_id: UUID,
-        user_id: UUID,
+        namespace: MemoryNamespace,
     ) -> _ConversationSession:
-        session = self._sessions.get(conversation_id)
+        session = self._sessions.get(namespace)
         if session is None:
             if len(self._sessions) >= self._max_sessions:
                 self._sessions.popitem(last=False)
-            session = _ConversationSession(project_id=project_id, user_id=user_id)
-            self._sessions[conversation_id] = session
-        elif session.project_id != project_id or session.user_id != user_id:
-            raise ValueError("conversation scope does not match project and user")
+            session = _ConversationSession()
+            self._sessions[namespace] = session
         else:
-            self._sessions.move_to_end(conversation_id)
+            self._sessions.move_to_end(namespace)
         return session
 
     def _trim_summary(self, session: _ConversationSession) -> None:
@@ -255,11 +266,9 @@ class ContextManager:
     @staticmethod
     def build(
         *,
-        project_id: UUID,
-        user_id: UUID,
+        namespace: MemoryNamespace,
         actor_admin: bool,
         message: str,
-        conversation_id: UUID,
         request_id: str,
         conversation: ConversationContext | None = None,
     ) -> ContextBundle:
@@ -268,16 +277,20 @@ class ContextManager:
             raise ValueError("message must contain non-whitespace characters")
         if (
             conversation is not None
-            and conversation.conversation_id != conversation_id
+            and conversation.namespace != namespace
         ):
-            raise ValueError("conversation id does not match loaded context")
+            raise ValueError("conversation namespace does not match loaded context")
         return ContextBundle(
             working=WorkingContext(message=normalized_message),
             conversation=conversation
-            or ConversationContext(conversation_id=conversation_id),
+            or ConversationContext(
+                namespace=namespace,
+                # Stateless graph tests have no store-backed lease. This random
+                # generation cannot be committed and will fail closed if misused.
+                lease=ConversationLease(namespace, uuid4()),
+            ),
             project=ProjectContext(
-                project_id=project_id,
-                user_id=user_id,
+                namespace=namespace,
                 actor_admin=actor_admin,
                 request_id=request_id,
             ),

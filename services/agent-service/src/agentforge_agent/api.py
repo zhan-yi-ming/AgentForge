@@ -1,13 +1,13 @@
 from functools import lru_cache
 import hmac
 import json
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import StreamingResponse
 
 from .config import Settings, get_settings
-from .context import ConversationMemory, TokenCounter
+from .context import ConversationMemory, MemoryNamespace, TokenCounter
 from .errors import LlmDependencyError, RagDependencyError
 from .graph import build_chat_context_graph, build_chat_graph
 from .llm import build_responder
@@ -79,8 +79,10 @@ def chat(
     responder=Depends(get_responder),
     observability=Depends(get_observability),
     conversation_memory: ConversationMemory = Depends(get_conversation_memory),
+    settings: Settings = Depends(get_settings),
 ) -> ChatResponse:
     thread_id = request.conversation_id or uuid4()
+    namespace = _memory_namespace(settings, request, thread_id)
     request_observation = observability.start_request(
         request.request_id, thread_id, request.project_id
     )
@@ -95,22 +97,17 @@ def chat(
             )
             state = chat_graph.invoke(
                 {
-                    "project_id": request.project_id,
-                    "user_id": request.user_id,
+                    "namespace": namespace,
                     "actor_admin": request.actor_admin,
                     "message": request.message,
-                    "conversation_id": thread_id,
                     "request_id": request.request_id,
                 }
             )
             bundle = state["context_bundle"]
             conversation_memory.commit_exchange(
-                bundle.conversation.conversation_id,
-                bundle.project.project_id,
-                bundle.project.user_id,
+                bundle.conversation.lease,
                 bundle.working.message,
                 state["answer"],
-                expected_session_generation=bundle.conversation.session_generation,
             )
             agent_observation.update(output={"status": "completed"})
             request_observation.update(output={"status": "completed"})
@@ -152,8 +149,10 @@ def chat_stream(
     responder=Depends(get_responder),
     observability=Depends(get_observability),
     conversation_memory: ConversationMemory = Depends(get_conversation_memory),
+    settings: Settings = Depends(get_settings),
 ) -> StreamingResponse:
     thread_id = request.conversation_id or uuid4()
+    namespace = _memory_namespace(settings, request, thread_id)
     request_observation = observability.start_request(
         request.request_id, thread_id, request.project_id
     )
@@ -165,11 +164,9 @@ def chat_stream(
             conversation_memory=conversation_memory,
         ).invoke(
             {
-                "project_id": request.project_id,
-                "user_id": request.user_id,
+                "namespace": namespace,
                 "actor_admin": request.actor_admin,
                 "message": request.message,
-                "conversation_id": thread_id,
                 "request_id": request.request_id,
             }
         )
@@ -218,12 +215,9 @@ def chat_stream(
                     yield encode({"type": "delta", "text": chunk})
             bundle = state["context_bundle"]
             conversation_memory.commit_exchange(
-                bundle.conversation.conversation_id,
-                bundle.project.project_id,
-                bundle.project.user_id,
+                bundle.conversation.lease,
                 bundle.working.message,
                 "".join(answer_parts),
-                expected_session_generation=bundle.conversation.session_generation,
             )
             proposal = state["context_bundle"].tool.proposal
             yield encode(
@@ -270,3 +264,17 @@ def _fail_and_end(request_observation, agent_observation, exception: Exception) 
     request_observation.fail(exception)
     agent_observation.end()
     request_observation.end()
+
+
+def _memory_namespace(
+    settings: Settings,
+    request: ChatRequest,
+    thread_id: UUID,
+) -> MemoryNamespace:
+    return MemoryNamespace(
+        tenant_id=settings.namespace_tenant,
+        workspace_id=settings.namespace_workspace,
+        project_id=request.project_id,
+        user_id=request.user_id,
+        thread_id=thread_id,
+    )

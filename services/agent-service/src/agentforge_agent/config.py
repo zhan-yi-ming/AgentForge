@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     context_recent_turns: int = Field(default=4, ge=1, le=20)
     context_summary_token_budget: int = Field(default=800, ge=64, le=8192)
     context_max_sessions: int = Field(default=1000, ge=1, le=10000)
+    namespace_tenant: str = Field(
+        default="agentforge", pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$"
+    )
+    namespace_workspace: str = Field(
+        default="default", pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$"
+    )
     langfuse_enabled: bool = False
     langfuse_public_key: SecretStr | None = None
     langfuse_secret_key: SecretStr | None = None

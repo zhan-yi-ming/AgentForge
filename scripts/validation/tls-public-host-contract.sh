@@ -365,6 +365,8 @@ EOF
     assert_line 'AGENTFORGE_AGENT_CONTEXT_RECENT_TURNS=4' "${env_file}"
     assert_line 'AGENTFORGE_AGENT_CONTEXT_SUMMARY_TOKEN_BUDGET=800' "${env_file}"
     assert_line 'AGENTFORGE_AGENT_CONTEXT_MAX_SESSIONS=1000' "${env_file}"
+    assert_line 'AGENTFORGE_AGENT_NAMESPACE_TENANT=agentforge' "${env_file}"
+    assert_line 'AGENTFORGE_AGENT_NAMESPACE_WORKSPACE=default' "${env_file}"
     [[ "$(stat -c '%a' "${env_file}")" == '600' ]] || fail 'generated domain environment must use mode 600'
 
     local ipv6_env_file="${scenario_root}/generated-ipv6.env"

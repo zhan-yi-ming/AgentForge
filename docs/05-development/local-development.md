@@ -57,6 +57,8 @@ V2-01 的 Langfuse 默认关闭，不影响无外部账号的本地运行。需�
 
 V2-03 默认以 `AGENTFORGE_AGENT_CONTEXT_TOKEN_BUDGET=8192` 限制完整输入 Prompt 的保守 UTF-8 字节上界；`CONTEXT_RECENT_TURNS=4`、`CONTEXT_SUMMARY_TOKEN_BUDGET=800`、`CONTEXT_MAX_SESSIONS=1000` 分别控制近期轮数、摘要上限与进程内 session 数。修改这些值后需要重建或重启 Agent Service。会话状态不写数据库，重启和多实例切换都会丢失；不要把它当作持久记忆。
 
+V2-04 使用 `AGENTFORGE_AGENT_NAMESPACE_TENANT=agentforge` 与 `AGENTFORGE_AGENT_NAMESPACE_WORKSPACE=default` 标识当前 Agent Service 的部署级 Memory 命名域。两项值只能由服务端环境设置，不能从 Chat body、浏览器或模型取得；它们不是 Workspace/Membership 业务实体。修改任一值相当于切换到新的空进程内命名域，原进程中的其他 Namespace 历史不会被读取。
+
 切换智谱或千问时只改 provider、key；默认模型和地址如下，也可在本地覆盖 `AGENTFORGE_AGENT_LLM_MODEL` 与 `AGENTFORGE_AGENT_LLM_BASE_URL`：
 
 | provider | 默认模型 | 默认 base URL |
