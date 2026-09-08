@@ -675,8 +675,10 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 /* ---------- Composer states and dedicated conversation view ---------- */
 .chat-composer textarea { text-align: left; }
 .chat-composer textarea::placeholder { text-align: center; }
+.home-chat .panel-heading { display: none; }
 .home-chat .chat-composer textarea { min-height: 58px; height: 58px; padding: .65rem .25rem; }
-.chat-collapsed .chat-composer { grid-template-columns: minmax(0, 1fr) auto auto; }
+.chat-collapsed .chat-composer { grid-template-columns: minmax(0, 1fr) 34px auto; }
+.chat-collapsed .chat-composer textarea::placeholder { text-align: center; }
 .chat-collapsed .composer-footer button[aria-label="发送"] { margin-left: 0; }
 .chat-collapsed.composer-expanded .chat-composer { grid-template-columns: 1fr; align-items: stretch; padding: .65rem .75rem .55rem; border-radius: 14px; }
 .chat-collapsed.composer-expanded .chat-composer textarea { min-height: 92px; height: 92px; padding: .75rem .25rem; text-align: left; }
@@ -706,6 +708,10 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 }
 
 /* ---------- Outer-scroll conversation and in-chat tool windows ---------- */
+.composer-footer { justify-content: flex-end; }
+.composer-footer > span { margin-right: auto; }
+.agent-panel .expand-chat-button { border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); }
+.agent-panel .expand-chat-button:hover { border-color: var(--ink); background: var(--hover); }
 .chat-session { min-height: calc(100vh - 90px); padding-bottom: 170px; }
 .chat-session .conversation-history { flex: none; min-height: auto; max-height: none; overflow: visible; padding-bottom: 1rem; }
 .chat-session .chat-composer { position: fixed; z-index: 9; left: 50%; right: auto; bottom: 1rem; transform: translateX(-50%); margin: 0; }

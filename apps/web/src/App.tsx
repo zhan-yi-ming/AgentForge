@@ -380,7 +380,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   }
 
   function renderChatComposer() {
-    return <form className="chat-composer" onSubmit={(event) => { event.stopPropagation(); void sendChat(event); }}><textarea aria-label="给 Agent 的消息" value={chatMessage} onChange={(event) => setChatMessage(event.target.value)} placeholder="向 Agent 提问，探索项目上下文…" /><div className="composer-footer"><span>Agent 会基于当前项目 Wiki 与任务回答</span><button type="button" className="expand-chat-button" aria-label={chatExpanded ? "缩小聊天输入框" : "放大聊天输入框"} onClick={() => setChatExpanded((expanded) => !expanded)}><Icon name={chatExpanded ? "shrink" : "expand"} /></button><button aria-label="发送" disabled={busy || streaming || !chatMessage.trim()}>{streaming ? "生成中…" : "发送"}<span>↗</span></button></div></form>;
+    return <form className="chat-composer" onSubmit={(event) => { event.stopPropagation(); void sendChat(event); }}><textarea aria-label="给 Agent 的消息" value={chatMessage} onChange={(event) => setChatMessage(event.target.value)} placeholder="向 Agent 提问，探索项目上下文…" /><div className="composer-footer"><span>Agent 会基于当前项目 Wiki 与任务回答</span>{activePanel && <button type="button" className="expand-chat-button" aria-label={chatExpanded ? "缩小聊天输入框" : "放大聊天输入框"} onClick={() => setChatExpanded((expanded) => !expanded)}><Icon name={chatExpanded ? "shrink" : "expand"} /></button>}<button aria-label="发送" disabled={busy || streaming || !chatMessage.trim()}>{streaming ? "生成中…" : "发送"}<span>↗</span></button></div></form>;
   }
 
   if (!authenticated) {
