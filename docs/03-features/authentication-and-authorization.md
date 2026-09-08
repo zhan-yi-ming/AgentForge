@@ -73,3 +73,7 @@ Refresh Token、主动登出、找回密码、邮箱验证、验证码、锁定�
 ## 已知限制
 
 token 不可主动撤销，角色变更存在最长 30 分钟缓存窗口。Day 1 passwordless 用户不可登录。ADMIN 只能通过受控数据库操作配置，后续需要专门的管理流程。
+
+## V2-05 集中式 RBAC 与风险
+
+V2-05 保留 `USER/ADMIN` 和 owner-or-admin 项目模型，但不再把授权只视为 Controller 或 ProjectAccess 的局部约定。Tool Intent 与直接 Wiki/Task API 都映射到 Java 服务端 `ToolPolicy`，再由 Risk Engine 执行最低角色、风险和 ProjectAccess 校验。删除属于 HIGH 且要求 ADMIN；客户端、Python 和 LLM 不能通过提交 Metadata 降低要求。完整策略见 `security-and-risk.md`。

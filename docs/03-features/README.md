@@ -12,6 +12,8 @@
 - `agent-chat.md`：Day 3 项目内 Chat、LangGraph 状态流与 Java-Python 边界，已实现。
 - `observability.md`：V2-01 Langfuse 基础 Trace、字段白名单、异常闭合与 fail-open 边界，已实现。
 - `context-management.md`：V2-02 ContextBundle、V2-03 Conversation Summary/Token Budget 与 V2-04 Memory Namespace 隔离。
+- `security-and-risk.md`：V2-05 Java 集中式 RBAC、Tool Metadata 与 Risk Engine。
+- `conversation-history.md`：V2-05 受 Project/User/Thread 隔离保护的持久化历史会话。
 - `rag-retrieval.md`：Day 4 Wiki/Task Chunk、Embedding、BM25、RRF、Context 与来源引用，已实现并通过真实 pgvector 与跨进程验证。
 - `tool-calling-and-confirmation.md`：Day 5 create/update task 意图、待确认 action 与 Java 确定性写回，已实现。
 - `web-workspace.md`：Day 6 登录、项目选择、Wiki/Task、AI Chat、人工确认与 Markdown 预览，已实现并在 Day 7 完成真实浏览器验收。
@@ -21,4 +23,4 @@
 
 以下文档尚未创建，表示功能也不应开始实现：
 
-- V2 的完整 RBAC、审计、幂等和可恢复执行尚未建立功能文档，也不得提前实现；Memory Namespace 仅表示当前进程内记忆归属，不代表长期记忆或完整 SaaS 多租户。
+- V2-05 RBAC/Risk 与持久化展示历史已完成；Approval/Audit/Idempotency 和可恢复执行仍属于后续节点。Memory Namespace 仅表示当前进程内 Agent 记忆归属，不代表长期记忆或完整 SaaS 多租户。

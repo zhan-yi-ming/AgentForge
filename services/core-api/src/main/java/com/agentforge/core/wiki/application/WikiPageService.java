@@ -9,9 +9,12 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.security.AuthenticatedActor;
+import com.agentforge.core.security.ToolOperation;
+import com.agentforge.core.security.ToolRiskEngine;
 import com.agentforge.core.shared.error.ConflictException;
 import com.agentforge.core.shared.error.ResourceNotFoundException;
 import com.agentforge.core.wiki.domain.WikiPage;
@@ -21,18 +24,23 @@ import com.agentforge.core.wiki.domain.WikiPageRepository;
 public class WikiPageService {
 
     private final WikiPageRepository wikiPages;
-    private final ProjectAccess projectAccess;
+    private final ToolRiskEngine riskEngine;
     private final Clock clock;
 
     public WikiPageService(WikiPageRepository wikiPages, ProjectAccess projectAccess, Clock clock) {
+        this(wikiPages, new ToolRiskEngine(projectAccess), clock);
+    }
+
+    @Autowired
+    public WikiPageService(WikiPageRepository wikiPages, ToolRiskEngine riskEngine, Clock clock) {
         this.wikiPages = wikiPages;
-        this.projectAccess = projectAccess;
+        this.riskEngine = riskEngine;
         this.clock = clock;
     }
 
     @Transactional
     public WikiPageView create(UUID projectId, AuthenticatedActor actor, String title, String content) {
-        projectAccess.requireAccess(projectId, actor);
+        riskEngine.authorize(ToolOperation.CREATE_WIKI, projectId, actor);
         String normalizedTitle = title.trim();
         if (wikiPages.existsByProjectIdAndTitle(projectId, normalizedTitle)) {
             throw new ConflictException("A Wiki page with this title already exists in the project.");
@@ -51,13 +59,13 @@ public class WikiPageService {
 
     @Transactional(readOnly = true)
     public WikiPageView get(UUID projectId, UUID wikiPageId, AuthenticatedActor actor) {
-        projectAccess.requireAccess(projectId, actor);
+        riskEngine.authorize(ToolOperation.SEARCH_WIKI, projectId, actor);
         return WikiPageView.from(find(projectId, wikiPageId));
     }
 
     @Transactional(readOnly = true)
     public List<WikiPageView> list(UUID projectId, AuthenticatedActor actor) {
-        projectAccess.requireAccess(projectId, actor);
+        riskEngine.authorize(ToolOperation.SEARCH_WIKI, projectId, actor);
         return wikiPages.findAllByProjectIdOrderByUpdatedAtDesc(projectId)
                 .stream()
                 .map(WikiPageView::from)
@@ -72,7 +80,7 @@ public class WikiPageService {
             String title,
             String content,
             long expectedVersion) {
-        projectAccess.requireAccess(projectId, actor);
+        riskEngine.authorize(ToolOperation.UPDATE_WIKI, projectId, actor);
         WikiPage page = find(projectId, wikiPageId);
         requireVersion(page, expectedVersion);
         String normalizedTitle = title.trim();
@@ -90,7 +98,7 @@ public class WikiPageService {
 
     @Transactional
     public void delete(UUID projectId, UUID wikiPageId, AuthenticatedActor actor, long expectedVersion) {
-        projectAccess.requireAccess(projectId, actor);
+        riskEngine.authorize(ToolOperation.DELETE_WIKI, projectId, actor);
         WikiPage page = find(projectId, wikiPageId);
         requireVersion(page, expectedVersion);
         try {

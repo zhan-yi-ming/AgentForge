@@ -84,7 +84,7 @@ class WikiPageServiceTest {
     void updateAndDeleteUseCurrentVersion() {
         UUID projectId = UUID.randomUUID();
         UUID pageId = UUID.randomUUID();
-        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), true);
         WikiPage page = WikiPage.create(projectId, "Architecture", "old", NOW);
         when(wikiPages.findByProjectIdAndId(projectId, pageId)).thenReturn(Optional.of(page));
         when(wikiPages.existsByProjectIdAndTitleAndIdNot(projectId, "Updated", pageId))
@@ -110,7 +110,7 @@ class WikiPageServiceTest {
     void deleteRejectsStaleVersionWithoutDeleting() {
         UUID projectId = UUID.randomUUID();
         UUID pageId = UUID.randomUUID();
-        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), true);
         WikiPage page = WikiPage.create(projectId, "Architecture", "old", NOW);
         when(wikiPages.findByProjectIdAndId(projectId, pageId)).thenReturn(Optional.of(page));
 

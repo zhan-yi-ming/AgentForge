@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import com.agentforge.core.agent.domain.AgentActionStatus;
 import com.agentforge.core.agent.domain.AgentActionType;
@@ -15,6 +16,8 @@ import com.agentforge.core.agent.domain.AgentTaskAction;
 import com.agentforge.core.agent.domain.AgentTaskActionRepository;
 import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.security.AuthenticatedActor;
+import com.agentforge.core.security.ToolOperation;
+import com.agentforge.core.security.ToolRiskEngine;
 import com.agentforge.core.shared.error.ConflictException;
 import com.agentforge.core.shared.error.ForbiddenException;
 import com.agentforge.core.shared.error.ResourceNotFoundException;
@@ -28,6 +31,7 @@ public class AgentActionService {
 
     private final AgentTaskActionRepository actions;
     private final ProjectAccess projectAccess;
+    private final ToolRiskEngine riskEngine;
     private final TaskService taskService;
     private final Clock clock;
 
@@ -36,8 +40,19 @@ public class AgentActionService {
             ProjectAccess projectAccess,
             TaskService taskService,
             Clock clock) {
+        this(actions, projectAccess, new ToolRiskEngine(projectAccess), taskService, clock);
+    }
+
+    @Autowired
+    public AgentActionService(
+            AgentTaskActionRepository actions,
+            ProjectAccess projectAccess,
+            ToolRiskEngine riskEngine,
+            TaskService taskService,
+            Clock clock) {
         this.actions = actions;
         this.projectAccess = projectAccess;
+        this.riskEngine = riskEngine;
         this.taskService = taskService;
         this.clock = clock;
     }
@@ -56,6 +71,11 @@ public class AgentActionService {
         catch (IllegalArgumentException exception) {
             return Optional.empty();
         }
+        ToolOperation operation = switch (normalized.type()) {
+            case CREATE_TASK -> ToolOperation.CREATE_TASK;
+            case UPDATE_TASK -> ToolOperation.UPDATE_TASK;
+        };
+        riskEngine.authorize(operation, projectId, actor);
         if (normalized.type() == AgentActionType.UPDATE_TASK) {
             TaskView current = taskService.get(projectId, normalized.taskId(), actor);
             if (current.version() != normalized.expectedVersion()) {

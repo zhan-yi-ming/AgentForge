@@ -120,6 +120,35 @@ confirm/reject 在事务内锁定 action。同一 action 已为 `EXECUTED` 时�
 - 数据库唯一 / 检查 / 外键约束提供并发下最终保护，应用层校验提供可读错误。
 - RAG 查询和清理都必须带 `project_id`；即使来源 ID 猜测成功，也不能跨项目读取 Chunk。
 
+## V2-05 持久化会话历史
+
+### `agent_conversation`
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| `id` | UUID | 主键 | conversationId |
+| `project_id` | UUID | 外键、非空 | 项目作用域 |
+| `user_id` | UUID | 外键、非空 | 发起用户作用域 |
+| `preview` | VARCHAR(240) | 非空 | 首条用户消息的受限摘要 |
+| `message_count` | INTEGER | 非空、非负 | 已完成消息数 |
+| `created_at` / `updated_at` | TIMESTAMPTZ | 非空 | 生命周期 |
+
+列表索引为 `(project_id, user_id, updated_at DESC)`。conversation ID 一旦绑定 project/user 后不能重绑。
+
+### `agent_message`
+
+| 字段 | 类型 | 约束 | 含义 |
+| --- | --- | --- | --- |
+| `id` | UUID | 主键 | 消息 ID |
+| `conversation_id` | UUID | 外键、非空 | 所属会话 |
+| `sequence` | BIGINT | 非空、非负 | 会话内稳定顺序 |
+| `role` | VARCHAR(16) | `USER` / `ASSISTANT` | 展示角色 |
+| `content` | TEXT | 非空 | 完整消息正文 |
+| `sources_json` | TEXT | 非空 | assistant 的公开来源 JSON；user 为 `[]` |
+| `created_at` | TIMESTAMPTZ | 非空 | 创建时间 |
+
+`(conversation_id, sequence)` 唯一。一次完成 exchange 在同一事务追加 USER 与 ASSISTANT；错误或未收到 SSE complete 时不写半截 assistant。
+
 ## 迁移规则
 
 - 迁移文件放在 `services/core-api/src/main/resources/db/migration/`。

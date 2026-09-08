@@ -28,3 +28,5 @@ Java 到当前明文 uvicorn 服务固定使用 HTTP/1.1，避免 JDK HttpClient
 V2-01 为 JSON 与流式入口增加相同的基础观测模型：内部认证后以请求为根 Trace，在 Agent 下记录 prepare、retrieval、tool 和 generation。`requestId`、实际 `conversationId`（作为 `thread_id`）与 `projectId` 用于检索 Trace；Chat HTTP/SSE 响应不新增 Langfuse 字段。观测严格排除 message、answer、检索正文、Tool 参数和凭据，并在 SDK 故障时 fail-open，详见 `observability.md` 与 ADR-0016。
 
 V2-02 在 Python 内部引入 `ContextBundle`。prepare 把当前消息、conversation 和已授权项目标识建立为 Working/Conversation/Project Context；retrieve 与 plan 分别替换 Retrieved/Tool Context；同步 responder 与流式 responder 消费同一个 bundle。LangGraph State 负责流程传递，ContextBundle 负责 Agent/模型所需资料，HTTP 字段和 Java 确定性写入边界不变，详见 `context-management.md`。
+
+V2-05 由 Java 根据服务端 Tool 名称解析 `required_role`、`risk_level` 与 `need_approval`。Python 仍只产生 Action Intent，不能提供可信权限 Metadata。Core 在同步成功或 SSE `complete` 后持久化完整 user/assistant exchange；流错误或提前结束不保存不完整 assistant 消息。历史展示与 Python 进程内 Context Memory 相互独立，详见 `security-and-risk.md` 与 `conversation-history.md`。

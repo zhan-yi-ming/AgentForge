@@ -89,6 +89,12 @@ HTTP Bearer token
 - Day 3：定义 Core API ↔ Agent Service 契约。
 - V2：根据真实复杂度考虑 Spring Modulith 的结构验证、模块事件和更严格的可见接口。
 
+## V2-05 安全与会话边界
+
+Core 新增集中式 Tool Policy/Risk Engine 作为 application service 之前的确定性授权入口。Agent、Wiki 与 Task 只传稳定动作名，不读取 Python 或客户端提供的风险字段。ProjectAccess 仍负责资源作用域，Risk Engine 负责最低角色和动作风险，两者不能互相替代。
+
+持久化会话属于 Core `conversation` 能力：Chat service 在完整成功后写 exchange，Conversation API 只通过 project/user/conversation 联合范围读取。该模块不向 Python 暴露 Repository，也不承担 LangGraph checkpoint。
+
 ## 参考
 
 - [Spring Modulith](https://github.com/spring-projects/spring-modulith)：官方建议把业务模块作为应用根包的直接子包，并支持验证模块结构。当前采用其分包思想，暂不引入额外运行时复杂度。

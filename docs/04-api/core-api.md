@@ -247,6 +247,18 @@ V1.1 在转发给 Agent Service 前原子消费一次用户 UTC 日配额；达�
 
 无 body。成功返回 `status=REJECTED`，`resultTask=null`；Task 不变。重复 reject 返回同一结果；已执行 action 返回 409。
 
+## V2-05 Tool Policy 与历史会话
+
+所有 Agent Intent 和直接 Wiki/Task 操作由 Java 服务端映射到固定 Tool Policy。HTTP 请求不接受可信的 `requiredRole`、`riskLevel` 或 `needApproval`；即使下游返回同名未知字段也不能覆盖策略。角色或项目策略拒绝返回 403，未知 Agent Tool 不创建 pending action。
+
+### `GET /api/v1/projects/{projectId}/agent/conversations`
+
+返回认证 actor 在当前授权项目内的历史会话摘要，按 `updatedAt DESC, conversationId` 稳定排序。每项包含 `conversationId`、`preview`、`messageCount`、`createdAt`、`updatedAt`。请求不接受 userId。
+
+### `GET /api/v1/projects/{projectId}/agent/conversations/{conversationId}`
+
+返回同一 project/user/conversation 作用域内的会话详情，包含摘要字段和按 sequence 排序的 `messages`。消息字段为 `role`（`USER` / `ASSISTANT`）、`content`、`sources`、`createdAt`。不返回 Prompt、Summary、Tool Context、内部 token 或其他用户信息。跨 Project/User/Thread 不能读取正文。
+
 `/internal/v1/rag/sources` 是 Agent Service 专用只读接口，不属于浏览器公共 API。它使用独立 Core 内部 token，并在读取 Wiki/Task 前再次执行用户存在和项目权限校验。
 
 ## 兼容性

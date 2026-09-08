@@ -30,6 +30,7 @@ import com.agentforge.core.security.application.AuthenticationService;
 import com.agentforge.core.task.application.TaskService;
 import com.agentforge.core.wiki.application.WikiPageService;
 import com.agentforge.core.wiki.domain.WikiPage;
+import com.agentforge.core.conversation.application.ConversationHistoryService;
 
 @Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest(
@@ -68,10 +69,33 @@ class PersistenceIntegrationTest {
     private AiUsageQuota aiUsageQuota;
 
     @Autowired
+    private ConversationHistoryService conversationHistoryService;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;
+
+    @Test
+    void conversationHistoryPersistsAndReadsOnlyItsBoundScope() {
+        var authentication = authenticationService.register(
+                "history-integration@example.com", "History Integration", "integration-password");
+        var actor = new AuthenticatedActor(authentication.user().id(), false);
+        var project = projectService.createProject(actor, "History Project", null);
+        var conversationId = java.util.UUID.randomUUID();
+
+        conversationHistoryService.appendCompletedExchange(
+                project.id(), actor, conversationId, "What changed?", "RBAC changed.", java.util.List.of());
+
+        assertThat(conversationHistoryService.list(project.id(), actor)).hasSize(1);
+        var detail = conversationHistoryService.get(project.id(), conversationId, actor);
+        assertThat(detail.messages()).extracting(message -> message.content())
+                .containsExactly("What changed?", "RBAC changed.");
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from agent_message where conversation_id = ?", Integer.class, conversationId))
+                .isEqualTo(2);
+    }
 
     @Test
     void flywayCreatesSchemaAndJpaPersistsAuthenticatedProjectResources() {

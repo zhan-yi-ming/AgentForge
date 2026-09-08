@@ -89,6 +89,16 @@ Day 4 跨进程闭环由仓库脚本执行：
 
 脚本使用独立 Compose project 和专用端口，启动 pgvector、Core API 与 Agent Service；通过公共 HTTP 创建两名用户、两个项目、Wiki 与 Task，验证两类召回、跨项目隔离、来源版本替换、删除清理和无匹配不伪造来源。无论成功失败都按精确 PID 停止服务并执行 `docker compose down -v`；只清理由本轮创建的临时日志和隔离资源。
 
+## V2-05 质量门槛
+
+- Risk Engine 公共 seam 覆盖每个 Tool 的 role/risk/approval 固定映射、未知 Tool 和 USER/ADMIN 拒绝矩阵。
+- Core HTTP 覆盖 Agent 与直接 Wiki/Task API，证明不能绕过 ProjectAccess/Risk Engine，客户端 Metadata 不能降权。
+- Conversation HTTP 与应用服务测试共同覆盖列表、详情、Project/User/Thread 负向隔离、稳定排序和不泄露内部 Context。
+- 同步成功与 SSE complete 保存完整 exchange；下游失败、流错误和提前结束不保存不完整历史。
+- 真实 PostgreSQL/Testcontainers 执行 Flyway、JPA validate、唯一/外键约束与会话查询。
+- Web ApiClient/DOM 覆盖历史入口、项目切换、选择恢复及 conversationId 复用。
+- Agent pytest 与 Java→Python 契约证明 Python 只提供 Intent，服务端 Metadata 不可伪造。
+
 ## 2026-09-05 历史决定：曾停用 Pi
 
 用户曾撤销 Pi 审查与测试授权，该决定及 Day 1–4 复核保留在 `docs/07-changes/2026-09-05-disable-pi-and-day1-day4-audit.md` 供历史追溯。随后用户重新授权每阶段一次性 Pi 只读代码审核，但没有恢复 Pi 测试、monitor、OnCodexWake 或自动阶段推进；Codex 始终直接执行并记录全部测试证据。

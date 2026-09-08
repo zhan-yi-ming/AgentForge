@@ -18,8 +18,82 @@ import org.mockito.InOrder;
 
 import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.security.AuthenticatedActor;
+import com.agentforge.core.conversation.application.ConversationHistoryService;
 
 class AgentChatServiceTest {
+
+    @Test
+    void chatPersistsOnlyTheCompletedServerResult() {
+        ProjectAccess projects = org.mockito.Mockito.mock(ProjectAccess.class);
+        AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
+        AgentActionService actions = org.mockito.Mockito.mock(AgentActionService.class);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+        ConversationHistoryService history = org.mockito.Mockito.mock(ConversationHistoryService.class);
+        AgentChatService service = new AgentChatService(projects, client, actions, quota, history);
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(userId, false);
+        when(client.chat(projectId, userId, false, "question", null, "request-history"))
+                .thenReturn(new AgentChatResult(conversationId, "answer", "request-history", List.of()));
+
+        service.chat(projectId, actor, "question", null, "request-history");
+
+        verify(history).appendCompletedExchange(
+                projectId, actor, conversationId, "question", "answer", List.of());
+    }
+
+    @Test
+    void failedStreamDoesNotPersistPartialAnswer() {
+        ProjectAccess projects = org.mockito.Mockito.mock(ProjectAccess.class);
+        AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
+        AgentActionService actions = org.mockito.Mockito.mock(AgentActionService.class);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+        ConversationHistoryService history = org.mockito.Mockito.mock(ConversationHistoryService.class);
+        AgentChatService service = new AgentChatService(projects, client, actions, quota, history);
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(userId, false);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            java.util.function.Consumer<AgentStreamEvent> sink = invocation.getArgument(6);
+            sink.accept(AgentStreamEvent.delta("partial"));
+            throw new IllegalStateException("stream failed");
+        }).when(client).stream(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), any(), any(), any(), any());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                service.stream(new AgentChatCommand(projectId, actor, "question", null, "request"), event -> { }))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(history, never()).appendCompletedExchange(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void historyWriteFailureDoesNotSuppressTheCompletedStreamEvent() {
+        ProjectAccess projects = org.mockito.Mockito.mock(ProjectAccess.class);
+        AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
+        AgentActionService actions = org.mockito.Mockito.mock(AgentActionService.class);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+        ConversationHistoryService history = org.mockito.Mockito.mock(ConversationHistoryService.class);
+        AgentChatService service = new AgentChatService(projects, client, actions, quota, history);
+        UUID projectId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        org.mockito.Mockito.doThrow(new IllegalStateException("database unavailable"))
+                .when(history).appendCompletedExchange(any(), any(), any(), any(), any(), any());
+        org.mockito.Mockito.doAnswer(invocation -> {
+            java.util.function.Consumer<AgentStreamEvent> sink = invocation.getArgument(6);
+            sink.accept(AgentStreamEvent.metadata(conversationId, "request-history-failure", List.of()));
+            sink.accept(AgentStreamEvent.delta("complete answer"));
+            sink.accept(AgentStreamEvent.complete(null));
+            return null;
+        }).when(client).stream(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), any(), any(), any(), any());
+        List<AgentStreamEvent> events = new ArrayList<>();
+
+        service.stream(new AgentChatCommand(projectId, actor, "question", null, "request-history-failure"), events::add);
+
+        assertThat(events).extracting(AgentStreamEvent::type)
+                .containsExactly("metadata", "delta", "complete");
+    }
 
     @Test
     void streamAuthorizesAndConsumesQuotaBeforeForwardingOrderedEvents() {
@@ -27,7 +101,8 @@ class AgentChatServiceTest {
         AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
         AgentActionService actionService = org.mockito.Mockito.mock(AgentActionService.class);
         AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
-        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota);
+        ConversationHistoryService history = org.mockito.Mockito.mock(ConversationHistoryService.class);
+        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota, history);
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
@@ -56,6 +131,8 @@ class AgentChatServiceTest {
         order.verify(quota).consume(userId);
         order.verify(client).stream(eq(projectId), eq(userId), eq(false), eq("hello"), eq(null),
                 eq("request-stream"), any());
+        verify(history).appendCompletedExchange(
+                projectId, actor, conversationId, "hello", "第一段，第二段", List.of());
     }
 
     @Test

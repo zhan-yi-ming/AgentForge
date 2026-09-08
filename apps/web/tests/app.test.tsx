@@ -24,6 +24,7 @@ function api(overrides: Partial<ApiClient> = {}): ApiClient {
     listWikiPages: vi.fn().mockResolvedValue([] as WikiPage[]),
     createWikiPage: vi.fn(), updateWikiPage: vi.fn(),
     listTasks: vi.fn().mockResolvedValue([task]),
+    listConversations: vi.fn().mockResolvedValue([]), getConversation: vi.fn(),
     chat: vi.fn(), chatStream: vi.fn(), confirmAction: vi.fn(), rejectAction: vi.fn(),
     ...overrides,
   };
@@ -35,11 +36,95 @@ async function login(mockApi: ApiClient) {
   await user.type(screen.getByLabelText("邮箱"), "owner@example.com");
   await user.type(screen.getByLabelText("密码"), "password-123");
   await user.click(screen.getByRole("button", { name: "登录" }));
-  await screen.findByRole("button", { name: /AgentForge/ });
+  await screen.findByText("你好，我是 AgentForge");
   return user;
 }
 
 describe("App", () => {
+  it("opens a persisted conversation from the current project history", async () => {
+    const mockApi = api({
+      listConversations: vi.fn().mockResolvedValue([{ conversationId: "conversation-old", preview: "Earlier question",
+        messageCount: 2, createdAt: "2026-09-08T00:00:00Z", updatedAt: "2026-09-08T00:01:00Z" }]),
+      getConversation: vi.fn().mockResolvedValue({ conversationId: "conversation-old", preview: "Earlier question",
+        messageCount: 2, createdAt: "2026-09-08T00:00:00Z", updatedAt: "2026-09-08T00:01:00Z",
+        messages: [
+          { role: "USER", content: "Earlier question", sources: [], createdAt: "2026-09-08T00:00:00Z" },
+          { role: "ASSISTANT", content: "Earlier answer", sources: [], createdAt: "2026-09-08T00:01:00Z" },
+        ] }),
+    });
+    const user = await login(mockApi);
+    await user.click(within(await screen.findByRole("dialog"))
+      .getByRole("button", { name: "开始体验" }));
+    await user.click(await screen.findByRole("button", { name: /历史/ }));
+    await user.click(await screen.findByRole("button", { name: /Earlier question/ }));
+
+    expect(await screen.findByText("Earlier answer")).toBeInTheDocument();
+    expect(mockApi.getConversation).toHaveBeenCalledWith(project.id, "conversation-old");
+    localStorage.removeItem("agentforge.onboardingComplete");
+  });
+
+  it("ignores a history response that arrives after the project changes", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    let resolveDetail!: (detail: Awaited<ReturnType<ApiClient["getConversation"]>>) => void;
+    const mockApi = api({
+      listProjects: vi.fn().mockResolvedValue([project, secondProject]),
+      listConversations: vi.fn().mockImplementation(async (projectId) => projectId === project.id
+        ? [{ conversationId: "conversation-old", preview: "Old project question", messageCount: 2,
+          createdAt: "2026-09-08T00:00:00Z", updatedAt: "2026-09-08T00:01:00Z" }]
+        : []),
+      getConversation: vi.fn().mockReturnValue(new Promise((resolve) => { resolveDetail = resolve; })),
+    });
+    const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: /历史/ }));
+    await user.click(await screen.findByRole("button", { name: /Old project question/ }));
+    await user.click(screen.getByRole("button", { name: /项目/ }));
+    await user.click(await screen.findByRole("button", { name: /Second Project/ }));
+
+    resolveDetail({ conversationId: "conversation-old", preview: "Old project question", messageCount: 2,
+      createdAt: "2026-09-08T00:00:00Z", updatedAt: "2026-09-08T00:01:00Z", messages: [
+        { role: "USER", content: "Old project question", sources: [], createdAt: "2026-09-08T00:00:00Z" },
+        { role: "ASSISTANT", content: "Old project secret", sources: [], createdAt: "2026-09-08T00:01:00Z" },
+      ] });
+
+    await waitFor(() => expect(mockApi.listConversations).toHaveBeenCalledWith(secondProject.id));
+    expect(screen.queryByText("Old project secret")).not.toBeInTheDocument();
+    localStorage.removeItem("agentforge.onboardingComplete");
+  });
+
+  it("clears conversation state before another user logs in", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    const loginMock = vi.fn()
+      .mockResolvedValueOnce({ accessToken: "token-a", tokenType: "Bearer", expiresIn: 1800,
+        user: { id: "user-a", email: "a@example.com", displayName: "A", role: "USER" } })
+      .mockResolvedValueOnce({ accessToken: "token-b", tokenType: "Bearer", expiresIn: 1800,
+        user: { id: "user-b", email: "b@example.com", displayName: "B", role: "USER" } });
+    const mockApi = api({
+      login: loginMock,
+      listProjects: vi.fn().mockResolvedValueOnce([project]).mockReturnValueOnce(new Promise(() => {})),
+      listConversations: vi.fn().mockResolvedValue([{ conversationId: "conversation-a", preview: "User A summary",
+        messageCount: 2, createdAt: "2026-09-08T00:00:00Z", updatedAt: "2026-09-08T00:01:00Z" }]),
+      getConversation: vi.fn().mockResolvedValue({ conversationId: "conversation-a", preview: "User A summary",
+        messageCount: 2, createdAt: "2026-09-08T00:00:00Z", updatedAt: "2026-09-08T00:01:00Z", messages: [
+          { role: "USER", content: "A question", sources: [], createdAt: "2026-09-08T00:00:00Z" },
+          { role: "ASSISTANT", content: "User A secret", sources: [], createdAt: "2026-09-08T00:01:00Z" },
+        ] }),
+    });
+    const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: /历史/ }));
+    await user.click(await screen.findByRole("button", { name: /User A summary/ }));
+    expect(await screen.findByText("User A secret")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "退出" }));
+    await user.clear(screen.getByLabelText("邮箱"));
+    await user.type(screen.getByLabelText("邮箱"), "b@example.com");
+    await user.type(screen.getByLabelText("密码"), "password-b");
+    await user.click(screen.getByRole("button", { name: "登录" }));
+
+    expect(await screen.findByText("你好，我是 AgentForge")).toBeInTheDocument();
+    expect(screen.queryByText("User A summary")).not.toBeInTheDocument();
+    expect(screen.queryByText("User A secret")).not.toBeInTheDocument();
+    localStorage.removeItem("agentforge.onboardingComplete");
+  });
   it("shows the project positioning without personal branding", () => {
     render(<App api={api()} />);
     expect(screen.getByText(/把复杂项目，变成可协作的确定性行动/)).toBeInTheDocument();
@@ -71,15 +156,15 @@ describe("App", () => {
 
   it("guides first-time users and lets them reopen the guide", async () => {
     const user = await login(api());
-    const guide = await screen.findByRole("dialog", { name: "新手引导" });
-    expect(within(guide).getByText(/中央对话/)).toBeInTheDocument();
+    const guide = await screen.findByRole("dialog");
+    expect(within(guide).getByText(/让项目知识真正参与执行/)).toBeInTheDocument();
 
     await user.click(within(guide).getByRole("button", { name: "开始体验" }));
-    expect(screen.queryByRole("dialog", { name: "新手引导" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(localStorage.getItem("agentforge.onboardingComplete")).toBe("true");
 
-    await user.click(screen.getByRole("button", { name: "新手引导" }));
-    expect(await screen.findByRole("dialog", { name: "新手引导" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "产品说明" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
   it("keeps onboarding usable when browser storage is unavailable", async () => {
@@ -90,7 +175,7 @@ describe("App", () => {
     });
 
     const user = await login(api());
-    const guide = await screen.findByRole("dialog", { name: "新手引导" });
+    const guide = await screen.findByRole("dialog");
     await user.click(within(guide).getByRole("button", { name: "开始体验" }));
 
     expect(screen.queryByRole("dialog", { name: "新手引导" })).not.toBeInTheDocument();
@@ -107,16 +192,18 @@ describe("App", () => {
 
   it("logs in and loads the selected project resources", async () => {
     const mockApi = api();
-    await login(mockApi);
+    const user = await login(mockApi);
     expect(mockApi.listProjects).toHaveBeenCalled();
-    expect(mockApi.listWikiPages).toHaveBeenCalledWith(project.id);
+    await waitFor(() => expect(mockApi.listWikiPages).toHaveBeenCalledWith(project.id));
     expect(mockApi.listTasks).toHaveBeenCalledWith(project.id);
+    await user.click(screen.getByRole("button", { name: /执行任务/ }));
     expect(await screen.findByText("Ship UI")).toBeInTheDocument();
   });
 
   it("explains which actions appear in the execution task list", async () => {
-    await login(api());
+    const user = await login(api());
 
+    await user.click(screen.getByRole("button", { name: /执行任务/ }));
     expect(screen.getByRole("heading", { name: "执行任务" })).toBeInTheDocument();
     expect(screen.getByText(/普通提问和 Wiki 保存不会新增任务/)).toBeInTheDocument();
   });
@@ -192,12 +279,14 @@ describe("App", () => {
       listWikiPages: vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([saved]),
     });
     const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: "Wiki 工作台" }));
     await user.type(screen.getByLabelText("Wiki 标题"), "Architecture");
     await user.type(screen.getByLabelText("Wiki Markdown 草稿"), "# Core");
     expect(mockApi.createWikiPage).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "保存 Wiki" }));
 
     await waitFor(() => expect(mockApi.createWikiPage).toHaveBeenCalledWith(project.id, "Architecture", "# Core"));
+    await user.click(screen.getByRole("button", { name: "打开预览" }));
     expect(await screen.findByRole("heading", { name: "Core" })).toBeInTheDocument();
   });
 
@@ -212,6 +301,7 @@ describe("App", () => {
       updateWikiPage: vi.fn().mockResolvedValue(saved),
     });
     const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: "Wiki 工作台" }));
     const editor = screen.getByLabelText("Wiki Markdown 草稿");
     await waitFor(() => expect(editor).toHaveValue("# Before"));
     await user.clear(editor);
@@ -237,8 +327,10 @@ describe("App", () => {
     });
     const mockApi = api({ chatStream: formatStream });
     const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: "Wiki 工作台" }));
     const editor = screen.getByLabelText("Wiki Markdown 草稿");
     await user.type(editor, "Original draft");
+    await user.click(screen.getByRole("button", { name: "AI 文本整理" }));
     await user.type(screen.getByLabelText("待整理原文"), "messy notes");
     await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
     expect(await screen.findByRole("heading", { name: "Structured" })).toBeInTheDocument();
@@ -249,9 +341,11 @@ describe("App", () => {
       expect.any(Object),
       expect.any(AbortSignal),
     );
-    expect(editor).toHaveValue("Original draft");
+    await user.click(screen.getByRole("button", { name: "Wiki 工作台" }));
+    expect(screen.getByLabelText("Wiki Markdown 草稿")).toHaveValue("Original draft");
+    await user.click(screen.getByRole("button", { name: "AI 文本整理" }));
     await user.click(screen.getByRole("button", { name: "应用到 Wiki 草稿" }));
-    expect(editor).toHaveValue("# Structured\n\nKeep this.");
+    expect(screen.getByLabelText("Wiki Markdown 草稿")).toHaveValue("# Structured\n\nKeep this.");
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
     expect(screen.getByRole("status")).toHaveTextContent("已应用到 Wiki 草稿，请确认后保存");
   });
@@ -265,6 +359,7 @@ describe("App", () => {
     });
     const user = await login(api({ chatStream: streamMock }));
 
+    await user.click(screen.getByRole("button", { name: "AI 文本整理" }));
     await user.type(screen.getByLabelText("待整理原文"), "stream these notes");
     await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
 
@@ -296,8 +391,10 @@ describe("App", () => {
       updateWikiPage: vi.fn(),
     });
     const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: "Wiki 工作台" }));
     await waitFor(() => expect(screen.getByLabelText("Wiki 标题")).toHaveValue("Existing page"));
 
+    await user.click(screen.getByRole("button", { name: "AI 文本整理" }));
     await user.type(screen.getByLabelText("待整理原文"), "generate a new page");
     await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
     expect(mockApi.chatStream).toHaveBeenCalledWith(
@@ -311,7 +408,7 @@ describe("App", () => {
 
     expect(screen.getByLabelText("Wiki 标题")).toHaveValue("Generated title");
     expect(screen.getByLabelText("Wiki Markdown 草稿")).toHaveValue(answer);
-    expect(screen.getByRole("button", { name: "应用到 Wiki 草稿" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "应用到 Wiki 草稿" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "保存 Wiki" }));
     await waitFor(() => expect(mockApi.createWikiPage).toHaveBeenCalledWith(
       project.id, "Generated title", answer,
@@ -329,6 +426,7 @@ describe("App", () => {
     });
     const user = await login(mockApi);
 
+    await user.click(screen.getByRole("button", { name: "AI 文本整理" }));
     await user.type(screen.getByLabelText("待整理原文"), "notes with code");
     await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
     await user.click(await screen.findByRole("button", { name: "应用到 Wiki 草稿" }));
@@ -343,6 +441,7 @@ describe("App", () => {
       return { conversationId: "conversation-code", answer, requestId: "r-code", sources: [] };
     }) });
     const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: "AI 文本整理" }));
     await user.type(screen.getByLabelText("待整理原文"), "code notes");
     await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
 
@@ -365,6 +464,7 @@ describe("App", () => {
     const user = await login(mockApi);
     await user.type(screen.getByLabelText("给 Agent 的消息"), "project question");
     await user.click(screen.getByRole("button", { name: "发送" }));
+    await user.click(screen.getByRole("button", { name: /整理/ }));
     await user.type(screen.getByLabelText("待整理原文"), "format me");
     await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
 
@@ -379,9 +479,11 @@ describe("App", () => {
     const streamMock = vi.fn().mockReturnValue(new Promise(() => {}));
     const mockApi = api({ chatStream: streamMock });
     const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: "AI 文本整理" }));
     await user.type(screen.getByLabelText("待整理原文"), "format me");
     await user.type(screen.getByLabelText("给 Agent 的消息"), "project question");
     await user.click(screen.getByRole("button", { name: "发送" }));
+    await user.click(screen.getByRole("button", { name: /整理/ }));
 
     expect(screen.getByRole("button", { name: "AI 整理并预览" })).toBeDisabled();
   });
@@ -392,6 +494,7 @@ describe("App", () => {
       return new Promise(() => {});
     });
     const user = await login(api({ chatStream: streamMock }));
+    await user.click(screen.getByRole("button", { name: "AI 文本整理" }));
     await user.type(screen.getByLabelText("给 Agent 的消息"), "project question");
     await user.type(screen.getByLabelText("待整理原文"), "format me");
     await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
@@ -409,6 +512,7 @@ describe("App", () => {
       }),
     });
     const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: "AI 文本整理" }));
     await user.type(screen.getByLabelText("待整理原文"), "format me");
     await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
 
@@ -431,11 +535,13 @@ describe("App", () => {
       }),
     });
     const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: "AI 文本整理" }));
     await user.type(screen.getByLabelText("待整理原文"), "project one notes");
     await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
     expect(await screen.findByText("# Project one")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Second Project/ }));
+    await user.click(screen.getByRole("button", { name: /项目/ }));
+    await user.click(await screen.findByRole("button", { name: /Second Project/ }));
     expect(formatSignal?.aborted).toBe(true);
     expect(screen.getByLabelText("待整理原文")).toHaveValue("");
     expect(screen.queryByText("# Project one")).not.toBeInTheDocument();

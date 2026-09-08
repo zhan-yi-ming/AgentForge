@@ -8,9 +8,12 @@ import java.util.UUID;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.security.AuthenticatedActor;
+import com.agentforge.core.security.ToolOperation;
+import com.agentforge.core.security.ToolRiskEngine;
 import com.agentforge.core.shared.error.ConflictException;
 import com.agentforge.core.shared.error.ResourceNotFoundException;
 import com.agentforge.core.task.domain.TaskItem;
@@ -22,12 +25,17 @@ import com.agentforge.core.task.domain.TaskStatus;
 public class TaskService {
 
     private final TaskItemRepository tasks;
-    private final ProjectAccess projectAccess;
+    private final ToolRiskEngine riskEngine;
     private final Clock clock;
 
     public TaskService(TaskItemRepository tasks, ProjectAccess projectAccess, Clock clock) {
+        this(tasks, new ToolRiskEngine(projectAccess), clock);
+    }
+
+    @Autowired
+    public TaskService(TaskItemRepository tasks, ToolRiskEngine riskEngine, Clock clock) {
         this.tasks = tasks;
-        this.projectAccess = projectAccess;
+        this.riskEngine = riskEngine;
         this.clock = clock;
     }
 
@@ -39,7 +47,7 @@ public class TaskService {
             String description,
             TaskStatus status,
             TaskPriority priority) {
-        projectAccess.requireAccess(projectId, actor);
+        riskEngine.authorize(ToolOperation.CREATE_TASK, projectId, actor);
         TaskItem task = TaskItem.create(
                 projectId,
                 title.trim(),
@@ -52,13 +60,13 @@ public class TaskService {
 
     @Transactional(readOnly = true)
     public TaskView get(UUID projectId, UUID taskId, AuthenticatedActor actor) {
-        projectAccess.requireAccess(projectId, actor);
+        riskEngine.authorize(ToolOperation.GET_TASK, projectId, actor);
         return TaskView.from(find(projectId, taskId));
     }
 
     @Transactional(readOnly = true)
     public List<TaskView> list(UUID projectId, AuthenticatedActor actor) {
-        projectAccess.requireAccess(projectId, actor);
+        riskEngine.authorize(ToolOperation.GET_TASK, projectId, actor);
         return tasks.findAllByProjectIdOrderByUpdatedAtDesc(projectId)
                 .stream()
                 .map(TaskView::from)
@@ -75,7 +83,7 @@ public class TaskService {
             TaskStatus status,
             TaskPriority priority,
             long expectedVersion) {
-        projectAccess.requireAccess(projectId, actor);
+        riskEngine.authorize(ToolOperation.UPDATE_TASK, projectId, actor);
         TaskItem task = find(projectId, taskId);
         requireVersion(task, expectedVersion);
         task.update(
@@ -94,7 +102,7 @@ public class TaskService {
 
     @Transactional
     public void delete(UUID projectId, UUID taskId, AuthenticatedActor actor, long expectedVersion) {
-        projectAccess.requireAccess(projectId, actor);
+        riskEngine.authorize(ToolOperation.DELETE_TASK, projectId, actor);
         TaskItem task = find(projectId, taskId);
         requireVersion(task, expectedVersion);
         try {

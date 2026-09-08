@@ -2,6 +2,34 @@ import { describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../src/api";
 
 describe("API client", () => {
+  it("loads conversation history from the current project scope", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([]), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createApiClient(() => "token-123").listConversations("project-1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/projects/project-1/agent/conversations", expect.any(Object),
+    );
+  });
+
+  it("loads one conversation detail from the project-scoped path", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      conversationId: "conversation-1", preview: "Question", messageCount: 2,
+      createdAt: "2026-09-08T00:00:00Z", updatedAt: "2026-09-08T00:01:00Z", messages: [],
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createApiClient(() => "token-123").getConversation("project-1", "conversation-1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/projects/project-1/agent/conversations/conversation-1", expect.any(Object),
+    );
+    const headers = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer token-123");
+  });
   it("adds the bearer token and parses JSON", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([]), {
       status: 200, headers: { "Content-Type": "application/json", "X-Request-Id": "request-1" },

@@ -11,6 +11,9 @@ export type AgentAction = {
   resultTask?: Task; createdAt: string; decidedAt?: string;
 };
 export type AgentChat = { conversationId: string; answer: string; requestId: string; sources: AgentSource[]; pendingAction?: AgentAction };
+export type ConversationSummary = { conversationId: string; preview: string; messageCount: number; createdAt: string; updatedAt: string };
+export type ConversationMessage = { role: "USER" | "ASSISTANT"; content: string; sources: AgentSource[]; createdAt: string };
+export type ConversationDetail = ConversationSummary & { messages: ConversationMessage[] };
 export type AgentStreamCallbacks = {
   onMetadata?: (metadata: Pick<AgentChat, "conversationId" | "requestId" | "sources">) => void;
   onDelta?: (text: string) => void;
@@ -35,6 +38,8 @@ export interface ApiClient {
   createWikiPage(projectId: string, title: string, content: string): Promise<WikiPage>;
   updateWikiPage(projectId: string, pageId: string, title: string, content: string, version: number): Promise<WikiPage>;
   listTasks(projectId: string): Promise<Task[]>;
+  listConversations(projectId: string): Promise<ConversationSummary[]>;
+  getConversation(projectId: string, conversationId: string): Promise<ConversationDetail>;
   chat(projectId: string, message: string, conversationId?: string): Promise<AgentChat>;
   chatStream(projectId: string, message: string, conversationId: string | undefined, callbacks: AgentStreamCallbacks, signal?: AbortSignal): Promise<AgentChat>;
   confirmAction(projectId: string, actionId: string): Promise<AgentAction>;
@@ -151,6 +156,8 @@ export function createApiClient(getToken: () => string | null): ApiClient {
     createWikiPage: (projectId, title, content) => request(`/api/v1/projects/${projectId}/wiki-pages`, { method: "POST", body: JSON.stringify({ title, content }) }),
     updateWikiPage: (projectId, pageId, title, content, version) => request(`/api/v1/projects/${projectId}/wiki-pages/${pageId}`, { method: "PUT", body: JSON.stringify({ title, content, version }) }),
     listTasks: (projectId) => request(`/api/v1/projects/${projectId}/tasks`),
+    listConversations: (projectId) => request(`/api/v1/projects/${projectId}/agent/conversations`),
+    getConversation: (projectId, conversationId) => request(`/api/v1/projects/${projectId}/agent/conversations/${conversationId}`),
     chat: (projectId, message, conversationId) => request(`/api/v1/projects/${projectId}/agent/chat`, { method: "POST", body: JSON.stringify({ message, conversationId }) }),
     chatStream,
     confirmAction: (projectId, actionId) => request(`/api/v1/projects/${projectId}/agent/actions/${actionId}/confirm`, { method: "POST" }),

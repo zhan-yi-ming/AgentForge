@@ -92,7 +92,7 @@ class TaskServiceTest {
     void updateAndDeleteUseCurrentVersion() {
         UUID projectId = UUID.randomUUID();
         UUID taskId = UUID.randomUUID();
-        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), true);
         TaskItem task = TaskItem.create(
                 projectId,
                 "Task",
@@ -125,7 +125,7 @@ class TaskServiceTest {
     void deleteRejectsStaleVersionWithoutDeleting() {
         UUID projectId = UUID.randomUUID();
         UUID taskId = UUID.randomUUID();
-        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), true);
         TaskItem task = TaskItem.create(projectId, "Task", null, TaskStatus.TODO, TaskPriority.MEDIUM, NOW);
         when(tasks.findByProjectIdAndId(projectId, taskId)).thenReturn(Optional.of(task));
 

@@ -23,6 +23,7 @@ App
 - 远端数据通过一个 typed API client 访问；它负责 Bearer header、Problem Details、request ID 与 401 会话失效。
 - V1 使用 React 局部 state 和少量自定义 hook，不引入 Redux/Query 等状态框架；数据量小且请求关系清楚，避免 Day 6 提前承担缓存一致性复杂度。
 - conversationId 在当前项目会话中复用；已完成问答保存在页面内存，最新一条默认展开、旧记录可逐条展开。切换项目时清空 Chat 历史/pending action，避免跨项目拼接上下文。
+- V2-05 增加由 Core API 提供的持久化会话列表与详情。页面内存继续承载当前流式增量；选择历史时用服务端详情替换当前完成消息并进入聊天页。切换项目必须取消在途请求、清空旧详情并按新项目重新加载列表。
 - Agent Chat 使用 `fetch` 读取 SSE 字节流；客户端用流式 `TextDecoder` 处理被任意拆分的 UTF-8 和 SSE frame，收到 `delta` 后立即增量渲染 Markdown。切换项目或组件卸载时终止旧请求，旧项目的迟到事件不得写入新项目状态。
 - AI 整理的原始输入、流式返回 Markdown、完成状态和 Wiki 草稿是显式状态；整理复用公共 SSE Chat 接口但使用独立 AbortController、无 conversationId 的调用和独立展示状态，不改写项目 Chat 的 conversation、answer、sources 或 pending action。delta 到达后立即显示；未闭合的全文围栏先使用安全纯文本预览，complete 后再渲染 Markdown，避免流中整页黑色代码块。Chat 与整理互斥，切换项目或卸载组件时同时取消旧流，迟到事件不得写入新项目。
 - 只有用户操作才能把完成的整理内容复制到草稿。应用时强制切换为新 Wiki 页面，清空旧页面 ID/version，并从 fenced code block 外的首个 H1 提取 title（缺失时使用默认值）；同一整理结果只能应用一次，只有保存按钮才能调用 create API 写入业务数据。整理入口忽略意外 tool proposal。
