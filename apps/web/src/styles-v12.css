@@ -633,3 +633,39 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
   .topbar-info { padding-left: .45rem; }
   .logout-button { padding: .45rem .55rem; }
 }
+
+/* ---------- Final compact shell ---------- */
+.auth-copy h1 { max-width: 620px; margin-left: auto; margin-right: auto; font-size: clamp(1.55rem, 3.2vw, 2.25rem); }
+.login-heading { justify-content: center; text-align: left; }
+.login-note { text-align: center; }
+.topbar { justify-content: space-between; }
+.topbar-logo { border: 0; background: transparent; box-shadow: none; padding-left: 0; }
+.topbar-right { display: flex; align-items: center; justify-content: flex-end; gap: .35rem; }
+.topbar-info { display: contents; }
+.topbar .guide-button, .topbar .status, .topbar .logout-button { min-height: 32px; padding: .32rem .5rem; border: 0; background: transparent; box-shadow: none; border-radius: 8px; font-size: .72rem; }
+.topbar .guide-button:hover:not(:disabled), .topbar .logout-button:hover:not(:disabled) { background: var(--hover); }
+.topbar .status { display: inline-flex; align-items: center; gap: .25rem; color: var(--muted); }
+.topbar .status i { margin-right: .15rem; }
+.icon-button { display: inline-flex; align-items: center; gap: .3rem; }
+.ui-icon { width: 15px; height: 15px; flex: none; }
+.chat-back-button { position: fixed; z-index: 13; top: 1rem; left: 1rem; width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.chat-back-button:hover { background: var(--hover); }
+.workspace-hidden { display: none; }
+.chat-collapsed { cursor: text; }
+.chat-collapsed .chat-composer { cursor: text; }
+.chat-collapsed .expand-chat-button { display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--muted); }
+.chat-collapsed .expand-chat-button:hover { background: var(--hover); color: var(--ink); }
+.chat-collapsed .expand-chat-button .ui-icon { width: 16px; height: 16px; }
+.chat-collapsed .composer-footer button[aria-label="发送"] { margin-left: auto; }
+.agent-panel:not(.chat-collapsed) .expand-chat-button { display: none; }
+
+@media (max-width: 720px) {
+  .topbar-right { gap: .05rem; }
+  .topbar .guide-button, .topbar .status, .topbar .logout-button { padding: .28rem .3rem; }
+  .topbar .guide-button { font-size: 0; }
+  .topbar .guide-button .ui-icon { width: 17px; height: 17px; }
+  .topbar .status { font-size: 0; }
+  .topbar .status i { width: 7px; height: 7px; }
+  .topbar .logout-button { font-size: 0; }
+  .topbar .logout-button .ui-icon { width: 17px; height: 17px; }
+}
