@@ -4,9 +4,19 @@ from uuid import uuid4
 import pytest
 
 from agentforge_agent.config import Settings
-from agentforge_agent.context import ContextManager
+from agentforge_agent.context import (
+    ConversationContext,
+    ConversationMessage,
+    ContextManager,
+    TokenCounter,
+)
 from agentforge_agent.errors import LlmDependencyError
-from agentforge_agent.llm import CompatibleLlmResponder, build_responder
+from agentforge_agent.llm import (
+    SYSTEM_PROMPT,
+    CompatibleLlmResponder,
+    PromptComposer,
+    build_responder,
+)
 from agentforge_agent.retrieval import RetrievalResult
 from agentforge_agent.schemas import ToolProposal
 
@@ -98,6 +108,120 @@ def test_compatible_responder_does_not_feed_tool_context_back_to_model() -> None
     assert "Private tool proposal description" not in prompt
 
 
+def test_prompt_composer_enforces_total_budget_and_protects_retrieval() -> None:
+    counter = TokenCounter()
+    conversation_id = uuid4()
+    project_id = uuid4()
+    user_id = uuid4()
+    bundle = ContextManager.build(
+        project_id=project_id,
+        user_id=user_id,
+        actor_admin=False,
+        message="当前请求",
+        conversation_id=conversation_id,
+        request_id="request-budget",
+        conversation=ConversationContext(
+            conversation_id=conversation_id,
+            summary="旧摘要 " * 200,
+            recent_messages=(
+                ConversationMessage("user", "较旧消息 " * 100),
+                ConversationMessage("assistant", "较旧回答 " * 100),
+                ConversationMessage("user", "最新约束：不要覆盖 Wiki"),
+                ConversationMessage("assistant", "已保留最新约束"),
+            ),
+        ),
+    )
+    bundle = ContextManager.with_retrieval(
+        bundle,
+        RetrievalResult(context="RETRIEVAL-MUST-STAY", sources=[]),
+    )
+    composer = PromptComposer(token_budget=1200, token_counter=counter)
+
+    prompt = composer.compose(bundle)
+
+    assert counter.count_messages((SYSTEM_PROMPT, prompt)) <= 1200
+    assert "近期消息：" in prompt
+    assert "会话摘要：" in prompt
+    assert "项目检索上下文：\nRETRIEVAL-MUST-STAY" in prompt
+    assert "项目上下文：" in prompt
+    assert "当前请求：\n当前请求" in prompt
+    assert "最新约束：不要覆盖 Wiki" in prompt
+    assert str(project_id) not in prompt
+    assert str(user_id) not in prompt
+    assert "request-budget" not in prompt
+
+
+def test_prompt_composer_keeps_summary_and_recent_messages_in_separate_sections() -> None:
+    conversation_id = uuid4()
+    bundle = ContextManager.build(
+        project_id=uuid4(),
+        user_id=uuid4(),
+        actor_admin=False,
+        message="current question",
+        conversation_id=conversation_id,
+        request_id="request-sections",
+        conversation=ConversationContext(
+            conversation_id=conversation_id,
+            summary="用户：旧约束是 Java 负责业务写入",
+            recent_messages=(
+                ConversationMessage("user", "latest question"),
+                ConversationMessage("assistant", "latest answer"),
+            ),
+        ),
+    )
+
+    prompt = PromptComposer(
+        token_budget=8192,
+        token_counter=TokenCounter(),
+    ).compose(bundle)
+
+    assert "近期消息：\n用户：latest question\n助手：latest answer" in prompt
+    assert "会话摘要：\n用户：旧约束是 Java 负责业务写入" in prompt
+
+
+def test_prompt_composer_drops_last_recent_exchange_atomically() -> None:
+    counter = TokenCounter()
+    conversation_id = uuid4()
+
+    def bundle_with(messages):
+        return ContextManager.build(
+            project_id=uuid4(),
+            user_id=uuid4(),
+            actor_admin=False,
+            message="current",
+            conversation_id=conversation_id,
+            request_id="request-atomic",
+            conversation=ConversationContext(
+                conversation_id=conversation_id,
+                recent_messages=messages,
+            ),
+        )
+
+    assistant_only = bundle_with(
+        (ConversationMessage("assistant", "assistant-marker"),)
+    )
+    assistant_prompt = PromptComposer(
+        token_budget=8192,
+        token_counter=counter,
+    ).compose(assistant_only)
+    exact_budget = counter.count_messages((SYSTEM_PROMPT, assistant_prompt))
+    paired = bundle_with(
+        (
+            ConversationMessage("user", "user-marker " * 200),
+            ConversationMessage("assistant", "assistant-marker"),
+        )
+    )
+
+    prompt = PromptComposer(
+        token_budget=exact_budget,
+        token_counter=counter,
+    ).compose(paired)
+
+    assert "近期消息：\n（无）" in prompt
+    assert "user-marker" not in prompt
+    assert "assistant-marker" not in prompt
+
+
 @pytest.mark.parametrize(
     ("provider", "expected_url", "expected_model"),
     [
@@ -146,6 +270,32 @@ def test_build_responder_applies_configured_max_tokens() -> None:
     )
 
     assert captured["max_tokens"] == 321
+
+
+def test_build_responder_applies_configured_context_budget() -> None:
+    responder = build_responder(
+        settings(
+            llm_provider="deepseek",
+            llm_api_key="local-test-key",
+            context_token_budget=2048,
+        ),
+        model_factory=lambda **kwargs: FakeChatModel(),
+    )
+
+    assert responder.prompt_composer.token_budget == 2048
+
+
+def test_settings_reject_context_budget_below_safe_prompt_metadata_floor() -> None:
+    with pytest.raises(ValueError, match="context_token_budget"):
+        settings(context_token_budget=1023)
+
+
+def test_settings_reject_summary_budget_above_total_context_budget() -> None:
+    with pytest.raises(ValueError, match="summary"):
+        settings(
+            context_token_budget=1024,
+            context_summary_token_budget=2048,
+        )
 
 
 def test_enabled_provider_requires_local_api_key() -> None:

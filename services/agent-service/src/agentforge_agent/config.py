@@ -2,7 +2,7 @@ from functools import lru_cache
 
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     llm_model: str | None = None
     llm_max_tokens: int = Field(default=800, ge=64, le=4096)
+    context_token_budget: int = Field(default=8192, ge=1024, le=131072)
+    context_recent_turns: int = Field(default=4, ge=1, le=20)
+    context_summary_token_budget: int = Field(default=800, ge=64, le=8192)
+    context_max_sessions: int = Field(default=1000, ge=1, le=10000)
     langfuse_enabled: bool = False
     langfuse_public_key: SecretStr | None = None
     langfuse_secret_key: SecretStr | None = None
@@ -44,6 +48,14 @@ class Settings(BaseSettings):
         if value.startswith("langfuse"):
             raise ValueError("Langfuse environment uses a reserved prefix.")
         return value
+
+    @model_validator(mode="after")
+    def validate_context_budgets(self) -> "Settings":
+        if self.context_summary_token_budget > self.context_token_budget:
+            raise ValueError(
+                "context summary budget must not exceed total context budget"
+            )
+        return self
 
 
 @lru_cache

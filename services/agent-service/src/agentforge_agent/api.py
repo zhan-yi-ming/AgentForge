@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import StreamingResponse
 
 from .config import Settings, get_settings
+from .context import ConversationMemory, TokenCounter
 from .errors import LlmDependencyError, RagDependencyError
 from .graph import build_chat_context_graph, build_chat_graph
 from .llm import build_responder
@@ -41,6 +42,18 @@ def get_observability():
     return build_observability(get_settings())
 
 
+@lru_cache
+def get_conversation_memory() -> ConversationMemory:
+    settings = get_settings()
+    return ConversationMemory(
+        recent_turns=settings.context_recent_turns,
+        summary_token_budget=settings.context_summary_token_budget,
+        max_sessions=settings.context_max_sessions,
+        token_counter=TokenCounter(),
+        message_token_budget=settings.context_token_budget,
+    )
+
+
 def require_internal_token(
     token: str | None = Header(default=None, alias="X-AgentForge-Internal-Token"),
     settings: Settings = Depends(get_settings),
@@ -65,6 +78,7 @@ def chat(
     retrieval_service: RetrievalService | DisabledRetrievalService = Depends(get_retrieval_service),
     responder=Depends(get_responder),
     observability=Depends(get_observability),
+    conversation_memory: ConversationMemory = Depends(get_conversation_memory),
 ) -> ChatResponse:
     thread_id = request.conversation_id or uuid4()
     request_observation = observability.start_request(
@@ -77,6 +91,7 @@ def chat(
                 retrieval_service.retrieve,
                 responder,
                 observation=agent_observation,
+                conversation_memory=conversation_memory,
             )
             state = chat_graph.invoke(
                 {
@@ -87,6 +102,15 @@ def chat(
                     "conversation_id": thread_id,
                     "request_id": request.request_id,
                 }
+            )
+            bundle = state["context_bundle"]
+            conversation_memory.commit_exchange(
+                bundle.conversation.conversation_id,
+                bundle.project.project_id,
+                bundle.project.user_id,
+                bundle.working.message,
+                state["answer"],
+                expected_session_generation=bundle.conversation.session_generation,
             )
             agent_observation.update(output={"status": "completed"})
             request_observation.update(output={"status": "completed"})
@@ -109,7 +133,6 @@ def chat(
     finally:
         agent_observation.end()
         request_observation.end()
-    bundle = state["context_bundle"]
     return ChatResponse(
         conversation_id=bundle.conversation.conversation_id,
         answer=state["answer"],
@@ -128,6 +151,7 @@ def chat_stream(
     retrieval_service: RetrievalService | DisabledRetrievalService = Depends(get_retrieval_service),
     responder=Depends(get_responder),
     observability=Depends(get_observability),
+    conversation_memory: ConversationMemory = Depends(get_conversation_memory),
 ) -> StreamingResponse:
     thread_id = request.conversation_id or uuid4()
     request_observation = observability.start_request(
@@ -138,6 +162,7 @@ def chat_stream(
         state = build_chat_context_graph(
             retrieval_service.retrieve,
             observation=agent_observation,
+            conversation_memory=conversation_memory,
         ).invoke(
             {
                 "project_id": request.project_id,
@@ -166,6 +191,7 @@ def chat_stream(
 
     def events():
         generation_observation = agent_observation.child("llm", "generation")
+        answer_parts: list[str] = []
         try:
             yield encode(
                 {
@@ -188,7 +214,17 @@ def chat_stream(
                 chunks = stream(state) if callable(stream) else (responder(state),)
             for chunk in chunks:
                 if isinstance(chunk, str) and chunk:
+                    answer_parts.append(chunk)
                     yield encode({"type": "delta", "text": chunk})
+            bundle = state["context_bundle"]
+            conversation_memory.commit_exchange(
+                bundle.conversation.conversation_id,
+                bundle.project.project_id,
+                bundle.project.user_id,
+                bundle.working.message,
+                "".join(answer_parts),
+                expected_session_generation=bundle.conversation.session_generation,
+            )
             proposal = state["context_bundle"].tool.proposal
             yield encode(
                 {
@@ -206,6 +242,16 @@ def chat_stream(
             agent_observation.fail(exception)
             request_observation.fail(exception)
             yield encode({"type": "error", "message": "LLM provider is unavailable."})
+        except ValueError as exception:
+            generation_observation.fail(exception)
+            agent_observation.fail(exception)
+            request_observation.fail(exception)
+            yield encode(
+                {
+                    "type": "error",
+                    "message": "Conversation context changed before completion.",
+                }
+            )
         except Exception as exception:
             generation_observation.fail(exception)
             agent_observation.fail(exception)

@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 from langgraph.graph import END, START, StateGraph
 
-from .context import ContextBundle, ContextManager
+from .context import ContextBundle, ContextManager, ConversationMemory
 from .observability import NullObservation
 from .retrieval import RetrievalResult
 from .tool_planner import plan_tool
@@ -39,9 +39,10 @@ def build_chat_graph(
     retriever: Retriever,
     responder: Responder = deterministic_responder,
     observation=None,
+    conversation_memory: ConversationMemory | None = None,
 ):
     parent = observation or NullObservation()
-    prepare, retrieve, plan = _context_nodes(retriever, parent)
+    prepare, retrieve, plan = _context_nodes(retriever, parent, conversation_memory)
 
     def respond(state: ChatState) -> dict[str, str]:
         observation = parent.child("llm", "generation")
@@ -69,11 +70,15 @@ def build_chat_graph(
     return builder.compile()
 
 
-def build_chat_context_graph(retriever: Retriever, observation=None):
+def build_chat_context_graph(
+    retriever: Retriever,
+    observation=None,
+    conversation_memory: ConversationMemory | None = None,
+):
     """Run deterministic preparation, retrieval and tool planning before streaming."""
 
     parent = observation or NullObservation()
-    prepare, retrieve, plan = _context_nodes(retriever, parent)
+    prepare, retrieve, plan = _context_nodes(retriever, parent, conversation_memory)
 
     builder = StateGraph(ChatState)
     builder.add_node("prepare", prepare)
@@ -86,17 +91,32 @@ def build_chat_context_graph(retriever: Retriever, observation=None):
     return builder.compile()
 
 
-def _context_nodes(retriever: Retriever, parent):
+def _context_nodes(
+    retriever: Retriever,
+    parent,
+    conversation_memory: ConversationMemory | None,
+):
     def prepare(state: ChatState) -> dict[str, object]:
         def operation() -> dict[str, object]:
+            conversation_id = state.get("conversation_id") or uuid4()
+            conversation = (
+                conversation_memory.load(
+                    conversation_id,
+                    state["project_id"],
+                    state["user_id"],
+                )
+                if conversation_memory is not None
+                else None
+            )
             return {
                 "context_bundle": ContextManager.build(
                     project_id=state["project_id"],
                     user_id=state["user_id"],
                     actor_admin=state["actor_admin"],
                     message=state["message"],
-                    conversation_id=state.get("conversation_id") or uuid4(),
+                    conversation_id=conversation_id,
                     request_id=state["request_id"],
+                    conversation=conversation,
                 )
             }
 

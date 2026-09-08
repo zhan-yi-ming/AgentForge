@@ -6,6 +6,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from .config import Settings
+from .context import ContextBundle, TokenCounter
 from .errors import LlmDependencyError
 from .graph import ChatState, Responder, deterministic_responder
 
@@ -22,16 +23,76 @@ SYSTEM_PROMPT = """你是 AgentForge 项目助手。请优先使用中文简洁�
 不要声称已经创建、修改或删除业务数据；这些操作必须由系统另行确认。"""
 
 
+class PromptComposer:
+    def __init__(self, *, token_budget: int, token_counter: TokenCounter) -> None:
+        self.token_budget = token_budget
+        self.token_counter = token_counter
+
+    def compose(self, bundle: ContextBundle) -> str:
+        current = bundle.working.message
+        recent = list(bundle.conversation.recent_messages)
+        summary = bundle.conversation.summary or ""
+        retrieved = bundle.retrieved.content.strip()
+
+        def render() -> str:
+            recent_text = "\n".join(
+                f"{'用户' if message.role == 'user' else '助手'}：{message.content}"
+                for message in recent
+            ) or "（无）"
+            return (
+                f"当前请求：\n{current or '（空）'}\n\n"
+                f"近期消息：\n{recent_text}\n\n"
+                f"会话摘要：\n{summary or '（无）'}\n\n"
+                f"项目检索上下文：\n{retrieved or '（未检索到相关项目资料）'}\n\n"
+                "项目上下文：\n"
+                "资料范围=已授权项目\n"
+                f"调用者角色={'管理员' if bundle.project.actor_admin else '成员'}"
+            )
+
+        def total() -> int:
+            return self.token_counter.count_messages((SYSTEM_PROMPT, render()))
+
+        while total() > self.token_budget:
+            excess = total() - self.token_budget
+            if summary:
+                summary = self._shrink(summary, excess)
+                continue
+            if len(recent) > 2:
+                del recent[:2]
+                continue
+            if recent:
+                recent.clear()
+                continue
+            if retrieved:
+                retrieved = self._shrink(retrieved, excess)
+                continue
+            if current:
+                current = self._shrink(current, excess)
+                continue
+            raise ValueError("context token budget is too small for prompt metadata")
+        return render()
+
+    def _shrink(self, value: str, excess: int) -> str:
+        current_tokens = self.token_counter.count_text(value)
+        target = max(0, current_tokens - max(1, excess))
+        return self.token_counter.truncate_text(value, target)
+
+
 class CompatibleLlmResponder:
     def __init__(
         self,
         model: Any,
         provider: str = "unknown",
         model_name: str = "unknown",
+        prompt_composer: PromptComposer | None = None,
     ) -> None:
         self.model = model
         self.provider = provider
         self.model_name = model_name
+        self.prompt_composer = prompt_composer or PromptComposer(
+            token_budget=8192,
+            token_counter=TokenCounter(),
+        )
 
     def __call__(self, state: ChatState) -> str:
         return self.respond_observed(state, None)
@@ -86,15 +147,9 @@ class CompatibleLlmResponder:
         if observation is not None and usage:
             observation.update(usage_details=usage)
 
-    @staticmethod
-    def _messages(state: ChatState):
+    def _messages(self, state: ChatState):
         bundle = state["context_bundle"]
-        context = bundle.retrieved.content.strip()
-        context_text = context or "（未检索到相关项目资料）"
-        prompt = (
-            f"用户问题：\n{bundle.working.message}\n\n"
-            f"项目检索上下文：\n{context_text}"
-        )
+        prompt = self.prompt_composer.compose(bundle)
         return [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)]
 
 
@@ -131,6 +186,10 @@ def build_responder(
         model,
         provider=settings.llm_provider,
         model_name=model_name,
+        prompt_composer=PromptComposer(
+            token_budget=settings.context_token_budget,
+            token_counter=TokenCounter(),
+        ),
     )
 
 

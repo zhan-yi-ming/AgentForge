@@ -55,6 +55,8 @@ AGENTFORGE_AGENT_LLM_API_KEY=只填写你自己的DeepSeek密钥
 
 V2-01 的 Langfuse 默认关闭，不影响无外部账号的本地运行。需要查看基础 Trace 时，在本机 `.env` 设置 `AGENTFORGE_AGENT_LANGFUSE_ENABLED=true`、public key、secret key、host 与 environment，然后重建或重启 Agent Service。secret key 不得打印、写入文档或提交；Trace 只包含关联 ID、节点结果摘要、耗时和 provider 返回的 Token usage，不包含 message、answer、检索正文或 Tool 参数。Langfuse 不可用时 Chat 应继续工作，可用同一个 `requestId` 对照本地日志排查。
 
+V2-03 默认以 `AGENTFORGE_AGENT_CONTEXT_TOKEN_BUDGET=8192` 限制完整输入 Prompt 的保守 UTF-8 字节上界；`CONTEXT_RECENT_TURNS=4`、`CONTEXT_SUMMARY_TOKEN_BUDGET=800`、`CONTEXT_MAX_SESSIONS=1000` 分别控制近期轮数、摘要上限与进程内 session 数。修改这些值后需要重建或重启 Agent Service。会话状态不写数据库，重启和多实例切换都会丢失；不要把它当作持久记忆。
+
 切换智谱或千问时只改 provider、key；默认模型和地址如下，也可在本地覆盖 `AGENTFORGE_AGENT_LLM_MODEL` 与 `AGENTFORGE_AGENT_LLM_BASE_URL`：
 
 | provider | 默认模型 | 默认 base URL |

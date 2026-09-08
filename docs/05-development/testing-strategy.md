@@ -135,3 +135,10 @@ Day 4 跨进程闭环由仓库脚本执行：
 - Context 测试必须覆盖 Working/Conversation/Project/Retrieved/Tool 五部分的生产者与消费者、显式 project 传递、同步/流式一致性、Tool proposal 不进入模型 messages，以及空 Summary 不改变现有 Prompt。
 - Web 测试必须让 stream promise 在首个 delta 后保持 pending，证明 complete 前 delta 已进入 DOM；未闭合全文 fence 不得渲染成整块代码区域。应用完成结果后必须清空旧 Wiki identity、生成 title，并在保存时调用 create 而非 update。
 - V2-02 作为 Agent 全局 Context/State L3 节点，运行 Agent Service 全量 pytest、Web 全量测试与生产构建、Java `clean verify`、必要跨进程 Chat/SSE smoke、敏感扫描和 Pi Milestone Review。Pi 只审核 diff，不能替代 Codex 的机器证据。
+
+## V2-03 Conversation Summary + Token Budget 门槛
+
+- 约定 seam 为 Python Context/store 公共接口、LLM model boundary、FastAPI `/internal/v1/chat` 与 `/internal/v1/chat/stream`，以及不变的 Java/Python HTTP 契约。
+- TDD 必须覆盖多轮 Recent/Summary 分离、关键旧约束可见、Tool/检索内容不进入摘要、跨 project/user conversationId 拒绝、session/summary 有界，以及最终 System + Human 输入计数不超过配置预算。
+- 同步与流式分别验证成功后提交完整 exchange；LLM 失败或不完整 stream 不得提交历史。Retrieval Context 必须在历史超预算时仍保留，最近消息必须作为独立 section 而不是被 Summary 替换。
+- V2-03 属于 Agent 全局 Context/State L3；执行 Agent Service 全量 pytest、Java `clean verify`、真实 Java/Python chat 与 stream 契约 smoke、配置解析、敏感扫描和 Pi Milestone Review。HTTP schema 未变化且 Web 不读取内部上下文，因此不把 Web 全量测试列为最低门禁；若实现扩散到 Web 或公共字段则立即补跑。
