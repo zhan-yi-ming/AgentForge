@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiProblem, createApiClient, type AgentAction, type ApiClient, type Project, type Task, type WikiPage } from "./api";
 import { MarkdownPreview, normalizeMarkdownContent } from "./MarkdownPreview";
 
@@ -80,11 +80,14 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState("");
   const [onboardingOpen, setOnboardingOpen] = useState(() => !hasCompletedOnboarding());
-  const [activePanel, setActivePanel] = useState<WorkspacePanel>("wiki");
+  const [activePanel, setActivePanel] = useState<WorkspacePanel | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [wikiCreateOpen, setWikiCreateOpen] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(true);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
+  const [previewSize, setPreviewSize] = useState({ width: 680, height: 420 });
+  const previewDrag = useRef<{ startX: number; startY: number; originX: number; originY: number } | undefined>(undefined);
   const streamAbort = useRef<AbortController | undefined>(undefined);
   const formatAbort = useRef<AbortController | undefined>(undefined);
   const activeProjectId = useRef("");
@@ -196,6 +199,30 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setActivePanel(panel);
     setProjectsOpen(false);
     setTasksOpen(false);
+  }
+
+  function logout() {
+    sessionStorage.removeItem(TOKEN_KEY);
+    setAuthenticated(false);
+    setProjectsOpen(false);
+    setTasksOpen(false);
+    setActivePanel(null);
+  }
+
+  function startPreviewDrag(event: ReactPointerEvent<HTMLElement>) {
+    if ((event.target as HTMLElement).closest("button")) return;
+    previewDrag.current = { startX: event.clientX, startY: event.clientY, originX: previewPosition.x, originY: previewPosition.y };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function movePreviewDrag(event: ReactPointerEvent<HTMLElement>) {
+    const drag = previewDrag.current;
+    if (!drag) return;
+    setPreviewPosition({ x: drag.originX + event.clientX - drag.startX, y: drag.originY + event.clientY - drag.startY });
+  }
+
+  function endPreviewDrag() {
+    previewDrag.current = undefined;
   }
 
   function createBlankWiki() {
@@ -320,7 +347,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   }
 
   return <div className="app-shell">
-    <header className="topbar"><div className="topbar-inner"><div className="topbar-brand"><span className="mark small">AF</span><span className="brand"><strong>AgentForge</strong><small>Project intelligence workspace</small></span></div><div className="topbar-actions"><button className="guide-button" onClick={() => setOnboardingOpen(true)}>产品说明</button><span className="status"><i /> V1.2 Live Demo</span></div></div></header>
+    <header className="topbar"><div className="topbar-logo"><span className="mark small">AF</span><span className="brand"><strong>AgentForge</strong><small>Project intelligence workspace</small></span></div><div className="topbar-info"><button className="guide-button" onClick={() => setOnboardingOpen(true)}>产品说明</button><span className="status"><i /> V1.2 Live Demo</span></div><button className="logout-button" onClick={logout}>退出登录</button></header>
     <div className="floating-rail" aria-label="快速导航">
       <button className="rail-button" aria-expanded={projectsOpen} onClick={() => { setProjectsOpen((open) => !open); setTasksOpen(false); }}><span>⌘</span><small>项目</small></button>
       <button className="rail-button" aria-expanded={tasksOpen} onClick={() => { setTasksOpen((open) => !open); setProjectsOpen(false); }}><span>✓</span><small>任务</small></button>
@@ -329,8 +356,8 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     {tasksOpen && <aside className="floating-drawer tasks-drawer"><div className="drawer-heading"><div><span className="section-label">EXECUTION</span><strong>执行任务</strong></div><button className="drawer-close" aria-label="关闭执行任务" onClick={() => setTasksOpen(false)}>×</button></div><div className="task-list">{tasks.map((task) => <article key={task.id}><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><h3>{task.title}</h3><p>{task.description || "暂无描述"}</p><footer><span>{task.status.replace("_", " ")}</span><span>v{task.version}</span></footer></article>)}{!tasks.length && <p className="empty-state">暂无任务，可让 Agent 提出一个。</p>}</div></aside>}
     <main className="workspace centered-workspace">
       {error && <p role="alert" className="error banner">{error}</p>}
-      <section className={activePanel === "wiki" ? "panel agent-panel" : "panel agent-panel chat-collapsed"}><div className="panel-heading"><div><span className="eyebrow">AI COPILOT</span><h2>项目对话</h2></div>{conversationId && <span className="conversation">会话 {conversationId.slice(0, 8)}</span>}</div>
-        <div className="agent-welcome"><span className="agent-orb">✦</span><div><strong>你好，我是 AgentForge</strong><p>我会结合当前项目的 Wiki 与任务回答，并在写入前征求你的确认。</p></div></div>
+      <section className={activePanel ? "panel agent-panel chat-collapsed" : "panel agent-panel"}><div className="panel-heading"><div><span className="eyebrow">AI COPILOT</span><h2>项目对话</h2></div>{conversationId && <span className="conversation">会话 {conversationId.slice(0, 8)}</span>}</div>
+        {!activePanel && <div className="agent-welcome"><span className="agent-orb">✦</span><div><strong>你好，我是 AgentForge</strong><p>我会结合当前项目的 Wiki 与任务回答，并在写入前征求你的确认。</p></div></div>}
         <form className="chat-composer" onSubmit={sendChat}><textarea aria-label="给 Agent 的消息" value={chatMessage} onChange={(event) => setChatMessage(event.target.value)} placeholder="向 Agent 提问，探索项目上下文…" /><div className="composer-footer"><span>Agent 会基于当前项目 Wiki 与任务回答</span><button aria-label="发送" disabled={busy || streaming || !chatMessage.trim()}>{streaming ? "生成中…" : "发送"}<span>↗</span></button></div></form>
         {chatHistory.length > 0 && <div className="conversation-history">{chatHistory.map((item, index) => {
           const expanded = expandedChatIds.has(item.id);
@@ -365,7 +392,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         {activePanel === "tasks" && <div className="workspace-view tasks-view"><div className="panel-heading"><div><span className="eyebrow">EXECUTION</span><h2>执行任务</h2></div><span className="count">{tasks.length}</span></div><p className="task-explanation">这里只展示明确创建并经你确认的任务；普通提问和 Wiki 保存不会新增任务。</p><div className="task-list">{tasks.map((task) => <article key={task.id}><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><h3>{task.title}</h3><p>{task.description || "暂无描述"}</p><footer><span>{task.status.replace("_", " ")}</span><span>v{task.version}</span></footer></article>)}{!tasks.length && <p className="empty-state">暂无任务，可让 Agent 提出一个。</p>}</div></div>}
         {activePanel === "format" && <div className="workspace-view format-view"><div className="panel-heading"><div><span className="eyebrow">DRAFT LAB</span><h2>AI 文本整理</h2></div><span className="safe-note">预览优先 · 不自动写回</span></div><div className="format-grid"><div><label>待整理原文<textarea value={formatInput} onChange={(event) => setFormatInput(event.target.value)} placeholder="粘贴零散会议记录或技术笔记…" /></label><button onClick={() => void formatText()} disabled={busy || streaming || !formatInput.trim()}>AI 整理并预览</button></div><div><p className="section-label">整理结果</p>{formatComplete ? <MarkdownPreview content={formattedText} /> : formattedText ? <div className="streaming-preview" aria-live="polite">{streamingPreviewText(formattedText)}</div> : <MarkdownPreview content="" />}{formattedText && <button className="ghost" onClick={applyFormattedText} disabled={busy || !formatComplete || formatApplied}>应用到 Wiki 草稿</button>}</div></div></div>}
       </section>
-      {previewOpen && activePanel === "wiki" && <aside className="preview-float"><div className="preview-float-heading"><div><span className="section-label">LIVE PREVIEW</span><strong>实时预览</strong></div><button className="drawer-close" aria-label="关闭实时预览" onClick={() => setPreviewOpen(false)}>×</button></div><div className="preview-float-body"><MarkdownPreview content={wikiContent} /></div></aside>}
+      {previewOpen && activePanel === "wiki" && wikiContent.trim() && <aside className="preview-float" style={{ transform: `translate(calc(-50% + ${previewPosition.x}px), calc(-50% + ${previewPosition.y}px))`, width: previewSize.width, height: previewSize.height }}><div className="preview-float-heading" onPointerDown={startPreviewDrag} onPointerMove={movePreviewDrag} onPointerUp={endPreviewDrag}><div><span className="section-label">LIVE PREVIEW</span><strong>实时预览</strong></div><button className="drawer-close" aria-label="关闭实时预览" onClick={() => setPreviewOpen(false)}>×</button></div><div className="preview-float-body"><MarkdownPreview content={wikiContent} /></div></aside>}
     </main>
     {onboardingOpen && <div className="onboarding-backdrop"><section className="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title"><span className="eyebrow">WHY AGENTFORGE</span><h2 id="onboarding-title">让项目知识真正参与执行</h2><p>AgentForge 把分散在 Wiki、任务和对话里的上下文放到同一个工作台，让团队更快理解问题、形成决策，并在确认后安全落地。</p><div className="onboarding-value"><span>问题</span><strong>信息散落，判断依赖个人记忆，执行容易失真。</strong><span>方法</span><strong>从项目上下文出发，让 AI 先解释、再提议，最后由人确认。</strong></div><div className="onboarding-modules"><details open><summary>项目空间</summary><p>切换项目时，Wiki、任务与对话上下文会严格隔离，避免跨项目混淆。</p></details><details><summary>项目对话</summary><p>直接询问架构、需求和风险；回答会带来源，涉及业务写入时会等待你的确认。</p></details><details><summary>Wiki 工作台</summary><p>把稳定知识沉淀为可编辑页面，并用底部预览窗即时检查 Markdown 结构。</p></details><details><summary>AI 文本整理</summary><p>把会议记录或技术笔记整理为可审阅的 Wiki 草稿，不会自动写回。</p></details></div><button onClick={completeOnboarding}>开始体验</button></section></div>}
   </div>;
