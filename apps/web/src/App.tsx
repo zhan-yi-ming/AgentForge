@@ -14,6 +14,8 @@ type ChatHistoryItem = {
   sources: { title: string; excerpt: string }[];
 };
 
+type WorkspacePanel = "wiki" | "tasks" | "format";
+
 function hasCompletedOnboarding() {
   try { return localStorage.getItem(ONBOARDING_KEY) === "true"; }
   catch { return false; }
@@ -78,6 +80,11 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState("");
   const [onboardingOpen, setOnboardingOpen] = useState(() => !hasCompletedOnboarding());
+  const [activePanel, setActivePanel] = useState<WorkspacePanel>("wiki");
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const [tasksOpen, setTasksOpen] = useState(false);
+  const [wikiCreateOpen, setWikiCreateOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(true);
   const streamAbort = useRef<AbortController | undefined>(undefined);
   const formatAbort = useRef<AbortController | undefined>(undefined);
   const activeProjectId = useRef("");
@@ -180,7 +187,27 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setWikiContent(formattedText);
     setFormatApplied(true);
     setWikiFeedback("已应用到 Wiki 草稿，请确认后保存");
+    setActivePanel("wiki");
+    setPreviewOpen(true);
     wikiPanel.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }
+
+  function openPanel(panel: WorkspacePanel) {
+    setActivePanel(panel);
+    setProjectsOpen(false);
+    setTasksOpen(false);
+  }
+
+  function createBlankWiki() {
+    selectWiki();
+    setWikiCreateOpen(false);
+    setActivePanel("wiki");
+  }
+
+  function createWikiWithAi() {
+    selectWiki();
+    setWikiCreateOpen(false);
+    setActivePanel("format");
   }
 
   async function sendChat(event: FormEvent) {
@@ -280,7 +307,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   if (!authenticated) {
     return <main className="auth-shell">
       <section className="login-card">
-        <div className="auth-copy"><span className="author-chip">Built by zhan-yi-ming</span><span className="eyebrow">AGENTFORGE / AI ENGINEERING WORKSPACE</span><h1>你好，面试官 👋</h1><p className="auth-lead">从一次真实的项目对话开始。</p><p>Agent 会读取项目 Wiki 与任务、流式回答，并在任何业务写入前等待你的确认。</p></div>
+        <div className="auth-copy"><span className="eyebrow">AGENTFORGE / AI ENGINEERING WORKSPACE</span><h1>把复杂项目，变成可协作的确定性行动。</h1><p className="auth-lead">从真实的项目上下文开始。</p><p>Agent 会读取项目 Wiki 与任务、流式回答，并在任何业务写入前等待你的确认。</p></div>
         <div className="login-heading"><div className="mark">AF</div><div><span className="eyebrow">LIVE DEMO</span><h2>进入 AgentForge</h2></div></div><p className="login-note">账号是简历上的邮箱，密码是微信号</p>
         <form className="login-form" onSubmit={login}>
           <label>邮箱<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
@@ -293,17 +320,18 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   }
 
   return <div className="app-shell">
-    <header className="topbar"><div><span className="mark small">AF</span><span className="brand"><strong>AgentForge</strong><small>by zhan-yi-ming</small></span></div><div className="topbar-actions"><button className="guide-button" onClick={() => setOnboardingOpen(true)}>新手引导</button><span className="status"><i /> V1.2 Live Demo</span></div></header>
-    <aside className="sidebar">
-      <div className="sidebar-intro"><p className="section-label">WORKSPACES</p><strong>项目空间</strong></div>
-      {projects.map((project) => <button key={project.id} className={project.id === projectId ? "project active" : "project"} onClick={() => setProjectId(project.id)}><strong>{project.name}</strong><span>{project.description || "暂无描述"}</span></button>)}
-      {!projects.length && <p className="empty-state">还没有项目</p>}
-    </aside>
+    <header className="topbar"><div className="topbar-inner"><div className="topbar-brand"><span className="mark small">AF</span><span className="brand"><strong>AgentForge</strong><small>Project intelligence workspace</small></span></div><div className="topbar-actions"><button className="guide-button" onClick={() => setOnboardingOpen(true)}>产品说明</button><span className="status"><i /> V1.2 Live Demo</span></div></div></header>
+    <div className="floating-rail" aria-label="快速导航">
+      <button className="rail-button" aria-expanded={projectsOpen} onClick={() => { setProjectsOpen((open) => !open); setTasksOpen(false); }}><span>⌘</span><small>项目</small></button>
+      <button className="rail-button" aria-expanded={tasksOpen} onClick={() => { setTasksOpen((open) => !open); setProjectsOpen(false); }}><span>✓</span><small>任务</small></button>
+    </div>
+    {projectsOpen && <aside className="floating-drawer projects-drawer"><div className="drawer-heading"><div><span className="section-label">WORKSPACES</span><strong>项目空间</strong></div><button className="drawer-close" aria-label="关闭项目空间" onClick={() => setProjectsOpen(false)}>×</button></div>{projects.map((project) => <button key={project.id} className={project.id === projectId ? "project active" : "project"} onClick={() => { setProjectId(project.id); setProjectsOpen(false); }}><strong>{project.name}</strong><span>{project.description || "暂无描述"}</span></button>)}{!projects.length && <p className="empty-state">还没有项目</p>}</aside>}
+    {tasksOpen && <aside className="floating-drawer tasks-drawer"><div className="drawer-heading"><div><span className="section-label">EXECUTION</span><strong>执行任务</strong></div><button className="drawer-close" aria-label="关闭执行任务" onClick={() => setTasksOpen(false)}>×</button></div><div className="task-list">{tasks.map((task) => <article key={task.id}><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><h3>{task.title}</h3><p>{task.description || "暂无描述"}</p><footer><span>{task.status.replace("_", " ")}</span><span>v{task.version}</span></footer></article>)}{!tasks.length && <p className="empty-state">暂无任务，可让 Agent 提出一个。</p>}</div></aside>}
     <main className="workspace centered-workspace">
       {error && <p role="alert" className="error banner">{error}</p>}
-      <section className="panel agent-panel"><div className="panel-heading"><div><span className="eyebrow">AI COPILOT</span><h2>项目对话</h2></div>{conversationId && <span className="conversation">会话 {conversationId.slice(0, 8)}</span>}</div>
+      <section className={activePanel === "wiki" ? "panel agent-panel" : "panel agent-panel chat-collapsed"}><div className="panel-heading"><div><span className="eyebrow">AI COPILOT</span><h2>项目对话</h2></div>{conversationId && <span className="conversation">会话 {conversationId.slice(0, 8)}</span>}</div>
         <div className="agent-welcome"><span className="agent-orb">✦</span><div><strong>你好，我是 AgentForge</strong><p>我会结合当前项目的 Wiki 与任务回答，并在写入前征求你的确认。</p></div></div>
-        <form className="chat-form" onSubmit={sendChat}><textarea aria-label="给 Agent 的消息" value={chatMessage} onChange={(event) => setChatMessage(event.target.value)} placeholder="例如：这个项目的架构边界是什么？" /><button aria-label="发送" disabled={busy || streaming || !chatMessage.trim()}>{streaming ? "生成中…" : "发送 ↗"}</button></form>
+        <form className="chat-composer" onSubmit={sendChat}><textarea aria-label="给 Agent 的消息" value={chatMessage} onChange={(event) => setChatMessage(event.target.value)} placeholder="向 Agent 提问，探索项目上下文…" /><div className="composer-footer"><span>Agent 会基于当前项目 Wiki 与任务回答</span><button aria-label="发送" disabled={busy || streaming || !chatMessage.trim()}>{streaming ? "生成中…" : "发送"}<span>↗</span></button></div></form>
         {chatHistory.length > 0 && <div className="conversation-history">{chatHistory.map((item, index) => {
           const expanded = expandedChatIds.has(item.id);
           const isLatest = index === chatHistory.length - 1;
@@ -319,27 +347,26 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         {pendingAction && <div className="action-card"><span className="eyebrow">等待你的确认</span><h3>{pendingAction.title || pendingAction.actionType}</h3><p>{pendingAction.description || `${pendingAction.taskStatus ?? ""} ${pendingAction.priority ?? ""}`}</p><div><button onClick={() => void decideAction("confirm")} disabled={busy}>确认执行</button><button className="danger" onClick={() => void decideAction("reject")} disabled={busy}>拒绝</button></div></div>}
       </section>
 
-      <section className="panel wiki-panel" ref={wikiPanel}>
-        <div className="panel-heading"><div><span className="eyebrow">KNOWLEDGE</span><h2>Wiki 工作台</h2></div><button className="ghost" onClick={() => selectWiki()}>新建页面</button></div>
-        <div className="wiki-layout"><nav className="wiki-list">{wikiPages.map((page) => <button key={page.id} className={page.id === wikiId ? "active" : ""} onClick={() => selectWiki(page)}>{page.title}</button>)}</nav>
-          <div className="editor"><input aria-label="Wiki 标题" placeholder="页面标题" value={wikiTitle} onChange={(event) => { setWikiTitle(event.target.value); setWikiFeedback(""); }} maxLength={200} />
-            <textarea aria-label="Wiki Markdown 草稿" placeholder="# 从这里开始记录…" value={wikiContent} onChange={(event) => { setWikiContent(event.target.value); setWikiFeedback(""); }} maxLength={100000} />
-            <button onClick={saveWiki} disabled={busy || !wikiTitle.trim()}>保存 Wiki</button>
-            {wikiFeedback && <p role="status" className="success">{wikiFeedback}</p>}</div>
-          <div className="preview"><p className="section-label">实时预览</p><MarkdownPreview content={wikiContent} /></div>
-        </div>
+      <section className="workspace-panel" ref={wikiPanel}>
+        <nav className="workspace-tabs" aria-label="工作台导航">
+          <button className={activePanel === "wiki" ? "active" : ""} onClick={() => openPanel("wiki")}>Wiki 工作台</button>
+          <button className={activePanel === "tasks" ? "active" : ""} onClick={() => openPanel("tasks")}>执行任务 <span>{tasks.length}</span></button>
+          <button className={activePanel === "format" ? "active" : ""} onClick={() => openPanel("format")}>AI 文本整理</button>
+        </nav>
+        {activePanel === "wiki" && <div className="workspace-view wiki-panel">
+          <div className="panel-heading"><div><span className="eyebrow">KNOWLEDGE</span><h2>Wiki 工作台</h2></div><div className="heading-actions"><div className="new-wiki-wrap"><button className="ghost" onClick={() => setWikiCreateOpen((open) => !open)}>新建页面 <span>＋</span></button>{wikiCreateOpen && <div className="new-wiki-menu"><button onClick={createBlankWiki}><strong>空白页面</strong><small>从零开始记录项目知识</small></button><button onClick={createWikiWithAi}><strong>AI 整理</strong><small>把零散内容整理成 Wiki 草稿</small></button></div>}</div><button className="preview-toggle" onClick={() => setPreviewOpen((open) => !open)}>{previewOpen ? "隐藏预览" : "打开预览"}</button></div></div>
+          <div className="wiki-layout"><nav className="wiki-list">{wikiPages.map((page) => <button key={page.id} className={page.id === wikiId ? "active" : ""} onClick={() => selectWiki(page)}>{page.title}</button>)}</nav>
+            <div className="editor"><input aria-label="Wiki 标题" placeholder="页面标题" value={wikiTitle} onChange={(event) => { setWikiTitle(event.target.value); setWikiFeedback(""); }} maxLength={200} />
+              <textarea aria-label="Wiki Markdown 草稿" placeholder="# 从这里开始记录…" value={wikiContent} onChange={(event) => { setWikiContent(event.target.value); setWikiFeedback(""); }} maxLength={100000} />
+              <button onClick={saveWiki} disabled={busy || !wikiTitle.trim()}>保存 Wiki</button>
+              {wikiFeedback && <p role="status" className="success">{wikiFeedback}</p>}</div>
+          </div>
+        </div>}
+        {activePanel === "tasks" && <div className="workspace-view tasks-view"><div className="panel-heading"><div><span className="eyebrow">EXECUTION</span><h2>执行任务</h2></div><span className="count">{tasks.length}</span></div><p className="task-explanation">这里只展示明确创建并经你确认的任务；普通提问和 Wiki 保存不会新增任务。</p><div className="task-list">{tasks.map((task) => <article key={task.id}><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><h3>{task.title}</h3><p>{task.description || "暂无描述"}</p><footer><span>{task.status.replace("_", " ")}</span><span>v{task.version}</span></footer></article>)}{!tasks.length && <p className="empty-state">暂无任务，可让 Agent 提出一个。</p>}</div></div>}
+        {activePanel === "format" && <div className="workspace-view format-view"><div className="panel-heading"><div><span className="eyebrow">DRAFT LAB</span><h2>AI 文本整理</h2></div><span className="safe-note">预览优先 · 不自动写回</span></div><div className="format-grid"><div><label>待整理原文<textarea value={formatInput} onChange={(event) => setFormatInput(event.target.value)} placeholder="粘贴零散会议记录或技术笔记…" /></label><button onClick={() => void formatText()} disabled={busy || streaming || !formatInput.trim()}>AI 整理并预览</button></div><div><p className="section-label">整理结果</p>{formatComplete ? <MarkdownPreview content={formattedText} /> : formattedText ? <div className="streaming-preview" aria-live="polite">{streamingPreviewText(formattedText)}</div> : <MarkdownPreview content="" />}{formattedText && <button className="ghost" onClick={applyFormattedText} disabled={busy || !formatComplete || formatApplied}>应用到 Wiki 草稿</button>}</div></div></div>}
       </section>
-
-      <section className="panel task-panel"><div className="panel-heading"><div><span className="eyebrow">EXECUTION</span><h2>执行任务</h2></div><span className="count">{tasks.length}</span></div>
-        <p className="task-explanation">这里只展示明确创建并经你确认的任务；普通提问和 Wiki 保存不会新增任务。</p>
-        <div className="task-list">{tasks.map((task) => <article key={task.id}><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><h3>{task.title}</h3><p>{task.description || "暂无描述"}</p><footer><span>{task.status.replace("_", " ")}</span><span>v{task.version}</span></footer></article>)}{!tasks.length && <p className="empty-state">暂无任务，可让 Agent 提出一个。</p>}</div>
-      </section>
-
-      <section className="panel format-panel"><div className="panel-heading"><div><span className="eyebrow">DRAFT LAB</span><h2>AI 文本整理</h2></div><span className="safe-note">预览优先 · 不自动写回</span></div>
-        <div className="format-grid"><div><label>待整理原文<textarea value={formatInput} onChange={(event) => setFormatInput(event.target.value)} placeholder="粘贴零散会议记录或技术笔记…" /></label><button onClick={() => void formatText()} disabled={busy || streaming || !formatInput.trim()}>AI 整理并预览</button></div>
-          <div><p className="section-label">整理结果</p>{formatComplete ? <MarkdownPreview content={formattedText} /> : formattedText ? <div className="streaming-preview" aria-live="polite">{streamingPreviewText(formattedText)}</div> : <MarkdownPreview content="" />}{formattedText && <button className="ghost" onClick={applyFormattedText} disabled={busy || !formatComplete || formatApplied}>应用到 Wiki 草稿</button>}</div></div>
-      </section>
+      {previewOpen && activePanel === "wiki" && <aside className="preview-float"><div className="preview-float-heading"><div><span className="section-label">LIVE PREVIEW</span><strong>实时预览</strong></div><button className="drawer-close" aria-label="关闭实时预览" onClick={() => setPreviewOpen(false)}>×</button></div><div className="preview-float-body"><MarkdownPreview content={wikiContent} /></div></aside>}
     </main>
-    {onboardingOpen && <div className="onboarding-backdrop"><section className="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title"><span className="eyebrow">QUICK START</span><h2 id="onboarding-title">新手引导</h2><p>四步看懂 AgentForge，不需要先研究所有面板。</p><ol><li><strong>选择项目</strong><span>左侧切换项目，所有 Wiki、任务和对话都严格隔离。</span></li><li><strong>从中央对话开始</strong><span>直接询问架构、需求或让 Agent 提出任务。</span></li><li><strong>检查来源与操作</strong><span>回答会带项目来源；业务写入必须由你确认。</span></li><li><strong>需要时再向下探索</strong><span>Wiki、任务和文本整理都保留在对话下方。</span></li></ol><button onClick={completeOnboarding}>开始体验</button></section></div>}
+    {onboardingOpen && <div className="onboarding-backdrop"><section className="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title"><span className="eyebrow">WHY AGENTFORGE</span><h2 id="onboarding-title">让项目知识真正参与执行</h2><p>AgentForge 把分散在 Wiki、任务和对话里的上下文放到同一个工作台，让团队更快理解问题、形成决策，并在确认后安全落地。</p><div className="onboarding-value"><span>问题</span><strong>信息散落，判断依赖个人记忆，执行容易失真。</strong><span>方法</span><strong>从项目上下文出发，让 AI 先解释、再提议，最后由人确认。</strong></div><div className="onboarding-modules"><details open><summary>项目空间</summary><p>切换项目时，Wiki、任务与对话上下文会严格隔离，避免跨项目混淆。</p></details><details><summary>项目对话</summary><p>直接询问架构、需求和风险；回答会带来源，涉及业务写入时会等待你的确认。</p></details><details><summary>Wiki 工作台</summary><p>把稳定知识沉淀为可编辑页面，并用底部预览窗即时检查 Markdown 结构。</p></details><details><summary>AI 文本整理</summary><p>把会议记录或技术笔记整理为可审阅的 Wiki 草稿，不会自动写回。</p></details></div><button onClick={completeOnboarding}>开始体验</button></section></div>}
   </div>;
 }

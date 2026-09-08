@@ -14,6 +14,7 @@
 
 ## 索引
 
+- `2026-09-08-visual-refresh.md`：收敛 Web 浅色视觉、替换登录页标语并清理个人/面试官文案。
 - `2026-09-07-v2-02-context-manager-and-wiki-draft-safety.md`：建立 V2-02 ContextBundle，并同步修复 AI 整理真实增量预览与新 Wiki 草稿/title 行为。
 - `2026-09-07-test-evidence-command-reproducibility.md`：强制每个成功验证记录完整可执行命令，禁止仅用勾选、PASS 或“同一命令”作为证据。
 - `2026-09-07-ai-formatting-stream-reliability.md`：把长文本 AI 整理迁移到独立 SSE 流，隔离 Chat 状态并细化 401/503/离线排障。

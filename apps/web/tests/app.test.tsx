@@ -40,10 +40,9 @@ async function login(mockApi: ApiClient) {
 }
 
 describe("App", () => {
-  it("welcomes the interviewer and credits zhan-yi-ming", () => {
+  it("shows the project positioning without personal branding", () => {
     render(<App api={api()} />);
-    expect(screen.getByText(/你好，面试官/)).toBeInTheDocument();
-    expect(screen.getByText(/zhan-yi-ming/)).toBeInTheDocument();
+    expect(screen.getByText(/把复杂项目，变成可协作的确定性行动/)).toBeInTheDocument();
   });
 
   it("hides demo credentials and explains where to find them", () => {
