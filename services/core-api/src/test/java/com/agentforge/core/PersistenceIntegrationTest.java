@@ -25,6 +25,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.agentforge.core.project.application.ProjectService;
 import com.agentforge.core.agent.application.AgentActionService;
+import com.agentforge.core.agent.application.AgentActionView;
 import com.agentforge.core.agent.application.ToolProposal;
 import com.agentforge.core.agent.application.AiUsageQuota;
 import com.agentforge.core.shared.error.RateLimitExceededException;
@@ -175,9 +176,9 @@ class PersistenceIntegrationTest {
                 .orElseThrow();
 
         assertThat(taskService.list(project.id(), actor)).isEmpty();
-        var executed = agentActionService.confirm(
+        var executed = confirmDirectly(
                 project.id(), pending.id(), actor, "integration-confirm-key", "integration-request-1");
-        var repeated = agentActionService.confirm(
+        var repeated = confirmDirectly(
                 project.id(), pending.id(), actor, "integration-confirm-key", "integration-request-2");
 
         assertThat(executed.resultTask().id()).isEqualTo(repeated.resultTask().id());
@@ -215,9 +216,9 @@ class PersistenceIntegrationTest {
                 project.id(), task.id(), actor, "Changed elsewhere", null,
                 task.status(), task.priority(), task.version());
 
-        var failed = agentActionService.confirm(
+        var failed = confirmDirectly(
                 project.id(), pending.id(), actor, "failure-key", "failure-confirm");
-        var replayed = agentActionService.confirm(
+        var replayed = confirmDirectly(
                 project.id(), pending.id(), actor, "failure-key", "failure-replay");
 
         assertThat(failed.status()).isEqualTo(com.agentforge.core.agent.domain.AgentActionStatus.FAILED);
@@ -249,13 +250,13 @@ class PersistenceIntegrationTest {
             var first = executor.submit(() -> {
                 ready.countDown();
                 start.await(10, TimeUnit.SECONDS);
-                return agentActionService.confirm(
+                return confirmDirectly(
                         project.id(), pending.id(), actor, "concurrent-key", "concurrent-1");
             });
             var second = executor.submit(() -> {
                 ready.countDown();
                 start.await(10, TimeUnit.SECONDS);
-                return agentActionService.confirm(
+                return confirmDirectly(
                         project.id(), pending.id(), actor, "concurrent-key", "concurrent-2");
             });
             assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
@@ -292,5 +293,21 @@ class PersistenceIntegrationTest {
                 "select usage_date from ai_usage_daily where user_id = ?",
                 LocalDate.class,
                 userId)).isEqualTo(LocalDate.now(Clock.systemUTC()));
+    }
+
+    private AgentActionView confirmDirectly(
+            java.util.UUID projectId,
+            java.util.UUID actionId,
+            AuthenticatedActor actor,
+            String idempotencyKey,
+            String requestId) {
+        AgentActionView approved = agentActionService.approve(
+                projectId, actionId, actor, idempotencyKey, requestId);
+        if (approved.status()
+                != com.agentforge.core.agent.domain.AgentActionStatus.APPROVED) {
+            return approved;
+        }
+        return agentActionService.executeApproved(
+                projectId, actionId, actor, idempotencyKey, requestId);
     }
 }

@@ -127,12 +127,7 @@ public class AgentActionService {
     }
 
     @Transactional
-    public AgentActionView confirm(UUID projectId, UUID actionId, AuthenticatedActor actor) {
-        return confirm(projectId, actionId, actor, "legacy-" + actionId, "internal");
-    }
-
-    @Transactional
-    public AgentActionView confirm(
+    public AgentActionView approve(
             UUID projectId,
             UUID actionId,
             AuthenticatedActor actor,
@@ -153,7 +148,6 @@ public class AgentActionService {
             requireMatchingKey(action, idempotencyKey);
             return AgentActionView.from(action, null);
         }
-
         if (action.getStatus() == AgentActionStatus.PENDING) {
             action.approve(idempotencyKey, Instant.now(clock));
             actions.save(action);
@@ -164,7 +158,34 @@ public class AgentActionService {
         else {
             requireMatchingKey(action, idempotencyKey);
         }
+        return AgentActionView.from(action, null);
+    }
 
+    @Transactional
+    public AgentActionView executeApproved(
+            UUID projectId,
+            UUID actionId,
+            AuthenticatedActor actor,
+            String idempotencyKey,
+            String requestId) {
+        projectAccess.requireAccess(projectId, actor);
+        AgentTaskAction action = findForDecision(projectId, actionId, actor);
+        riskEngine.authorize(operationFor(action), projectId, actor);
+        if (action.getStatus() == AgentActionStatus.REJECTED) {
+            throw new ConflictException("The Agent action was rejected.");
+        }
+        if (action.getStatus() == AgentActionStatus.EXECUTED) {
+            requireMatchingKey(action, idempotencyKey);
+            return AgentActionView.from(action, replayResult(projectId, action, actor));
+        }
+        if (action.getStatus() == AgentActionStatus.FAILED) {
+            requireMatchingKey(action, idempotencyKey);
+            return AgentActionView.from(action, null);
+        }
+        if (action.getStatus() != AgentActionStatus.APPROVED) {
+            throw new ConflictException("The Agent action has not been approved.");
+        }
+        requireMatchingKey(action, idempotencyKey);
         TaskView result;
         try {
             result = action.getActionType() == AgentActionType.CREATE_TASK

@@ -40,4 +40,4 @@
 
 ## 已知限制
 
-没有删除 Tool、通用工具注册、过期时间、人工审批人分派、多级审批、审计查询 UI 或跨重启 LangGraph resume；没有真实 LLM provider。
+没有删除 Tool、通用工具注册、过期时间、人工审批人分派、多级审批或审计查询 UI；没有真实 LLM provider。V2-07 正在增加跨重启 LangGraph resume，目标流程和失败语义见 `agent-runtime.md`。

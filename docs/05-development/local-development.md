@@ -59,6 +59,8 @@ V2-03 默认以 `AGENTFORGE_AGENT_CONTEXT_TOKEN_BUDGET=8192` 限制完整输入 
 
 V2-04 使用 `AGENTFORGE_AGENT_NAMESPACE_TENANT=agentforge` 与 `AGENTFORGE_AGENT_NAMESPACE_WORKSPACE=default` 标识当前 Agent Service 的部署级 Memory 命名域。两项值只能由服务端环境设置，不能从 Chat body、浏览器或模型取得；它们不是 Workspace/Membership 业务实体。修改任一值相当于切换到新的空进程内命名域，原进程中的其他 Namespace 历史不会被读取。
 
+V2-07 使用 `AGENTFORGE_AGENT_CHECKPOINT_DB_DSN` 持久化待决 Action workflow；省略时复用 `AGENTFORGE_AGENT_RAG_DB_DSN`。Core API 必须先通过 Flyway 创建 `agent_checkpoint` schema，Agent Service 随后在启动时执行 LangGraph checkpointer 的幂等 setup。checkpoint 数据库不可用时服务启动失败，不降级到内存 saver。V2-03 的 Conversation Summary 仍是进程内状态，不因 V2-07 自动变成持久记忆。
+
 切换智谱或千问时只改 provider、key；默认模型和地址如下，也可在本地覆盖 `AGENTFORGE_AGENT_LLM_MODEL` 与 `AGENTFORGE_AGENT_LLM_BASE_URL`：
 
 | provider | 默认模型 | 默认 base URL |
@@ -150,6 +152,7 @@ Day 4 需要以下新增环境值，它们由 `.env.example` 提供：
 - `AGENTFORGE_AGENT_CORE_API_URL`：Python 回调 Core API 的地址。
 - `AGENTFORGE_CORE_INTERNAL_TOKEN`：Python→Java 专用 token，必须与 Java 进程一致，且不能与 `AGENTFORGE_AGENT_INTERNAL_TOKEN` 共用。
 - `AGENTFORGE_AGENT_RAG_DB_DSN`：Python 只用于 `rag_chunk` 派生索引的 PostgreSQL DSN。
+- `AGENTFORGE_AGENT_CHECKPOINT_DB_DSN`：Python 用于 `agent_checkpoint` schema 的 PostgreSQL DSN；本地可与 RAG DSN 相同。
 - `AGENTFORGE_AGENT_EMBEDDING_PROVIDER=hash`：V1 固定无密钥 Embedding 模式。
 - `AGENTFORGE_AGENT_LLM_PROVIDER`：`disabled` 或三家 provider；启用模型时必须在当前进程提供 `AGENTFORGE_AGENT_LLM_API_KEY`。
 

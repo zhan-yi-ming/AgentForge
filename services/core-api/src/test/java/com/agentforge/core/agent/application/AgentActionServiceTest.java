@@ -89,8 +89,8 @@ class AgentActionServiceTest {
                 .thenReturn(task);
         when(taskService.get(projectId, taskId, actor)).thenReturn(task);
 
-        AgentActionView first = service.confirm(projectId, action.getId(), actor, "confirm-key-1", "request-1");
-        AgentActionView repeated = service.confirm(projectId, action.getId(), actor, "confirm-key-1", "request-2");
+        AgentActionView first = confirmDirectly(projectId, action.getId(), actor, "confirm-key-1", "request-1");
+        AgentActionView repeated = confirmDirectly(projectId, action.getId(), actor, "confirm-key-1", "request-2");
 
         assertThat(first.status()).isEqualTo(AgentActionStatus.EXECUTED);
         assertThat(repeated.resultTask().id()).isEqualTo(taskId);
@@ -101,10 +101,45 @@ class AgentActionServiceTest {
         verify(auditEvents).save(org.mockito.ArgumentMatchers.argThat(event ->
                 event.getEventType() == AgentAuditEventType.EXECUTED
                         && event.getIdempotencyKey().equals("confirm-key-1")));
-        assertThatThrownBy(() -> service.confirm(
+        assertThatThrownBy(() -> confirmDirectly(
                 projectId, action.getId(), actor, "different-key", "request-3"))
                 .isInstanceOf(ConflictException.class);
-        verify(riskEngine, times(3)).authorize(ToolOperation.CREATE_TASK, projectId, actor);
+        verify(riskEngine, times(4)).authorize(ToolOperation.CREATE_TASK, projectId, actor);
+    }
+
+    @Test
+    void approvedActionCanBeCommittedBeforeASeparateExecutionAttempt() {
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        var actor = new AuthenticatedActor(userId, false);
+        AgentTaskAction action = AgentTaskAction.pending(
+                projectId,
+                userId,
+                UUID.randomUUID(),
+                com.agentforge.core.agent.domain.AgentActionType.CREATE_TASK,
+                null,
+                "Resume safely",
+                null,
+                TaskStatus.TODO,
+                TaskPriority.HIGH,
+                null,
+                Instant.now(clock));
+        TaskView task = task(UUID.randomUUID(), projectId, "Resume safely", 0);
+        when(actions.findByProjectIdAndIdForUpdate(projectId, action.getId())).thenReturn(Optional.of(action));
+        when(taskService.create(projectId, actor, "Resume safely", null, TaskStatus.TODO, TaskPriority.HIGH))
+                .thenReturn(task);
+
+        AgentActionView approved = service.approve(
+                projectId, action.getId(), actor, "resume-key", "approval-request");
+
+        assertThat(approved.status()).isEqualTo(AgentActionStatus.APPROVED);
+        verify(taskService, never()).create(any(), any(), any(), any(), any(), any());
+
+        AgentActionView executed = service.executeApproved(
+                projectId, action.getId(), actor, "resume-key", "execution-request");
+
+        assertThat(executed.status()).isEqualTo(AgentActionStatus.EXECUTED);
+        assertThat(executed.resultTask().id()).isEqualTo(task.id());
     }
 
     @Test
@@ -135,7 +170,8 @@ class AgentActionServiceTest {
         assertThatThrownBy(() -> service.reject(
                 projectId, action.getId(), actor, "another-reject-key", "reject-conflict"))
                 .isInstanceOf(ConflictException.class);
-        assertThatThrownBy(() -> service.confirm(projectId, action.getId(), actor))
+        assertThatThrownBy(() -> confirmDirectly(
+                projectId, action.getId(), actor, "legacy-" + action.getId(), "internal"))
                 .isInstanceOf(ConflictException.class);
         verify(taskService, never()).create(any(), any(), any(), any(), any(), any());
         verify(auditEvents).save(org.mockito.ArgumentMatchers.argThat(event ->
@@ -168,7 +204,8 @@ class AgentActionServiceTest {
                 projectId, taskId, actor, "Existing title", "JWT", TaskStatus.DONE, TaskPriority.HIGH, 2))
                 .thenReturn(updated);
 
-        AgentActionView executed = service.confirm(projectId, pending.id(), actor);
+        AgentActionView executed = confirmDirectly(
+                projectId, pending.id(), actor, "legacy-" + pending.id(), "internal");
 
         assertThat(executed.resultTask().status()).isEqualTo(TaskStatus.DONE);
     }
@@ -226,9 +263,9 @@ class AgentActionServiceTest {
                 projectId, taskId, actor, "Existing title", "JWT", TaskStatus.DONE, TaskPriority.HIGH, 2))
                 .thenThrow(new ConflictException("The Task version is stale."));
 
-        AgentActionView failed = service.confirm(
+        AgentActionView failed = confirmDirectly(
                 projectId, action.getId(), actor, "failed-key", "failed-request");
-        AgentActionView replayed = service.confirm(
+        AgentActionView replayed = confirmDirectly(
                 projectId, action.getId(), actor, "failed-key", "replay-request");
 
         assertThat(failed.status()).isEqualTo(AgentActionStatus.FAILED);
@@ -256,7 +293,7 @@ class AgentActionServiceTest {
         when(taskService.get(projectId, taskId, actor))
                 .thenThrow(new ResourceNotFoundException("Task not found: " + taskId));
 
-        AgentActionView replayed = service.confirm(
+        AgentActionView replayed = confirmDirectly(
                 projectId, action.getId(), actor, "deleted-result-key", "deleted-result-replay");
 
         assertThat(replayed.status()).isEqualTo(AgentActionStatus.EXECUTED);
@@ -275,5 +312,20 @@ class AgentActionServiceTest {
                 version,
                 Instant.now(clock),
                 Instant.now(clock));
+    }
+
+    private AgentActionView confirmDirectly(
+            UUID projectId,
+            UUID actionId,
+            AuthenticatedActor actor,
+            String idempotencyKey,
+            String requestId) {
+        AgentActionView approved = service.approve(
+                projectId, actionId, actor, idempotencyKey, requestId);
+        if (approved.status() != AgentActionStatus.APPROVED) {
+            return approved;
+        }
+        return service.executeApproved(
+                projectId, actionId, actor, idempotencyKey, requestId);
     }
 }

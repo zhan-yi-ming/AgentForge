@@ -99,6 +99,12 @@ Core 新增集中式 Tool Policy/Risk Engine 作为 application service 之前�
 
 Core `agent` 模块把现有 Task Action 演进为五态 Approval。Controller 只接收不透明 `Idempotency-Key`；application service 在 action 行锁内重新验证 ProjectAccess、发起者归属和 Tool Risk Policy，再执行 Task 用例。相同 key 的终态 replay 读取既有结果，不同 key 拒绝。`AgentAuditEventRepository` 仅允许追加结构化事件，和 Approval/Task 状态共享事务事实；Python、LLM 与 Web 均不能写 actor、状态、result 或审计字段。
 
+## V2-07 可恢复 Agent Runtime 边界（目标状态）
+
+Python 只在存在 Tool proposal 时启动持久化 Action workflow，以完整 Memory Namespace 派生 LangGraph 物理 thread key，在 PostgreSQL `agent_checkpoint` schema 写 checkpoint 并 interrupt；公共 Thread ID 仍是 conversation UUID。checkpoint 不保存完整 Prompt、回答或检索正文，也不写 Java 业务表。
+
+Java 的 action workflow application service 负责跨服务编排：在短事务中提交 APPROVED/REJECTED，事务外调用 Python Resume，再由新的短事务锁定 APPROVED action、重新执行 ProjectAccess/Tool Policy 并写 Task。内部 Resume 成功不是业务授权；Java Approval、Audit 和 Task 表仍是唯一业务事实。
+
 ## 参考
 
 - [Spring Modulith](https://github.com/spring-projects/spring-modulith)：官方建议把业务模块作为应用根包的直接子包，并支持验证模块结构。当前采用其分包思想，暂不引入额外运行时复杂度。

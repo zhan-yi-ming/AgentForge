@@ -12,10 +12,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 import com.agentforge.core.agent.application.AgentChatResult;
+import com.agentforge.core.agent.application.AgentResumeResult;
 import com.agentforge.core.agent.application.AgentServiceClient;
 import com.agentforge.core.agent.application.AgentStreamEvent;
+import com.agentforge.core.shared.error.ConflictException;
 import com.agentforge.core.shared.error.ServiceUnavailableException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -111,12 +114,65 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         }
     }
 
+    @Override
+    public AgentResumeResult resume(
+            UUID projectId,
+            UUID userId,
+            boolean actorAdmin,
+            UUID conversationId,
+            UUID actionId,
+            String decision,
+            String idempotencyKey,
+            String requestId) {
+        try {
+            AgentResumeResult response = restClient.post()
+                    .uri("/internal/v1/agent/resume")
+                    .header("X-Request-Id", requestId)
+                    .body(new InternalResumeRequest(
+                            projectId,
+                            userId,
+                            actorAdmin,
+                            conversationId,
+                            actionId,
+                            decision,
+                            idempotencyKey,
+                            requestId))
+                    .retrieve()
+                    .body(AgentResumeResult.class);
+            if (response == null) {
+                throw new ServiceUnavailableException("Agent Service returned an empty resume response.");
+            }
+            return response;
+        }
+        catch (RestClientResponseException exception) {
+            if (exception.getStatusCode().value() == 404
+                    || exception.getStatusCode().value() == 409) {
+                throw new ConflictException("Agent workflow cannot be resumed.");
+            }
+            throw new ServiceUnavailableException("Agent Service resume is unavailable.", exception);
+        }
+        catch (RestClientException exception) {
+            throw new ServiceUnavailableException("Agent Service resume is unavailable.", exception);
+        }
+    }
+
     private record InternalChatRequest(
             UUID projectId,
             UUID userId,
             boolean actorAdmin,
             String message,
             UUID conversationId,
+            String requestId) {
+    }
+
+    private record InternalResumeRequest(
+            UUID projectId,
+            UUID userId,
+            boolean actorAdmin,
+            UUID conversationId,
+            UUID actionId,
+            String decision,
+            String idempotencyKey,
             String requestId) {
     }
 }

@@ -78,6 +78,9 @@ public class AgentTaskAction {
     @Column(name = "approved_at")
     private Instant approvedAt;
 
+    @Column(name = "action_workflow_version")
+    private Integer actionWorkflowVersion;
+
     protected AgentTaskAction() {
     }
 
@@ -105,6 +108,7 @@ public class AgentTaskAction {
         this.priority = priority;
         this.expectedTaskVersion = expectedTaskVersion;
         this.status = AgentActionStatus.PENDING;
+        this.actionWorkflowVersion = 1;
         this.createdAt = Objects.requireNonNull(createdAt);
     }
 
@@ -188,4 +192,5 @@ public class AgentTaskAction {
     public Instant getDecidedAt() { return decidedAt; }
     public String getIdempotencyKey() { return idempotencyKey; }
     public Instant getApprovedAt() { return approvedAt; }
+    public Integer getActionWorkflowVersion() { return actionWorkflowVersion; }
 }

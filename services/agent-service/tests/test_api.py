@@ -3,12 +3,15 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from langgraph.checkpoint.memory import InMemorySaver
 
 from agentforge_agent.api import (
+    get_action_runtime,
     get_conversation_memory,
     get_responder,
     get_retrieval_service,
 )
+from agentforge_agent.action_runtime import ActionWorkflowConflict, ActionWorkflowRuntime
 from agentforge_agent.config import Settings, get_settings
 from agentforge_agent.context import ConversationMemory, MemoryNamespace, TokenCounter
 from agentforge_agent.errors import LlmDependencyError
@@ -19,6 +22,8 @@ from agentforge_agent.schemas import ChatSource
 
 client = TestClient(app)
 TOKEN = "test-only-internal-token"
+action_runtime = ActionWorkflowRuntime(InMemorySaver())
+app.dependency_overrides[get_action_runtime] = lambda: action_runtime
 
 
 def api_namespace(project_id, user_id, conversation_id) -> MemoryNamespace:
@@ -83,6 +88,57 @@ def test_chat_rejects_wrong_internal_token() -> None:
     assert response.status_code == 401
 
 
+def test_resume_restores_an_interrupted_action_and_replays_the_same_decision() -> None:
+    project_id = uuid4()
+    user_id = uuid4()
+    conversation_id = uuid4()
+    action_id = uuid4()
+    request = chat_request(
+        message="create task: Recover the workflow; priority=HIGH",
+        project_id=str(project_id),
+        user_id=str(user_id),
+        conversation_id=str(conversation_id),
+    )
+    chat_response = client.post(
+        "/internal/v1/chat",
+        headers={"X-AgentForge-Internal-Token": TOKEN},
+        json=request,
+    )
+    resume_request = {
+        "projectId": str(project_id),
+        "userId": str(user_id),
+        "actorAdmin": False,
+        "conversationId": str(conversation_id),
+        "actionId": str(action_id),
+        "decision": "APPROVE",
+        "idempotencyKey": "resume-http-key",
+        "requestId": "resume-request-1",
+    }
+
+    resumed = client.post(
+        "/internal/v1/agent/resume",
+        headers={"X-AgentForge-Internal-Token": TOKEN},
+        json=resume_request,
+    )
+    replayed = client.post(
+        "/internal/v1/agent/resume",
+        headers={"X-AgentForge-Internal-Token": TOKEN},
+        json={**resume_request, "requestId": "resume-request-2"},
+    )
+
+    assert chat_response.status_code == 200
+    assert chat_response.json()["toolProposal"]["actionType"] == "CREATE_TASK"
+    assert resumed.status_code == 200
+    assert resumed.json() == {
+        "conversationId": str(conversation_id),
+        "actionId": str(action_id),
+        "decision": "APPROVE",
+        "status": "RESUMED",
+        "requestId": "resume-request-1",
+    }
+    assert replayed.json() == resumed.json()
+
+
 def test_chat_runs_graph_and_creates_conversation_id() -> None:
     response = client.post(
         "/internal/v1/chat",
@@ -135,6 +191,30 @@ def test_chat_stream_emits_metadata_deltas_and_complete_in_order() -> None:
     assert events[0]["sources"][0]["sourceType"] == "WIKI"
     assert [event["text"] for event in events[1:3]] == ["第一段", "，第二段"]
     assert events[-1]["toolProposal"] is None
+
+
+def test_chat_stream_reports_a_waiting_action_conflict() -> None:
+    class ConflictingRuntime:
+        def interrupt(self, namespace, proposal, request_id):
+            raise ActionWorkflowConflict("another action is waiting")
+
+    app.dependency_overrides[get_responder] = lambda: FakeStreamingResponder()
+    app.dependency_overrides[get_action_runtime] = lambda: ConflictingRuntime()
+    try:
+        response = client.post(
+            "/internal/v1/chat/stream",
+            headers={"X-AgentForge-Internal-Token": TOKEN},
+            json=chat_request(message="create task: Another action; priority=HIGH"),
+        )
+    finally:
+        app.dependency_overrides.pop(get_responder, None)
+        app.dependency_overrides[get_action_runtime] = lambda: action_runtime
+
+    events = [__import__("json").loads(line) for line in response.text.splitlines()]
+    assert events[-1] == {
+        "type": "error",
+        "message": "Another tool action is already waiting for this conversation.",
+    }
 
 
 def test_chat_sanitizes_llm_provider_failure() -> None:

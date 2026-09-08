@@ -13,7 +13,9 @@
 - 已完成并推送：V1 Day 5，Tool Calling、持久化待确认动作、人工确认/拒绝与 Java 确定性写回。
 - 已完成：V1 Day 6，React 工作区、Markdown 安全预览、Chat 来源与待确认动作交互，以及 AI 文本显式应用到 Wiki 草稿；Pi 未发现阻断性问题，审查项已集中修正并由 Codex 回归验证。
 - 已完成：V1 Day 7 完整 Compose、演示数据、安全配置生成、接口验收和真实浏览器验收。
-- 进行中：V1.2 固定面试账号、随机备用账号、SSE 流式回答和视觉体验升级。
+- 已完成：V1.2 固定面试账号、随机备用账号、SSE 流式回答和视觉体验升级。
+- 已完成：V2-01–V2-04 Langfuse Trace、Context Manager、Conversation Summary / Token Budget 与完整 Memory Namespace 隔离。
+- 已完成：V2-05–V2-07 Java 集中式 RBAC/Risk、持久化会话、五态 Approval/幂等/Audit，以及 PostgreSQL-backed LangGraph interrupt/resume；Agent Service 重启后仍可恢复待确认动作，业务写入继续由 Java 确定性执行。
 
 ## 先读文档
 
@@ -21,7 +23,7 @@
 - [产品概览](docs/01-product/product-overview.md)
 - [系统架构](docs/02-architecture/system-overview.md)
 - [本地开发](docs/05-development/local-development.md)
-- [当前变更](docs/07-changes/2026-09-05-day-7-v1-acceptance.md)
+- [当前变更](docs/07-changes/2026-09-09-v2-07-langgraph-checkpoint-resume.md)
 - [公开仓库安全](docs/00-governance/public-repository-security.md)
 - [单机生产部署](docs/06-operations/production-single-host.md)
 

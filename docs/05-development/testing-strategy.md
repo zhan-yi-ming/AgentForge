@@ -107,6 +107,14 @@ Day 4 跨进程闭环由仓库脚本执行：
 - Web API/DOM 覆盖 Idempotency-Key 请求头、网络失败后复用同 key、`EXECUTED` 成功刷新 Task、`FAILED` 不误刷新及拒绝不写。
 - 回归 Agent proposal/Java→Python 契约，证明 Python 仍只产生 Intent；V2-06 不引入 checkpoint/resume。
 
+## V2-07 质量门槛
+
+- 用 Agent Service 单元/HTTP 测试覆盖动态 interrupt、成功 Resume、同 key replay、错误 action/decision/key、旧 state schema 和完整 Namespace 隔离。
+- 用两个独立 runtime 共享真实 PostgreSQL，证明第一个进程写入等待点并关闭后，第二个进程能恢复同一 workflow；生产启动不得静默退回内存 saver。
+- Core application/HTTP 测试验证 `APPROVED` 提交、事务外 Resume、再次锁定授权与确定性执行的顺序；无 checkpoint 的 V2-06 旧 Action 必须保持兼容，V2-07 新 Action 必须强制 Resume。
+- 运行真实 Core API、Agent Service 与 PostgreSQL 的跨进程闭环：Tool proposal interrupt 后重启 Python，再 confirm、same-key replay，并断言 Task 只写一次且 checkpoint 已持久化；所有进程、容器和卷必须清理。
+- 本节点是状态机、Schema 和跨服务契约 L3 变化：最低门禁为 Agent pytest、Core `clean verify`、Compose config、上述 restart smoke、diff/docs/敏感扫描与 Pi Milestone Review。未修改 Web 契约或实现时不机械运行 Web 套件。
+
 ## 2026-09-05 历史决定：曾停用 Pi
 
 用户曾撤销 Pi 审查与测试授权，该决定及 Day 1–4 复核保留在 `docs/07-changes/2026-09-05-disable-pi-and-day1-day4-audit.md` 供历史追溯。随后用户重新授权每阶段一次性 Pi 只读代码审核，但没有恢复 Pi 测试、monitor、OnCodexWake 或自动阶段推进；Codex 始终直接执行并记录全部测试证据。

@@ -85,6 +85,38 @@ class AgentServiceHttpContractIntegrationTest {
     }
 
     @Test
+    void javaClientResumesARealInterruptedPythonWorkflow() {
+        HttpAgentServiceClient client = new HttpAgentServiceClient(restClient, objectMapper);
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        UUID actionId = UUID.randomUUID();
+        AgentChatResult chat = client.chat(
+                projectId,
+                userId,
+                false,
+                "create task: Resume contract; priority=HIGH",
+                conversationId,
+                "resume-contract-start");
+
+        var resumed = client.resume(
+                projectId,
+                userId,
+                false,
+                conversationId,
+                actionId,
+                "APPROVE",
+                "resume-contract-key",
+                "resume-contract-finish");
+
+        assertThat(chat.toolProposal()).isNotNull();
+        assertThat(resumed.conversationId()).isEqualTo(conversationId);
+        assertThat(resumed.actionId()).isEqualTo(actionId);
+        assertThat(resumed.decision()).isEqualTo("APPROVE");
+        assertThat(resumed.status()).isEqualTo("RESUMED");
+    }
+
+    @Test
     void javaClientMapsInvalidInternalTokenToServiceUnavailable() {
         RestClient invalidTokenClient = restClient.mutate()
                 .defaultHeaders(headers -> headers.set("X-AgentForge-Internal-Token", "invalid-test-token"))

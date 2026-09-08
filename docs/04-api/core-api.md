@@ -249,6 +249,12 @@ V1.1 在转发给 Agent Service 前原子消费一次用户 UTC 日配额；达�
 
 V2-06 的 action status 枚举为 `PENDING / APPROVED / REJECTED / EXECUTED / FAILED`。每次请求、批准、拒绝、执行成功或业务失败由 Java 在同一事务中追加审计事实；HTTP 不接受 actor、状态、risk、result 或审计字段。
 
+V2-07 目标语义中，confirm 先在短事务提交 `APPROVED`，再在事务外调用 Agent Service Resume，成功后由第二个短事务锁定 action、重新授权并执行。Agent Service 暂时不可用时返回 503，但已提交的 APPROVED 不回滚；相同 Idempotency Key 重试继续 Resume/Execute。相同 key 的 `EXECUTED`/`FAILED` replay 保持 V2-06 语义。升级前已存在且没有 checkpoint 的 V2-06 Action 由内部 workflow version 标记识别，继续使用旧 Java 决策链路；该标记不加入响应。
+
+reject 先提交 `REJECTED` 再恢复 Agent wait。相同 key 可重试恢复；相反 decision 或不同 key 返回 409。Python Resume 不能自行批准或执行业务 Tool，Java 仍是 Approval、Audit 与 Task 的唯一写入边界。
+
+若 Python 明确返回 workflow 不存在或状态冲突，Core 将内部 404/409 收敛为公共 409 且不暴露下游正文；网络、超时或 5xx 仍返回 503。
+
 ## V2-05 Tool Policy 与历史会话
 
 所有 Agent Intent 和直接 Wiki/Task 操作由 Java 服务端映射到固定 Tool Policy。HTTP 请求不接受可信的 `requiredRole`、`riskLevel` 或 `needApproval`；即使下游返回同名未知字段也不能覆盖策略。角色或项目策略拒绝返回 403，未知 Agent Tool 不创建 pending action。

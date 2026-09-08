@@ -1,8 +1,11 @@
+from contextlib import nullcontext
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from langgraph.checkpoint.memory import InMemorySaver
 
+from agentforge_agent.action_runtime import ActionWorkflowRuntime
 from agentforge_agent.api import get_observability, get_responder, get_retrieval_service
 from agentforge_agent.config import Settings
 from agentforge_agent.context import ContextManager, MemoryNamespace
@@ -459,7 +462,10 @@ def test_application_shutdown_flushes_observability(monkeypatch) -> None:
     observer = LangfuseObservability(client)
     monkeypatch.setattr(main_module, "get_observability", lambda: observer)
 
-    with TestClient(main_module.create_app()) as local_client:
+    runtime = ActionWorkflowRuntime(InMemorySaver())
+    with TestClient(
+        main_module.create_app(lambda _dsn: nullcontext(runtime))
+    ) as local_client:
         assert local_client.get("/health").status_code == 200
 
     assert client.shutdown_called is True

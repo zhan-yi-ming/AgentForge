@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.validation.annotation.Validated;
 
-import com.agentforge.core.agent.application.AgentActionService;
+import com.agentforge.core.agent.application.AgentActionWorkflowService;
 import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.shared.web.RequestIdFilter;
 
@@ -24,10 +24,10 @@ import com.agentforge.core.shared.web.RequestIdFilter;
 @RequestMapping("/api/v1/projects/{projectId}/agent/actions")
 public class AgentActionController {
 
-    private final AgentActionService agentActionService;
+    private final AgentActionWorkflowService actionWorkflow;
 
-    public AgentActionController(AgentActionService agentActionService) {
-        this.agentActionService = agentActionService;
+    public AgentActionController(AgentActionWorkflowService actionWorkflow) {
+        this.actionWorkflow = actionWorkflow;
     }
 
     @PostMapping("/{actionId}/confirm")
@@ -39,7 +39,7 @@ public class AgentActionController {
             @Size(min = 1, max = 100)
             @Pattern(regexp = "[A-Za-z0-9._:-]+") String idempotencyKey,
             HttpServletRequest servletRequest) {
-        return AgentActionResponse.from(agentActionService.confirm(
+        return AgentActionResponse.from(actionWorkflow.confirm(
                 projectId,
                 actionId,
                 AuthenticatedActor.from(jwt),
@@ -56,7 +56,7 @@ public class AgentActionController {
             @Size(min = 1, max = 100)
             @Pattern(regexp = "[A-Za-z0-9._:-]+") String idempotencyKey,
             HttpServletRequest servletRequest) {
-        return AgentActionResponse.from(agentActionService.reject(
+        return AgentActionResponse.from(actionWorkflow.reject(
                 projectId,
                 actionId,
                 AuthenticatedActor.from(jwt),

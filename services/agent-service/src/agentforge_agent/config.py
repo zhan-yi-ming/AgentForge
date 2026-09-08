@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     service_name: str = "agentforge-agent-service"
     core_api_url: str = "http://localhost:8080"
     rag_db_dsn: SecretStr
+    checkpoint_db_dsn: SecretStr | None = None
     rag_enabled: bool = True
     embedding_provider: Literal["hash"] = "hash"
     embedding_dimensions: int = Field(default=384, ge=384, le=384)
@@ -62,6 +63,10 @@ class Settings(BaseSettings):
                 "context summary budget must not exceed total context budget"
             )
         return self
+
+    def effective_checkpoint_db_dsn(self) -> str:
+        configured = self.checkpoint_db_dsn or self.rag_db_dsn
+        return configured.get_secret_value()
 
 
 @lru_cache

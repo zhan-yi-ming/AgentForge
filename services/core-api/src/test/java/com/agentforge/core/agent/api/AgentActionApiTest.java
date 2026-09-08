@@ -22,7 +22,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import com.agentforge.core.agent.application.AgentActionService;
+import com.agentforge.core.agent.application.AgentActionWorkflowService;
 import com.agentforge.core.agent.application.AgentActionView;
 import com.agentforge.core.agent.domain.AgentActionStatus;
 import com.agentforge.core.agent.domain.AgentActionType;
@@ -44,7 +44,7 @@ import com.agentforge.core.task.domain.TaskStatus;
 class AgentActionApiTest {
 
     @Autowired MockMvc mockMvc;
-    @MockitoBean AgentActionService actionService;
+    @MockitoBean AgentActionWorkflowService workflowService;
 
     @Test
     void confirmReturnsExecutedActionAndTask() throws Exception {
@@ -54,7 +54,7 @@ class AgentActionApiTest {
         Instant now = Instant.parse("2026-09-05T10:00:00Z");
         TaskView task = new TaskView(
                 taskId, projectId, "Add login", null, TaskStatus.TODO, TaskPriority.HIGH, 0, now, now);
-        when(actionService.confirm(
+        when(workflowService.confirm(
                 org.mockito.ArgumentMatchers.eq(projectId), org.mockito.ArgumentMatchers.eq(actionId), any(),
                 org.mockito.ArgumentMatchers.eq("confirm-key"), org.mockito.ArgumentMatchers.eq("request-confirm")))
                 .thenReturn(new AgentActionView(
@@ -69,7 +69,7 @@ class AgentActionApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("EXECUTED"))
                 .andExpect(jsonPath("$.resultTask.id").value(taskId.toString()));
-        verify(actionService).confirm(
+        verify(workflowService).confirm(
                 org.mockito.ArgumentMatchers.eq(projectId), org.mockito.ArgumentMatchers.eq(actionId), any(),
                 org.mockito.ArgumentMatchers.eq("confirm-key"), org.mockito.ArgumentMatchers.eq("request-confirm"));
     }
@@ -79,7 +79,7 @@ class AgentActionApiTest {
         UUID projectId = UUID.randomUUID();
         UUID actionId = UUID.randomUUID();
         Instant now = Instant.parse("2026-09-05T10:00:00Z");
-        when(actionService.reject(
+        when(workflowService.reject(
                 org.mockito.ArgumentMatchers.eq(projectId), org.mockito.ArgumentMatchers.eq(actionId), any(),
                 org.mockito.ArgumentMatchers.eq("reject-key"), org.mockito.ArgumentMatchers.eq("request-reject")))
                 .thenReturn(new AgentActionView(
@@ -105,7 +105,7 @@ class AgentActionApiTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType("application/problem+json"))
                 .andExpect(jsonPath("$.requestId").value("missing-key-request"));
-        verifyNoInteractions(actionService);
+        verifyNoInteractions(workflowService);
     }
 
     @Test
@@ -118,14 +118,14 @@ class AgentActionApiTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType("application/problem+json"))
                 .andExpect(jsonPath("$.requestId").value("unsafe-key-request"));
-        verifyNoInteractions(actionService);
+        verifyNoInteractions(workflowService);
     }
 
     @Test
     void differentReplayKeyReturnsConflictProblemDetails() throws Exception {
         UUID projectId = UUID.randomUUID();
         UUID actionId = UUID.randomUUID();
-        when(actionService.confirm(
+        when(workflowService.confirm(
                 org.mockito.ArgumentMatchers.eq(projectId), org.mockito.ArgumentMatchers.eq(actionId), any(),
                 org.mockito.ArgumentMatchers.eq("different-key"), org.mockito.ArgumentMatchers.eq("replay-conflict")))
                 .thenThrow(new ConflictException("The approval was already decided with another idempotency key."));
@@ -144,7 +144,7 @@ class AgentActionApiTest {
         UUID projectId = UUID.randomUUID();
         UUID actionId = UUID.randomUUID();
         Instant now = Instant.parse("2026-09-08T10:00:00Z");
-        when(actionService.confirm(
+        when(workflowService.confirm(
                 org.mockito.ArgumentMatchers.eq(projectId), org.mockito.ArgumentMatchers.eq(actionId), any(),
                 org.mockito.ArgumentMatchers.eq("failed-key"), org.mockito.ArgumentMatchers.eq("failed-replay")))
                 .thenReturn(new AgentActionView(

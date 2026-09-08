@@ -21,4 +21,14 @@ public interface AgentServiceClient {
             UUID conversationId,
             String requestId,
             Consumer<AgentStreamEvent> sink);
+
+    AgentResumeResult resume(
+            UUID projectId,
+            UUID userId,
+            boolean actorAdmin,
+            UUID conversationId,
+            UUID actionId,
+            String decision,
+            String idempotencyKey,
+            String requestId);
 }

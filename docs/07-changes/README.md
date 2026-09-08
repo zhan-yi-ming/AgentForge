@@ -1,5 +1,6 @@
 # 变更记录
 
+- `2026-09-09-v2-07-langgraph-checkpoint-resume.md`：V2-07 PostgreSQL checkpoint、interrupt/resume 与 Java 确定性执行恢复。
 - `2026-09-08-v2-06-approval-idempotency-audit.md`：V2-06 五态 Approval、幂等确认执行与追加审计。
 - `2026-09-08-v2-05-rbac-risk-history.md`：V2-05 集中式 RBAC/Risk Engine 与持久化历史会话。
 

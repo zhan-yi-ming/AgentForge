@@ -12,8 +12,10 @@ dependencies = [
   "langfuse>=4.0,<5",
   "langchain-openai>=1.1,<2",
   "langgraph>=1.0,<2",
+  "langgraph-checkpoint-postgres>=3.0,<4",
   "pgvector>=0.3,<1",
   "psycopg[binary]>=3.2,<4",
+  "psycopg-pool>=3.2,<4",
   "pydantic-settings>=2.7,<3",
   "uvicorn[standard]>=0.34,<1",
 ]

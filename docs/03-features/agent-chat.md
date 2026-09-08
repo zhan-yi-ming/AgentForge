@@ -30,3 +30,5 @@ V2-01 为 JSON 与流式入口增加相同的基础观测模型：内部认证�
 V2-02 在 Python 内部引入 `ContextBundle`。prepare 把当前消息、conversation 和已授权项目标识建立为 Working/Conversation/Project Context；retrieve 与 plan 分别替换 Retrieved/Tool Context；同步 responder 与流式 responder 消费同一个 bundle。LangGraph State 负责流程传递，ContextBundle 负责 Agent/模型所需资料，HTTP 字段和 Java 确定性写入边界不变，详见 `context-management.md`。
 
 V2-05 由 Java 根据服务端 Tool 名称解析 `required_role`、`risk_level` 与 `need_approval`。Python 仍只产生 Action Intent，不能提供可信权限 Metadata。Core 在同步成功或 SSE `complete` 后持久化完整 user/assistant exchange；流错误或提前结束不保存不完整 assistant 消息。历史展示与 Python 进程内 Context Memory 相互独立，详见 `security-and-risk.md` 与 `conversation-history.md`。
+
+V2-07 的目标状态只为有效 Tool proposal 增加持久化 Action workflow。Python 在同步响应或 SSE `complete` 之前写 PostgreSQL checkpoint 并 interrupt；普通回答不创建或覆盖等待状态。同一完整 Namespace 尚在等待决定时，相同 proposal 的重试返回原等待状态，另一个 Tool proposal 返回冲突。确认或拒绝由 Java 持久化后调用内部 Resume，详见 `agent-runtime.md`。

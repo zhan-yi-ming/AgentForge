@@ -108,12 +108,19 @@ Flyway V3 迁移启用 `vector` 扩展并创建 `rag_chunk`。该表可从 Wiki/
 | `status` | VARCHAR(16) | `PENDING` / `APPROVED` / `REJECTED` / `EXECUTED` / `FAILED` | 审批与执行状态 |
 | `result_task_id` | UUID | executed 后填写 | 已创建/更新 Task |
 | `idempotency_key` | VARCHAR(100) | requester 范围内部分唯一 | 首次决策绑定的幂等键 |
+| `action_workflow_version` | INTEGER | 可空、当前仅允许 1 | 空值表示升级前无 checkpoint 的 V2-06 Action；1 表示必须恢复 V2-07 workflow；不进入公共 API |
 | `version` | BIGINT | 非空 | action 乐观锁 |
 | `created_at` / `approved_at` / `decided_at` | TIMESTAMPTZ | created 非空 | 生命周期时间 |
 
 confirm/reject 在事务内悲观锁定 action。同 key 的终态请求返回既有事实，不同 key 冲突；确认前已可见的业务前置条件冲突落为 `FAILED`，flush 期乐观锁或未知基础设施异常回滚整个事务为 `PENDING` 并保持可安全重试。`(requested_by_user_id, idempotency_key)` 部分唯一索引防止同一用户跨 Approval 误用 key。Audit 的首版公共契约不承诺同一事务内事件的独立全序查询；测试验证完整事件集合与状态机约束，不依赖相同 timestamp 下的随机 UUID 排序。
 
 `agent_action_audit_event` 是追加式审计事实，包含 `project_id`、`approval_id`、`actor_user_id`、`action_type`、`target_id`、`event_type`、`result`、`request_id`、`idempotency_key` 和 `created_at`。外键保证 Project/User/Approval 真实存在；业务状态与对应事件在同一 Java 事务提交，不记录 token、Prompt 或密码。
+
+## V2-07 LangGraph checkpoint（目标状态）
+
+Flyway V8 创建独立 `agent_checkpoint` schema，并为 `agent_task_action` 增加可空的 `action_workflow_version` 兼容标记；该 schema 内部的 checkpoint migrations、checkpoints、writes 与 blobs 表由 `langgraph-checkpoint-postgres` 的幂等 setup 管理，应用代码不依赖其内部列结构。它们是 Python Agent 运行态，不是 Java 业务事实。
+
+checkpoint state 只保存 schema version、完整 Memory Namespace、proposal 指纹、等待/恢复状态、action/decision/idempotency/request 元数据。禁止保存 JWT、内部 token、密码、完整 Prompt、回答正文和检索正文。生产部署应把 Python 数据库权限限制为 checkpoint schema 及既有 RAG 派生数据；Python 不得写 `agent_task_action`、`task_item` 或 audit 表。
 
 ## 隔离与并发
 

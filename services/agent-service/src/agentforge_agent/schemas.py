@@ -43,6 +43,29 @@ class ChatResponse(ApiModel):
     tool_proposal: ToolProposal | None = None
 
 
+class ResumeRequest(ApiModel):
+    project_id: UUID
+    user_id: UUID
+    actor_admin: bool = False
+    conversation_id: UUID
+    action_id: UUID
+    decision: Literal["APPROVE", "REJECT"]
+    idempotency_key: str = Field(
+        min_length=1,
+        max_length=100,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
+    request_id: str = Field(min_length=1, max_length=128)
+
+
+class ResumeResponse(ApiModel):
+    conversation_id: UUID
+    action_id: UUID
+    decision: Literal["APPROVE", "REJECT"]
+    status: Literal["RESUMED"]
+    request_id: str
+
+
 class RagSource(ApiModel):
     source_type: Literal["WIKI", "TASK"]
     source_id: UUID
