@@ -704,3 +704,19 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
   .chat-session .history-toggle { max-width: 90%; }
   .chat-session .history-item .answer { width: 100%; }
 }
+
+/* ---------- Outer-scroll conversation and in-chat tool windows ---------- */
+.chat-session { min-height: calc(100vh - 90px); padding-bottom: 170px; }
+.chat-session .conversation-history { flex: none; min-height: auto; max-height: none; overflow: visible; padding-bottom: 1rem; }
+.chat-session .chat-composer { position: fixed; z-index: 9; left: 50%; right: auto; bottom: 1rem; transform: translateX(-50%); margin: 0; }
+.conversation-button { position: relative; }
+.unread-badge { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: #c73b36; border: 2px solid var(--surface); }
+.chat-tool-window { position: fixed; z-index: 15; top: 50%; left: 50%; width: min(860px, calc(100vw - 9rem)); max-height: min(720px, calc(100vh - 5rem)); transform: translate(-50%, -50%); overflow: auto; box-shadow: 0 22px 60px rgba(28,28,26,.16); }
+.chat-tool-window .workspace-view { padding-top: 1.2rem; }
+.chat-tool-close { position: sticky; z-index: 2; top: .55rem; float: right; margin: .45rem .55rem -.2rem 0; background: var(--surface); border: 1px solid var(--line); }
+
+@media (max-width: 720px) {
+  .chat-session { padding-bottom: 155px; }
+  .chat-session .chat-composer { left: calc(50% + 1.5rem); width: calc(100vw - 4.8rem); }
+  .chat-tool-window { width: calc(100vw - 5.5rem); max-height: calc(100vh - 3rem); left: calc(50% + 2rem); }
+}

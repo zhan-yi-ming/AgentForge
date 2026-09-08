@@ -45,9 +45,9 @@ V2 的总目标不是增加花哨功能，而是把“能运行的 Agent”升�
 
 ### V2-05 完整 RBAC + Risk Engine
 
-- **目标与 Scope**：建立 `READ / LOW / MEDIUM / HIGH` 风险等级和集中式 Tool Metadata（`required_role`、`risk_level`、`need_approval`），至少覆盖 `search_wiki`、`get_task`、`create_task`、`update_task` 与高风险修改/删除操作；Java 对 LLM Action Intent 做最终确定性授权。
+- **目标与 Scope**：建立 `READ / LOW / MEDIUM / HIGH` 风险等级和集中式 Tool Metadata（`required_role`、`risk_level`、`need_approval`），至少覆盖 `search_wiki`、`get_task`、`create_task`、`update_task` 与高风险修改/删除操作；Java 对 LLM Action Intent 做最终确定性授权。补充持久化历史聊天记录能力与左侧会话列表入口，用户可选择历史会话并进入对应聊天内容页；历史读取必须服从 Project/User/Thread Namespace 与 RBAC，不能跨项目或跨用户访问。
 - **边界**：禁止在各 Tool 散落权限 if/else；不得提前完整实现属于 V2-06 的 Approval/Audit/Idempotency。
-- **验收**：Agent 与直接 Java API 两条路径都不能绕过 RBAC/Risk；Tool Metadata 不能由客户端篡改。
+- **验收**：Agent 与直接 Java API 两条路径都不能绕过 RBAC/Risk；Tool Metadata 不能由客户端篡改；历史会话列表与详情只能返回当前授权作用域内的数据，选择记录后可恢复对应聊天内容页。
 - **Pi Security Review**：越权、IDOR、伪造 `project_id`、修改他人 Task、绕 Agent 直调 API、Metadata 篡改、Prompt Injection 绕权限。
 - **GitHub**：建立 Security and Risk 文档，建议 Mermaid `LLM Intent → Tool Policy → Risk Engine → RBAC → Execution`；可在真实实现后表述 `AI decides intent. Deterministic services enforce permission.`
 

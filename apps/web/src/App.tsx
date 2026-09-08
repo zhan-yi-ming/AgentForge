@@ -94,6 +94,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const [activePanel, setActivePanel] = useState<WorkspacePanel | null>(null);
   const [chatMode, setChatMode] = useState(false);
   const [chatExpanded, setChatExpanded] = useState(true);
+  const [unreadChat, setUnreadChat] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [wikiCreateOpen, setWikiCreateOpen] = useState(false);
@@ -106,6 +107,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const activeProjectId = useRef("");
   const wikiPanel = useRef<HTMLElement | null>(null);
   const chatSequence = useRef(0);
+  const chatModeRef = useRef(false);
 
   const report = useCallback((cause: unknown) => {
     if (cause instanceof ApiProblem) {
@@ -216,6 +218,29 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setTasksOpen(false);
   }
 
+  function openChatTool(panel: WorkspacePanel) {
+    setActivePanel((current) => current === panel ? null : panel);
+    setProjectsOpen(false);
+    setTasksOpen(false);
+  }
+
+  function enterChatMode() {
+    chatModeRef.current = true;
+    setChatMode(true);
+    setActivePanel(null);
+    setChatExpanded(true);
+    setUnreadChat(false);
+  }
+
+  function leaveChatMode() {
+    chatModeRef.current = false;
+    setChatMode(false);
+    setActivePanel(null);
+    setChatExpanded(true);
+    setProjectsOpen(false);
+    setTasksOpen(false);
+  }
+
   function logout() {
     sessionStorage.removeItem(TOKEN_KEY);
     setAuthenticated(false);
@@ -223,7 +248,9 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setTasksOpen(false);
     setActivePanel(null);
     setChatMode(false);
+    chatModeRef.current = false;
     setChatExpanded(true);
+    setUnreadChat(false);
   }
 
   function startPreviewDrag(event: ReactPointerEvent<HTMLElement>) {
@@ -257,9 +284,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   async function sendChat(event: FormEvent) {
     event.preventDefault();
     if (!projectId || !chatMessage.trim()) return;
-    setChatMode(true);
-    setActivePanel(null);
-    setChatExpanded(true);
+    enterChatMode();
     setProjectsOpen(false);
     setTasksOpen(false);
     const requestedProjectId = projectId;
@@ -288,6 +313,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
       setConversationId(result.conversationId);
       setChatHistory((current) => current.map((item) => item.id === historyId ? { ...item, answer: result.answer, sources: result.sources } : item));
       setPendingAction(result.pendingAction);
+      if (!chatModeRef.current) setUnreadChat(true);
       setChatMessage("");
     } catch (cause) {
       setChatHistory((current) => current.filter((item) => item.id !== historyId));
@@ -374,11 +400,12 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
 
   return <div className="app-shell">
     <header className="topbar"><div className="topbar-logo"><span className="mark small">AF</span><span className="brand"><strong>AgentForge</strong><small>Project intelligence workspace</small></span></div><div className="topbar-right"><button className="guide-button icon-button" onClick={() => setOnboardingOpen(true)}><Icon name="info" />产品说明</button><span className="status"><i /> V1.2 Live Demo</span><button className="logout-button icon-button" onClick={logout}><Icon name="logout" />退出</button></div></header>
-    {chatMode && <button className="chat-back-button" aria-label="返回首页工作台" onClick={() => { setChatMode(false); setActivePanel(null); setChatExpanded(true); }}><Icon name="back" /></button>}
-    {chatMode && <div className="chat-tools-rail" aria-label="聊天界面导航"><button className="rail-button" onClick={() => { setProjectsOpen((open) => !open); setTasksOpen(false); }}><span>⌘</span><small>项目</small></button><button className="rail-button" onClick={() => { setTasksOpen((open) => !open); setProjectsOpen(false); }}><span>✓</span><small>任务</small></button><button className="rail-button" onClick={() => openPanel("wiki")}><span>▤</span><small>Wiki</small></button><button className="rail-button" onClick={() => openPanel("tasks")}><span>≡</span><small>执行</small></button><button className="rail-button" onClick={() => openPanel("format")}><span>✎</span><small>整理</small></button></div>}
+    {chatMode && <button className="chat-back-button" aria-label="返回首页工作台" onClick={leaveChatMode}><Icon name="back" /></button>}
+    {chatMode && <div className="chat-tools-rail" aria-label="聊天界面导航"><button className="rail-button" onClick={() => { setProjectsOpen((open) => !open); setTasksOpen(false); }}><span>⌘</span><small>项目</small></button><button className="rail-button" onClick={() => { setTasksOpen((open) => !open); setProjectsOpen(false); }}><span>✓</span><small>任务</small></button><button className="rail-button" onClick={() => openChatTool("wiki")}><span>▤</span><small>Wiki</small></button><button className="rail-button" onClick={() => openChatTool("tasks")}><span>≡</span><small>执行</small></button><button className="rail-button" onClick={() => openChatTool("format")}><span>✎</span><small>整理</small></button></div>}
     {!chatMode && <div className="floating-rail" aria-label="快速导航">
       <button className="rail-button" aria-expanded={projectsOpen} onClick={() => { setProjectsOpen((open) => !open); setTasksOpen(false); }}><span>⌘</span><small>项目</small></button>
       <button className="rail-button" aria-expanded={tasksOpen} onClick={() => { setTasksOpen((open) => !open); setProjectsOpen(false); }}><span>✓</span><small>任务</small></button>
+      {(chatHistory.length > 0 || streaming) && <button className="rail-button conversation-button" onClick={enterChatMode}><span>◌</span><small>对话</small>{unreadChat && <i className="unread-badge" aria-label="有新的 AI 回答" />}</button>}
     </div>}
     {projectsOpen && <aside className="floating-drawer projects-drawer"><div className="drawer-heading"><div><span className="section-label">WORKSPACES</span><strong>项目空间</strong></div><button className="drawer-close" aria-label="关闭项目空间" onClick={() => setProjectsOpen(false)}>×</button></div>{projects.map((project) => <button key={project.id} className={project.id === projectId ? "project active" : "project"} onClick={() => { setProjectId(project.id); setProjectsOpen(false); }}><strong>{project.name}</strong><span>{project.description || "暂无描述"}</span></button>)}{!projects.length && <p className="empty-state">还没有项目</p>}</aside>}
     {tasksOpen && <aside className="floating-drawer tasks-drawer"><div className="drawer-heading"><div><span className="section-label">EXECUTION</span><strong>执行任务</strong></div><button className="drawer-close" aria-label="关闭执行任务" onClick={() => setTasksOpen(false)}>×</button></div><div className="task-list">{tasks.map((task) => <article key={task.id}><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><h3>{task.title}</h3><p>{task.description || "暂无描述"}</p><footer><span>{task.status.replace("_", " ")}</span><span>v{task.version}</span></footer></article>)}{!tasks.length && <p className="empty-state">暂无任务，可让 Agent 提出一个。</p>}</div></aside>}
@@ -403,7 +430,8 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         {chatMode && renderChatComposer()}
       </section>
 
-      <section className={chatMode ? "workspace-panel workspace-hidden" : "workspace-panel"} ref={wikiPanel}>
+      <section className={chatMode ? activePanel ? "workspace-panel chat-tool-window" : "workspace-panel workspace-hidden" : "workspace-panel"} ref={wikiPanel}>
+        {chatMode && activePanel && <button className="drawer-close chat-tool-close" aria-label="关闭悬浮工作台" onClick={() => setActivePanel(null)}>×</button>}
         {!chatMode && <nav className="workspace-tabs" aria-label="工作台导航">
           <button className={activePanel === "wiki" ? "active" : ""} onClick={() => openPanel("wiki")}>Wiki 工作台</button>
           <button className={activePanel === "tasks" ? "active" : ""} onClick={() => openPanel("tasks")}>执行任务 <span>{tasks.length}</span></button>
