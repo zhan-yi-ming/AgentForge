@@ -16,12 +16,13 @@ type ChatHistoryItem = {
 
 type WorkspacePanel = "wiki" | "tasks" | "format";
 
-function Icon({ name }: { name: "info" | "logout" | "back" | "expand" }) {
+function Icon({ name }: { name: "info" | "logout" | "back" | "expand" | "shrink" }) {
   const paths = {
     info: <><circle cx="12" cy="12" r="8.5" /><path d="M12 10.8v5.3M12 7.5h.01" /></>,
     logout: <><path d="M10 5H6.5A1.5 1.5 0 0 0 5 6.5v11A1.5 1.5 0 0 0 6.5 19H10" /><path d="M13 8l4 4-4 4M8.5 12H17" /></>,
     back: <><path d="M15 5l-7 7 7 7" /><path d="M8.5 12H20" /></>,
     expand: <><path d="M8 10V7h3M16 10V7h-3M8 14v3h3M16 14v3h-3" /></>,
+    shrink: <><path d="M11 8H8v3M13 8h3v3M11 16H8v-3M13 16h3v-3" /></>,
   };
   return <svg className="ui-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
@@ -93,6 +94,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const [activePanel, setActivePanel] = useState<WorkspacePanel | null>(null);
   const [lastPanel, setLastPanel] = useState<WorkspacePanel>("wiki");
   const [chatMode, setChatMode] = useState(false);
+  const [chatExpanded, setChatExpanded] = useState(true);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [wikiCreateOpen, setWikiCreateOpen] = useState(false);
@@ -211,13 +213,9 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setActivePanel(panel);
     setLastPanel(panel);
     setChatMode(false);
+    setChatExpanded(false);
     setProjectsOpen(false);
     setTasksOpen(false);
-  }
-
-  function openChatFromPanel() {
-    setActivePanel(null);
-    setChatMode(false);
   }
 
   function logout() {
@@ -227,6 +225,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setTasksOpen(false);
     setActivePanel(null);
     setChatMode(false);
+    setChatExpanded(true);
   }
 
   function startPreviewDrag(event: ReactPointerEvent<HTMLElement>) {
@@ -262,6 +261,9 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     if (!projectId || !chatMessage.trim()) return;
     setChatMode(true);
     setActivePanel(null);
+    setChatExpanded(true);
+    setProjectsOpen(false);
+    setTasksOpen(false);
     const requestedProjectId = projectId;
     const question = chatMessage.trim();
     const historyId = `chat-${++chatSequence.current}`;
@@ -370,7 +372,8 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
 
   return <div className="app-shell">
     <header className="topbar"><div className="topbar-logo"><span className="mark small">AF</span><span className="brand"><strong>AgentForge</strong><small>Project intelligence workspace</small></span></div><div className="topbar-right"><button className="guide-button icon-button" onClick={() => setOnboardingOpen(true)}><Icon name="info" />产品说明</button><span className="status"><i /> V1.2 Live Demo</span><button className="logout-button icon-button" onClick={logout}><Icon name="logout" />退出</button></div></header>
-    {chatMode && <button className="chat-back-button" aria-label="返回当前工作台" onClick={() => { setChatMode(false); setActivePanel(lastPanel); }}><Icon name="back" /></button>}
+    {chatMode && <button className="chat-back-button" aria-label="返回首页工作台" onClick={() => { setChatMode(false); setActivePanel(null); setChatExpanded(true); }}><Icon name="back" /></button>}
+    {chatMode && <div className="chat-tools-rail" aria-label="聊天界面导航"><button className="rail-button" onClick={() => { setProjectsOpen((open) => !open); setTasksOpen(false); }}><span>⌘</span><small>项目</small></button><button className="rail-button" onClick={() => { setTasksOpen((open) => !open); setProjectsOpen(false); }}><span>✓</span><small>任务</small></button><button className="rail-button" onClick={() => openPanel("wiki")}><span>▤</span><small>Wiki</small></button><button className="rail-button" onClick={() => openPanel("tasks")}><span>≡</span><small>执行</small></button><button className="rail-button" onClick={() => openPanel("format")}><span>✎</span><small>整理</small></button></div>}
     {!chatMode && <div className="floating-rail" aria-label="快速导航">
       <button className="rail-button" aria-expanded={projectsOpen} onClick={() => { setProjectsOpen((open) => !open); setTasksOpen(false); }}><span>⌘</span><small>项目</small></button>
       <button className="rail-button" aria-expanded={tasksOpen} onClick={() => { setTasksOpen((open) => !open); setProjectsOpen(false); }}><span>✓</span><small>任务</small></button>
@@ -379,9 +382,9 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     {tasksOpen && <aside className="floating-drawer tasks-drawer"><div className="drawer-heading"><div><span className="section-label">EXECUTION</span><strong>执行任务</strong></div><button className="drawer-close" aria-label="关闭执行任务" onClick={() => setTasksOpen(false)}>×</button></div><div className="task-list">{tasks.map((task) => <article key={task.id}><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><h3>{task.title}</h3><p>{task.description || "暂无描述"}</p><footer><span>{task.status.replace("_", " ")}</span><span>v{task.version}</span></footer></article>)}{!tasks.length && <p className="empty-state">暂无任务，可让 Agent 提出一个。</p>}</div></aside>}
     <main className="workspace centered-workspace">
       {error && <p role="alert" className="error banner">{error}</p>}
-      <section className={activePanel ? "panel agent-panel chat-collapsed" : "panel agent-panel"} onClick={activePanel ? openChatFromPanel : undefined}><div className="panel-heading"><div><span className="eyebrow">AI COPILOT</span><h2>项目对话</h2></div>{conversationId && <span className="conversation">会话 {conversationId.slice(0, 8)}</span>}</div>
+      <section className={activePanel ? "panel agent-panel chat-collapsed" : "panel agent-panel chat-expanded"}><div className="panel-heading"><div><span className="eyebrow">AI COPILOT</span><h2>项目对话</h2></div>{conversationId && <span className="conversation">会话 {conversationId.slice(0, 8)}</span>}</div>
         {!activePanel && <div className="agent-welcome"><span className="agent-orb">✦</span><div><strong>你好，我是 AgentForge</strong><p>我会结合当前项目的 Wiki 与任务回答，并在写入前征求你的确认。</p></div></div>}
-        <form className="chat-composer" onSubmit={(event) => { event.stopPropagation(); void sendChat(event); }}><textarea aria-label="给 Agent 的消息" value={chatMessage} onChange={(event) => { event.stopPropagation(); setChatMessage(event.target.value); }} placeholder="向 Agent 提问，探索项目上下文…" /><div className="composer-footer"><span>Agent 会基于当前项目 Wiki 与任务回答</span>{activePanel && <button type="button" className="expand-chat-button" aria-label="放大聊天输入框" onClick={(event) => { event.stopPropagation(); openChatFromPanel(); }}><Icon name="expand" /></button>}<button aria-label="发送" disabled={busy || streaming || !chatMessage.trim()}>{streaming ? "生成中…" : "发送"}<span>↗</span></button></div></form>
+        <form className="chat-composer" onSubmit={(event) => { event.stopPropagation(); void sendChat(event); }}><textarea aria-label="给 Agent 的消息" value={chatMessage} onChange={(event) => { event.stopPropagation(); setChatMessage(event.target.value); }} placeholder="向 Agent 提问，探索项目上下文…" /><div className="composer-footer"><span>Agent 会基于当前项目 Wiki 与任务回答</span><button type="button" className="expand-chat-button" aria-label={chatExpanded ? "缩小聊天输入框" : "放大聊天输入框"} onClick={(event) => { event.stopPropagation(); setChatExpanded((expanded) => !expanded); }}><Icon name={chatExpanded ? "shrink" : "expand"} /></button><button aria-label="发送" disabled={busy || streaming || !chatMessage.trim()}>{streaming ? "生成中…" : "发送"}<span>↗</span></button></div></form>
         {chatHistory.length > 0 && <div className="conversation-history">{chatHistory.map((item, index) => {
           const expanded = expandedChatIds.has(item.id);
           const isLatest = index === chatHistory.length - 1;
