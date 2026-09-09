@@ -1,7 +1,7 @@
 # 单机生产部署与运维
 
 - 状态：Accepted
-- 适用版本：V1.2
+- 适用版本：V1.2 至 V2 stable
 - 平台：Ubuntu 22.04 x86_64，Docker Compose v2
 
 ## 网络与目录
@@ -58,6 +58,8 @@ compose logs --since 30m --no-color agent-service core-api
 第一条持续跟随入口、后端、Agent 与 Web；第二条适合排查最近的 Chat 503。停止跟随按 `Ctrl+C`。日志可能包含 requestId、项目 ID 等运维元数据，不得复制或公开包含 Bearer、内部 token 或模型 key 的请求内容。
 
 `update.sh` 先备份，再 fast-forward 拉取部署分支、顺序构建、启动并验收。`rollback.sh` 使用更新前保存的 commit，数据库迁移必须保持向后兼容；脚本不会删除 volume。
+
+生产发布的固定顺序是：先获得用户对共享分支与生产变更的明确授权，再将已通过 Release Gate 的提交非强制 fast-forward 到 `origin/main`，最后只在干净的服务器 `main` 上执行 `scripts/deploy/update.sh`。未获授权或远程 `main` 尚未对齐时，禁止先改动服务器工作树或直接运行 `deploy.sh`/`update.sh`。
 
 ### SSH 连接排障
 

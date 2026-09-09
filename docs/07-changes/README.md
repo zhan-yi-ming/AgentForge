@@ -1,5 +1,6 @@
 # 变更记录
 
+- `2026-09-09-v2-stable-production-deployment.md`：将已验证的 V2 stable 版本发布到 `zhanyiming.cloud`，并保留备份、回滚与公网验收证据。
 - `2026-09-09-v2-09-regression-release.md`：V2 完整 Release Regression、公开证据收口与 README Agent 工作流叙事。
 - `2026-09-09-v2-08-evaluation.md`：V2-08 固定数据集、可执行 RAG/Answer/Tool Evaluation Pipeline 与真实报告。
 - `2026-09-09-v2-07-langgraph-checkpoint-resume.md`：V2-07 PostgreSQL checkpoint、interrupt/resume 与 Java 确定性执行恢复。
