@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     llm_model: str | None = None
     llm_max_tokens: int = Field(default=800, ge=64, le=4096)
+    system_prompt_suffix: str = Field(default="", max_length=4000)
     context_token_budget: int = Field(default=8192, ge=1024, le=131072)
     context_recent_turns: int = Field(default=4, ge=1, le=20)
     context_summary_token_budget: int = Field(default=800, ge=64, le=8192)

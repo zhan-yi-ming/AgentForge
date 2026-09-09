@@ -64,7 +64,7 @@ authenticate_or_register() {
 seed_workspace() {
     local auth="$1"
     local workspace_description="$2"
-    local token auth_header projects project_id project
+    local token auth_header projects project_id project wiki_pages tasks
     token="$(jq -er '.accessToken' <<<"${auth}")"
     [[ "$(jq -er '.user.role' <<<"${auth}")" == "USER" ]] || {
         echo "Demo accounts must have USER role." >&2
@@ -73,16 +73,41 @@ seed_workspace() {
     auth_header="Authorization: Bearer ${token}"
     projects="$(compose exec -T core-api curl --fail --silent -H "${auth_header}" "${BASE_URL}/api/v1/projects")"
     project_id="$(jq -r '.[] | select(.name == "AgentForge Demo") | .id' <<<"${projects}" | head -n 1)"
-    [[ -z "${project_id}" ]] || return
-    project="$(api_post '/api/v1/projects' "$(jq -n --arg description "${workspace_description}" \
-        '{name:"AgentForge Demo",description:$description}')" "${auth_header}")"
-    project_id="$(jq -er '.id' <<<"${project}")"
-    api_post "/api/v1/projects/${project_id}/wiki-pages" \
-        '{"title":"V1.2 Architecture","content":"# AgentForge V1.2\n\nJava owns authentication, quotas, approval and deterministic writes. Python owns LangGraph reasoning, RAG and native model streaming."}' \
-        "${auth_header}" >/dev/null
-    api_post "/api/v1/projects/${project_id}/tasks" \
-        '{"title":"Explore the V1.2 workspace","description":"Ask Agent about the architecture and watch the answer stream, then review a proposed task.","status":"TODO","priority":"HIGH"}' \
-        "${auth_header}" >/dev/null
+    if [[ -z "${project_id}" ]]; then
+        project="$(api_post '/api/v1/projects' "$(jq -n --arg description "${workspace_description}" \
+            '{name:"AgentForge Demo",description:$description}')" "${auth_header}")"
+        project_id="$(jq -er '.id' <<<"${project}")"
+    fi
+    wiki_pages="$(compose exec -T core-api curl --fail --silent -H "${auth_header}" \
+        "${BASE_URL}/api/v1/projects/${project_id}/wiki-pages")"
+    tasks="$(compose exec -T core-api curl --fail --silent -H "${auth_header}" \
+        "${BASE_URL}/api/v1/projects/${project_id}/tasks")"
+
+    ensure_wiki_page() {
+        local title="$1" content="$2"
+        jq -e --arg title "${title}" '.[] | select(.title == $title)' <<<"${wiki_pages}" >/dev/null ||
+            api_post "/api/v1/projects/${project_id}/wiki-pages" \
+                "$(jq -n --arg title "${title}" --arg content "${content}" '{title:$title,content:$content}')" \
+                "${auth_header}" >/dev/null
+    }
+
+    ensure_task() {
+        local title="$1" description="$2" status="$3" priority="$4"
+        jq -e --arg title "${title}" '.[] | select(.title == $title)' <<<"${tasks}" >/dev/null ||
+            api_post "/api/v1/projects/${project_id}/tasks" \
+                "$(jq -n --arg title "${title}" --arg description "${description}" \
+                    --arg status "${status}" --arg priority "${priority}" \
+                    '{title:$title,description:$description,status:$status,priority:$priority}')" \
+                "${auth_header}" >/dev/null
+    }
+
+    ensure_wiki_page 'AgentForge V2 Architecture' $'# AgentForge V2 Architecture\n\nAgentForge is a reliable AI Agent workspace for engineering collaboration.\n\n## Deterministic boundary\n\n- Python owns context engineering, retrieval, planning and model interaction.\n- Java owns authentication, RBAC, risk policy, approval and business writes.\n- The model proposes intent; deterministic services authorize and execute it.\n\n## Reliability path\n\nA request flows through project context, retrieval, Agent planning, tool policy, human approval, Java permission recheck, persistence, trace and evaluation.'
+    ensure_wiki_page 'Security, Approval and Recovery' $'# Security, Approval and Recovery\n\nWrite operations never execute directly from model text. Tool metadata assigns role and risk, high-risk actions pause for approval, and Java rechecks authorization before an idempotent write. Audit records preserve who requested and decided the action. LangGraph checkpoints allow an interrupted workflow to resume after a service restart.'
+    ensure_wiki_page 'Interview Demo Guide' $'# Interview Demo Guide\n\nTry these questions:\n\n1. AgentForge 为什么不是普通 RAG Wrapper？\n2. 创建或更新任务时，模型为什么不能直接写数据库？\n3. 如果审批期间 Python 服务重启，系统如何恢复？\n4. 请根据 Wiki 提议创建一个高优先级的安全回归任务。\n\nThe first three are read-only. The fourth should produce a reviewable proposal and wait for confirmation.'
+
+    ensure_task 'Interview demo walkthrough' 'Ask an architecture question, inspect cited context, then request one task proposal and review the approval boundary.' 'IN_PROGRESS' 'HIGH'
+    ensure_task 'Verify cross-user isolation' 'Confirm that each Demo account owns an independent seeded workspace copy and that deleting one copy does not affect another user.' 'TODO' 'HIGH'
+    ensure_task 'Review V2 reliability evidence' 'Inspect context budgeting, RBAC/risk, approval/idempotency/audit, checkpoint recovery, tracing and evaluation evidence.' 'TODO' 'MEDIUM'
 }
 
 compose stop gateway >/dev/null

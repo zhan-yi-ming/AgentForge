@@ -314,6 +314,22 @@ def test_build_responder_applies_configured_context_budget() -> None:
     assert responder.prompt_composer.token_budget == 2048
 
 
+def test_build_responder_appends_private_runtime_guidance_to_system_prompt() -> None:
+    model = FakeChatModel()
+    responder = build_responder(
+        settings(
+            llm_provider="deepseek",
+            llm_api_key="local-test-key",
+            system_prompt_suffix="private demo guidance",
+        ),
+        model_factory=lambda **kwargs: model,
+    )
+
+    responder(context_state("What should I inspect?"))
+
+    assert model.messages[0].content.endswith("\nprivate demo guidance")
+
+
 def test_settings_reject_context_budget_below_safe_prompt_metadata_floor() -> None:
     with pytest.raises(ValueError, match="context_token_budget"):
         settings(context_token_budget=1023)

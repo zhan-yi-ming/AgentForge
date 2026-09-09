@@ -63,6 +63,35 @@ describe("App", () => {
     localStorage.removeItem("agentforge.onboardingComplete");
   });
 
+  it("keeps later assistant answers when persisted roles are not strictly paired", async () => {
+    const mockApi = api({
+      listConversations: vi.fn().mockResolvedValue([{ conversationId: "conversation-irregular", preview: "First question",
+        messageCount: 4, createdAt: "2026-09-08T00:00:00Z", updatedAt: "2026-09-08T00:03:00Z" }]),
+      getConversation: vi.fn().mockResolvedValue({ conversationId: "conversation-irregular", preview: "First question",
+        messageCount: 4, createdAt: "2026-09-08T00:00:00Z", updatedAt: "2026-09-08T00:03:00Z",
+        messages: [
+          { role: "USER", content: "Interrupted question", sources: [], createdAt: "2026-09-08T00:00:00Z" },
+          { role: "USER", content: "Completed question", sources: [], createdAt: "2026-09-08T00:01:00Z" },
+          { role: "ASSISTANT", content: "Completed answer", sources: [], createdAt: "2026-09-08T00:02:00Z" },
+          { role: "ASSISTANT", content: "Additional assistant detail", sources: [], createdAt: "2026-09-08T00:03:00Z" },
+        ] }),
+    });
+    const user = await login(mockApi);
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "开始体验" }));
+    await user.click(await screen.findByRole("button", { name: /历史/ }));
+    await user.click(await screen.findByRole("button", { name: /First question/ }));
+
+    expect(await screen.findByText("Completed answer")).toBeInTheDocument();
+    expect(screen.getByText("Additional assistant detail")).toBeInTheDocument();
+  });
+
+  it("shows the V2 brand mark in the page chrome", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    await login(api());
+    expect(screen.getByRole("img", { name: "AgentForge" })).toHaveAttribute("src", "/brand-mark.svg");
+    expect(screen.getByText("V2 Live Demo")).toBeInTheDocument();
+  });
+
   it("ignores a history response that arrives after the project changes", async () => {
     localStorage.setItem("agentforge.onboardingComplete", "true");
     let resolveDetail!: (detail: Awaited<ReturnType<ApiClient["getConversation"]>>) => void;

@@ -519,7 +519,11 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 *::-webkit-scrollbar-thumb:hover { background: #aaa9a2; border: 1px solid transparent; background-clip: padding-box; }
 
 .app-shell { grid-template: 76px 1fr / 1fr; background: var(--bg); }
-.topbar { background: transparent; border-bottom: 0; padding: 0 1.25rem; }
+.topbar { position: fixed; z-index: 20; inset: 0 0 auto; height: 76px; background: rgba(252,252,251,.94); border-bottom: 0; padding: 0 1.25rem; backdrop-filter: blur(14px); }
+.topbar-logo { display: flex; align-items: center; gap: .7rem; transition: margin-left .15s ease; }
+.topbar.chat-mode .topbar-logo { margin-left: 3rem; }
+.brand-mark { width: 42px; height: 42px; display: block; flex: 0 0 auto; }
+.brand-mark.small { width: 34px; height: 34px; }
 .topbar-inner { width: min(100%, 1120px); min-height: 48px; margin: 0 auto; padding: .45rem .55rem .45rem .7rem; background: rgba(255,254,253,.92); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 1px 2px rgba(28,28,26,.04); }
 .topbar-brand, .topbar-actions { display: flex; align-items: center; }
 .topbar-brand { gap: .7rem; }
@@ -648,7 +652,7 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 .topbar .status i { margin-right: .15rem; }
 .icon-button { display: inline-flex; align-items: center; gap: .3rem; }
 .ui-icon { width: 15px; height: 15px; flex: none; }
-.chat-back-button { position: fixed; z-index: 13; top: 1rem; left: 1rem; width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.chat-back-button { position: fixed; z-index: 21; top: 1.3rem; left: 1.25rem; width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
 .chat-back-button:hover { background: var(--hover); }
 .chat-tools-rail { position: fixed; z-index: 12; top: 4rem; left: 1rem; display: grid; gap: .35rem; }
 .chat-tools-rail .rail-button { width: 52px; min-height: 48px; }
@@ -710,7 +714,8 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 /* ---------- Outer-scroll conversation and in-chat tool windows ---------- */
 .composer-footer { justify-content: flex-end; }
 .composer-footer > span { margin-right: auto; }
-.agent-panel .expand-chat-button { border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); }
+.agent-panel .expand-chat-button { display: inline-grid; place-items: center; flex: 0 0 30px; line-height: 0; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); }
+.agent-panel .expand-chat-button .ui-icon { display: block; margin: auto; }
 .agent-panel .expand-chat-button:hover { border-color: var(--ink); background: var(--hover); }
 .chat-session { min-height: calc(100vh - 90px); padding-bottom: 170px; }
 .chat-session .conversation-history { flex: none; min-height: auto; max-height: none; overflow: visible; padding-bottom: 1rem; }
@@ -722,6 +727,7 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 .chat-tool-close { position: sticky; z-index: 2; top: .55rem; float: right; margin: .45rem .55rem -.2rem 0; background: var(--surface); border: 1px solid var(--line); }
 
 @media (max-width: 720px) {
+  .topbar.chat-mode .topbar-logo { margin-left: 2.6rem; }
   .chat-session { padding-bottom: 155px; }
   .chat-session .chat-composer { left: calc(50% + 1.5rem); width: calc(100vw - 4.8rem); }
   .chat-tool-window { width: calc(100vw - 5.5rem); max-height: calc(100vh - 3rem); left: calc(50% + 2rem); }

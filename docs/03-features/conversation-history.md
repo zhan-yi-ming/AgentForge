@@ -18,7 +18,7 @@ Core API/PostgreSQL 保存完成的 user/assistant exchange，提供项目内会
 2. 同步 Chat 成功后一次事务保存 user/assistant exchange；SSE 只在收到完整 `complete` 后保存。
 3. 列表从认证 actor 和路径 projectId 推导作用域，不接受 userId。
 4. 详情以 projectId、actor userId、conversationId 联合查询；不匹配返回 404/403 且不泄露正文。
-5. Web 选择记录后用详情填充消息列表并复用 conversationId。
+5. Web 选择记录后按消息角色顺序恢复可配对的问答并复用 conversationId；遗留的不完整 USER 记录不会让后续完整 AI 回答被整组跳过。
 
 ## 接口
 

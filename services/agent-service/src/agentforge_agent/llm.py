@@ -24,9 +24,11 @@ SYSTEM_PROMPT = """你是 AgentForge 项目助手。请优先使用中文简洁�
 
 
 class PromptComposer:
-    def __init__(self, *, token_budget: int, token_counter: TokenCounter) -> None:
+    def __init__(self, *, token_budget: int, token_counter: TokenCounter,
+                 system_prompt: str = SYSTEM_PROMPT) -> None:
         self.token_budget = token_budget
         self.token_counter = token_counter
+        self.system_prompt = system_prompt
 
     def compose(self, bundle: ContextBundle) -> str:
         current = bundle.working.message
@@ -50,7 +52,7 @@ class PromptComposer:
             )
 
         def total() -> int:
-            return self.token_counter.count_messages((SYSTEM_PROMPT, render()))
+            return self.token_counter.count_messages((self.system_prompt, render()))
 
         while total() > self.token_budget:
             excess = total() - self.token_budget
@@ -85,10 +87,12 @@ class CompatibleLlmResponder:
         provider: str = "unknown",
         model_name: str = "unknown",
         prompt_composer: PromptComposer | None = None,
+        system_prompt: str = SYSTEM_PROMPT,
     ) -> None:
         self.model = model
         self.provider = provider
         self.model_name = model_name
+        self.system_prompt = system_prompt
         self.prompt_composer = prompt_composer or PromptComposer(
             token_budget=8192,
             token_counter=TokenCounter(),
@@ -150,7 +154,7 @@ class CompatibleLlmResponder:
     def _messages(self, state: ChatState):
         bundle = state["context_bundle"]
         prompt = self.prompt_composer.compose(bundle)
-        return [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)]
+        return [SystemMessage(content=self.system_prompt), HumanMessage(content=prompt)]
 
 
 ModelFactory = Callable[..., Any]
@@ -182,13 +186,18 @@ def build_responder(
         max_tokens=settings.llm_max_tokens,
         stream_usage=True,
     )
+    system_prompt = SYSTEM_PROMPT
+    if settings.system_prompt_suffix.strip():
+        system_prompt += "\n" + settings.system_prompt_suffix.strip()
     return CompatibleLlmResponder(
         model,
         provider=settings.llm_provider,
         model_name=model_name,
+        system_prompt=system_prompt,
         prompt_composer=PromptComposer(
             token_budget=settings.context_token_budget,
             token_counter=TokenCounter(),
+            system_prompt=system_prompt,
         ),
     )
 

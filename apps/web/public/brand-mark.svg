@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title">
+  <title id="title">AgentForge</title>
+  <defs>
+    <linearGradient id="g" x1="8" y1="7" x2="40" y2="41" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#171816"/>
+      <stop offset="1" stop-color="#3f4540"/>
+    </linearGradient>
+  </defs>
+  <rect x="3" y="3" width="42" height="42" rx="13" fill="url(#g)"/>
+  <path d="M14 28.5 24 12l10 16.5-10 7.5-10-7.5Z" fill="none" stroke="#fffefd" stroke-width="3" stroke-linejoin="round"/>
+  <path d="m18.2 26 5.8-9.6 5.8 9.6-5.8 4.3-5.8-4.3Z" fill="#fffefd" opacity=".94"/>
+  <circle cx="35.5" cy="12.5" r="2.5" fill="#7ed6a1"/>
+</svg>

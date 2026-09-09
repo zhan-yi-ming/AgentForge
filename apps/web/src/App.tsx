@@ -223,12 +223,21 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
       const detail = await api.getConversation(requestedProjectId, summary.conversationId);
       if (activeProjectId.current !== requestedProjectId) return;
       const items: ChatHistoryItem[] = [];
-      for (let index = 0; index < detail.messages.length; index += 2) {
-        const question = detail.messages[index];
-        const answer = detail.messages[index + 1];
-        if (question?.role === "USER" && answer?.role === "ASSISTANT") {
-          items.push({ id: `persisted-${index}`, question: question.content,
-            answer: answer.content, sources: answer.sources });
+      let pendingQuestion: typeof detail.messages[number] | undefined;
+      let activeItem: ChatHistoryItem | undefined;
+      for (const [index, message] of detail.messages.entries()) {
+        if (message.role === "USER") {
+          pendingQuestion = message;
+          activeItem = undefined;
+        } else if (pendingQuestion) {
+          if (activeItem) {
+            activeItem.answer += `${activeItem.answer ? "\n\n" : ""}${message.content}`;
+            activeItem.sources.push(...message.sources);
+          } else {
+            activeItem = { id: `persisted-${index}`, question: pendingQuestion.content,
+              answer: message.content, sources: [...message.sources] };
+            items.push(activeItem);
+          }
         }
       }
       setConversationId(detail.conversationId);
@@ -481,7 +490,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     return <main className="auth-shell">
       <section className="login-card">
         <div className="auth-copy"><span className="eyebrow">AGENTFORGE / AI ENGINEERING WORKSPACE</span><h1>把复杂项目，变成可协作的确定性行动。</h1><p className="auth-lead">从真实的项目上下文开始。</p><p>Agent 会读取项目 Wiki 与任务、流式回答，并在任何业务写入前等待你的确认。</p></div>
-        <div className="login-heading"><div className="mark">AF</div><div><span className="eyebrow">LIVE DEMO</span><h2>进入 AgentForge</h2></div></div><p className="login-note">账号是简历上的邮箱，密码是微信号</p>
+        <div className="login-heading"><img className="brand-mark" src="/brand-mark.svg" alt="AgentForge" /><div><span className="eyebrow">LIVE DEMO</span><h2>进入 AgentForge</h2></div></div><p className="login-note">账号是简历上的邮箱，密码是微信号</p>
         <form className="login-form" onSubmit={login}>
           <label>邮箱<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
           <label>密码<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} /></label>
@@ -493,7 +502,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   }
 
   return <div className="app-shell">
-    <header className="topbar"><div className="topbar-logo"><span className="mark small">AF</span><span className="brand"><strong>AgentForge</strong><small>Project intelligence workspace</small></span></div><div className="topbar-right"><button className="guide-button icon-button" onClick={() => setOnboardingOpen(true)}><Icon name="info" />产品说明</button><span className="status"><i /> V1.2 Live Demo</span><button className="logout-button icon-button" onClick={logout}><Icon name="logout" />退出</button></div></header>
+    <header className={chatMode ? "topbar chat-mode" : "topbar"}><div className="topbar-logo"><img className="brand-mark small" src="/brand-mark.svg" alt="AgentForge" /><span className="brand"><strong>AgentForge</strong><small>Project intelligence workspace</small></span></div><div className="topbar-right"><button className="guide-button icon-button" onClick={() => setOnboardingOpen(true)}><Icon name="info" />产品说明</button><span className="status"><i /> V2 Live Demo</span><button className="logout-button icon-button" onClick={logout}><Icon name="logout" />退出</button></div></header>
     {chatMode && <button className="chat-back-button" aria-label="返回首页工作台" onClick={leaveChatMode}><Icon name="back" /></button>}
     {chatMode && <div className="chat-tools-rail" aria-label="聊天界面导航"><button className="rail-button" onClick={() => { setProjectsOpen((open) => !open); setTasksOpen(false); setHistoryOpen(false); }}><span>⌘</span><small>项目</small></button><button className="rail-button" onClick={() => { setTasksOpen((open) => !open); setProjectsOpen(false); setHistoryOpen(false); }}><span>✓</span><small>任务</small></button><button className="rail-button" onClick={() => { setHistoryOpen((open) => !open); setProjectsOpen(false); setTasksOpen(false); }}><span>◴</span><small>历史</small></button><button className="rail-button" onClick={() => openChatTool("wiki")}><span>▤</span><small>Wiki</small></button><button className="rail-button" onClick={() => openChatTool("tasks")}><span>≡</span><small>执行</small></button><button className="rail-button" onClick={() => openChatTool("format")}><span>✎</span><small>整理</small></button></div>}
     {!chatMode && <div className="floating-rail" aria-label="快速导航">

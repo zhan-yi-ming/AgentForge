@@ -25,6 +25,17 @@ foreach ($entry in @(
     }
 }
 
+foreach ($entry in @(
+    'ensure_wiki_page',
+    'ensure_task',
+    'AgentForge V2 Architecture',
+    'Interview demo walkthrough'
+)) {
+    if (-not $seed.Contains($entry)) {
+        throw "seed-demo-v12.sh does not idempotently include the V2 interview dataset: $entry"
+    }
+}
+
 foreach ($value in @($expectedEmail, $expectedPassword)) {
     if ($webApp.Contains($value)) {
         throw "App.tsx must not contain a Demo credential literal."
