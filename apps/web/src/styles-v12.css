@@ -532,12 +532,12 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 .topbar-actions { gap: .55rem; }
 .topbar .status { background: var(--bg); }
 
-.floating-rail { position: fixed; z-index: 12; top: 50%; left: 1rem; transform: translateY(-50%); display: grid; gap: .5rem; }
+.floating-rail { position: fixed; z-index: 12; top: calc(50% + 38px); left: 1rem; transform: translateY(-50%); display: grid; gap: .5rem; }
 .rail-button { width: 52px; min-height: 58px; display: grid; place-items: center; gap: .1rem; padding: .55rem .35rem; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,254,253,.94); color: var(--ink); box-shadow: var(--shadow); }
 .rail-button:hover:not(:disabled), .rail-button[aria-expanded="true"] { background: var(--ink); color: #fff; }
 .rail-button span { font-size: 1.05rem; line-height: 1; }
 .rail-button small { font-size: .65rem; color: inherit; }
-.floating-drawer { position: fixed; z-index: 11; top: 50%; left: 5.6rem; transform: translateY(-50%); width: min(320px, calc(100vw - 7rem)); max-height: min(620px, 76vh); overflow: auto; padding: 1rem; background: rgba(255,254,253,.98); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 18px 45px rgba(28,28,26,.13); }
+.floating-drawer { position: fixed; z-index: 11; top: calc(50% + 38px); left: 5.6rem; transform: translateY(-50%); width: min(320px, calc(100vw - 7rem)); max-height: min(620px, calc(76vh - 38px)); overflow: auto; padding: 1rem; background: rgba(255,254,253,.98); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 18px 45px rgba(28,28,26,.13); }
 .drawer-heading, .preview-float-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: .8rem; }
 .drawer-heading > div, .preview-float-heading > div { display: grid; gap: .2rem; }
 .drawer-heading strong, .preview-float-heading strong { font-size: .95rem; font-weight: 600; }
@@ -546,7 +546,7 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 .floating-drawer .project { margin-bottom: .3rem; }
 .floating-drawer .task-list { max-height: none; }
 
-.workspace { width: min(100%, 920px); padding: .8rem 1.25rem 7rem; gap: 1rem; }
+.workspace { grid-row: 2; width: min(100%, 920px); padding: .8rem 1.25rem 7rem; gap: 1rem; }
 .agent-panel { min-height: 0; }
 .chat-collapsed { padding-bottom: .9rem; }
 .chat-collapsed .agent-welcome, .chat-collapsed .chat-composer, .chat-collapsed .conversation-history, .chat-collapsed .action-card { display: none; }
@@ -654,7 +654,7 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 .ui-icon { width: 15px; height: 15px; flex: none; }
 .chat-back-button { position: fixed; z-index: 21; top: 1.3rem; left: 1.25rem; width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
 .chat-back-button:hover { background: var(--hover); }
-.chat-tools-rail { position: fixed; z-index: 12; top: 4rem; left: 1rem; display: grid; gap: .35rem; }
+.chat-tools-rail { position: fixed; z-index: 12; top: 5.5rem; left: 1rem; display: grid; gap: .35rem; }
 .chat-tools-rail .rail-button { width: 52px; min-height: 48px; }
 .workspace-hidden { display: none; }
 .chat-collapsed { cursor: text; }
@@ -722,7 +722,7 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 .chat-session .chat-composer { position: fixed; z-index: 9; left: 50%; right: auto; bottom: 1rem; transform: translateX(-50%); margin: 0; }
 .conversation-button { position: relative; }
 .unread-badge { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: #c73b36; border: 2px solid var(--surface); }
-.chat-tool-window { position: fixed; z-index: 15; top: 50%; left: 50%; width: min(860px, calc(100vw - 9rem)); max-height: min(720px, calc(100vh - 5rem)); transform: translate(-50%, -50%); overflow: auto; box-shadow: 0 22px 60px rgba(28,28,26,.16); }
+.chat-tool-window { position: fixed; z-index: 15; top: calc(50% + 38px); left: 50%; width: min(860px, calc(100vw - 9rem)); max-height: min(720px, calc(100vh - 7.5rem)); transform: translate(-50%, -50%); overflow: auto; box-shadow: 0 22px 60px rgba(28,28,26,.16); }
 .chat-tool-window .workspace-view { padding-top: 1.2rem; }
 .chat-tool-close { position: sticky; z-index: 2; top: .55rem; float: right; margin: .45rem .55rem -.2rem 0; background: var(--surface); border: 1px solid var(--line); }
 
@@ -731,4 +731,215 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
   .chat-session { padding-bottom: 155px; }
   .chat-session .chat-composer { left: calc(50% + 1.5rem); width: calc(100vw - 4.8rem); }
   .chat-tool-window { width: calc(100vw - 5.5rem); max-height: calc(100vh - 3rem); left: calc(50% + 2rem); }
+}
+
+/* ---------- Demo entrance and composer expand control ---------- */
+.auth-shell {
+  position: relative;
+  display: block;
+  min-height: 100svh;
+  overflow: hidden;
+  padding: clamp(1.5rem, 3vw, 2.5rem) clamp(1.5rem, 6vw, 7.5rem) 4.5rem;
+  background:
+    radial-gradient(circle at 68% 32%, rgba(223, 220, 214, .22), transparent 24rem),
+    linear-gradient(135deg, #fff 0%, #fdfcfb 54%, #f7f5f1 100%);
+}
+.auth-shell::before,
+.auth-shell::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+}
+.auth-shell::before {
+  right: -7vw;
+  bottom: -26vh;
+  width: 78vw;
+  height: 48vh;
+  border-radius: 50% 0 0;
+  background: linear-gradient(160deg, rgba(226, 223, 218, .12), rgba(209, 205, 198, .34));
+  transform: rotate(-8deg);
+}
+.auth-shell::after {
+  left: -8vw;
+  bottom: -30vh;
+  width: 76vw;
+  height: 47vh;
+  border-radius: 0 70% 0 0;
+  background: rgba(232, 229, 224, .4);
+  transform: rotate(8deg);
+}
+.auth-watermark {
+  position: absolute;
+  z-index: 0;
+  top: 4.5rem;
+  right: -3.5rem;
+  width: 260px;
+  height: 260px;
+  border: 34px solid rgba(220, 217, 211, .26);
+  border-radius: 30px;
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+.auth-watermark::after {
+  content: "";
+  position: absolute;
+  inset: 54px;
+  border: 16px solid rgba(255, 255, 255, .82);
+  border-radius: 14px;
+}
+.auth-brand {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  width: min(100%, 1600px);
+  margin: 0 auto;
+  font-size: 1.25rem;
+  letter-spacing: -.025em;
+}
+.auth-brand .brand-mark { width: 36px; height: 36px; }
+.auth-layout {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(390px, 500px);
+  align-items: center;
+  gap: clamp(3rem, 8vw, 9rem);
+  width: min(100%, 1500px);
+  min-height: calc(100svh - 10rem);
+  margin: 0 auto;
+}
+.auth-layout .auth-copy {
+  max-width: 700px;
+  margin: 0;
+  text-align: left;
+}
+.auth-layout .auth-copy .eyebrow { letter-spacing: .2em; }
+.auth-layout .auth-copy h1 {
+  max-width: none;
+  margin: 1.5rem 0 1.45rem;
+  font-size: clamp(2.65rem, 4.4vw, 4.75rem);
+  line-height: 1.22;
+  font-weight: 650;
+  letter-spacing: -.055em;
+}
+.auth-layout .auth-copy p {
+  max-width: 600px;
+  margin: .55rem 0;
+  font-size: clamp(1rem, 1.5vw, 1.35rem);
+  line-height: 1.65;
+}
+.auth-layout .auth-copy .auth-lead {
+  margin-top: 0;
+  font-size: clamp(1.2rem, 1.7vw, 1.55rem);
+  font-weight: 550;
+}
+.auth-benefits {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.5rem;
+  margin-top: 2.7rem;
+}
+.auth-benefits > div { display: grid; justify-items: start; gap: .35rem; }
+.auth-benefits span {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  margin-bottom: .3rem;
+  border-radius: 50%;
+  background: rgba(232, 230, 226, .68);
+  color: var(--ink);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+.auth-benefits strong { font-size: .92rem; font-weight: 600; }
+.auth-benefits small { color: var(--muted); font-size: .78rem; }
+.auth-layout .login-card {
+  width: 100%;
+  justify-self: end;
+  gap: 1.45rem;
+  padding: clamp(2rem, 3vw, 3.25rem);
+  border-color: rgba(224, 222, 217, .9);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .86);
+  box-shadow: 0 24px 60px rgba(57, 54, 48, .12);
+  backdrop-filter: blur(16px);
+}
+.auth-layout .login-heading { justify-content: flex-start; gap: 1rem; text-align: left; }
+.auth-layout .login-heading .brand-mark { width: 58px; height: 58px; }
+.auth-layout .login-card h2 { margin-top: .35rem; font-size: 1.55rem; }
+.auth-layout .login-note { margin: -.15rem 0 .55rem; text-align: left; font-size: .86rem; }
+.auth-layout .login-form { gap: 1.15rem; }
+.auth-layout .login-form label { gap: .65rem; font-size: .95rem; font-weight: 600; }
+.auth-layout .login-form input { min-height: 54px; padding: .85rem 1rem; background: rgba(255,255,255,.72); }
+.auth-layout .login-form button { min-height: 52px; margin-top: .25rem; font-size: 1rem; font-weight: 600; }
+.auth-footer {
+  position: absolute;
+  z-index: 2;
+  left: clamp(1.5rem, 6vw, 7.5rem);
+  bottom: 1.6rem;
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: .68rem;
+  letter-spacing: .18em;
+}
+.auth-footer span { width: 18px; height: 1px; background: var(--muted); }
+
+.agent-panel .expand-chat-button {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 34px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--active-bg);
+  color: var(--ink);
+  line-height: 1;
+  box-shadow: inset 0 0 0 1px rgba(28, 28, 26, .035);
+}
+.agent-panel .expand-chat-button .ui-icon {
+  display: block;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  flex: 0 0 17px;
+}
+.agent-panel .expand-chat-button:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .auth-shell { padding: 1.25rem clamp(1rem, 5vw, 2.5rem) 4.5rem; }
+  .auth-layout { grid-template-columns: 1fr; gap: 2.5rem; min-height: auto; padding: 4rem 0 3rem; }
+  .auth-layout .auth-copy { max-width: 620px; }
+  .auth-layout .auth-copy h1 { font-size: clamp(2.25rem, 8vw, 3.5rem); }
+  .auth-layout .login-card { justify-self: start; max-width: 560px; }
+  .auth-footer { left: clamp(1rem, 5vw, 2.5rem); }
+}
+
+@media (max-width: 560px) {
+  .auth-brand { font-size: 1.05rem; }
+  .auth-brand .brand-mark { width: 32px; height: 32px; }
+  .auth-layout { padding-top: 3rem; }
+  .auth-layout .auth-copy h1 { margin-top: 1.1rem; font-size: 2.25rem; }
+  .auth-layout .auth-copy p br { display: none; }
+  .auth-benefits { gap: .65rem; margin-top: 2rem; }
+  .auth-benefits > div { justify-items: center; text-align: center; }
+  .auth-benefits small { display: none; }
+  .auth-layout .login-card { padding: 1.5rem; }
+  .auth-layout .login-heading .brand-mark { width: 48px; height: 48px; }
+  .auth-layout .login-card h2 { font-size: 1.3rem; }
+  .auth-watermark { opacity: .55; }
 }

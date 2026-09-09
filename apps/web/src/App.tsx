@@ -488,16 +488,32 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
 
   if (!authenticated) {
     return <main className="auth-shell">
-      <section className="login-card">
-        <div className="auth-copy"><span className="eyebrow">AGENTFORGE / AI ENGINEERING WORKSPACE</span><h1>把复杂项目，变成可协作的确定性行动。</h1><p className="auth-lead">从真实的项目上下文开始。</p><p>Agent 会读取项目 Wiki 与任务、流式回答，并在任何业务写入前等待你的确认。</p></div>
-        <div className="login-heading"><img className="brand-mark" src="/brand-mark.svg" alt="AgentForge" /><div><span className="eyebrow">LIVE DEMO</span><h2>进入 AgentForge</h2></div></div><p className="login-note">账号是简历上的邮箱，密码是微信号</p>
-        <form className="login-form" onSubmit={login}>
-          <label>邮箱<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
-          <label>密码<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={8} /></label>
-          {error && <p role="alert" className="error">{error}</p>}
-          <button disabled={busy}>{busy ? "登录中…" : "登录"}</button>
-        </form>
-      </section>
+      <div className="auth-watermark" aria-hidden="true" />
+      <header className="auth-brand"><img className="brand-mark" src="/brand-mark.svg" alt="" /><strong>AgentForge</strong></header>
+      <div className="auth-layout">
+        <section className="auth-copy">
+          <span className="eyebrow">AGENTFORGE / AI ENGINEERING WORKSPACE</span>
+          <h1>把复杂项目，<br />变成可协作的确定性行动。</h1>
+          <p className="auth-lead">从真实的项目上下文开始。</p>
+          <p>Agent 会读取项目 Wiki 与任务、流式回答，<br />并在任何业务写入前等待你的确认。</p>
+          <div className="auth-benefits" aria-label="产品能力">
+            <div><span aria-hidden="true">▣</span><strong>项目上下文</strong><small>理解你的业务全貌</small></div>
+            <div><span aria-hidden="true">ϟ</span><strong>流式智能问答</strong><small>更快获得可靠结果</small></div>
+            <div><span aria-hidden="true">◎</span><strong>协作更高效</strong><small>从想法到执行</small></div>
+          </div>
+        </section>
+        <section className="login-card">
+          <div className="login-heading"><img className="brand-mark" src="/brand-mark.svg" alt="AgentForge" /><div><span className="eyebrow">LIVE DEMO</span><h2>进入 AgentForge</h2></div></div>
+          <p className="login-note">账号是简历上的邮箱，密码是微信号</p>
+          <form className="login-form" onSubmit={login}>
+            <label>邮箱<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="请输入你的邮箱" required /></label>
+            <label>密码<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="请输入你的密码" required minLength={8} /></label>
+            {error && <p role="alert" className="error">{error}</p>}
+            <button disabled={busy}>{busy ? "登录中…" : "登录"}</button>
+          </form>
+        </section>
+      </div>
+      <p className="auth-footer"><span /> BUILD WITH AGENTS. SHIP REAL IMPACT.</p>
     </main>;
   }
 
