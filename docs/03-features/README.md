@@ -26,4 +26,5 @@
 
 以下文档尚未创建，表示功能也不应开始实现：
 
-- V2-08 Evaluation 已完成；V2-09 Release Gate 等待新的明确 Start Gate。Memory Namespace 仅表示 Agent 记忆归属，不代表长期记忆或完整 SaaS 多租户。
+- V2-09 Release Gate 已完成；V2-01 至 V2-09 全部收口。Memory Namespace 仅表示 Agent 记忆归属，不代表长期记忆或完整 SaaS 多租户。
+- V3-01 MCP 尚未授权，禁止提前实现。

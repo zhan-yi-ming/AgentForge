@@ -49,13 +49,21 @@ $createProposal = Invoke-JsonPost "$WebUrl/api/v1/projects/$($project.id)/agent/
     message = "create task: Verify V1 confirmation; priority=HIGH"
 } $headers
 Assert-True ($createProposal.pendingAction.status -eq "PENDING") "Create proposal is not pending"
-$confirmed = Invoke-RestMethod -Method Post -Uri "$WebUrl/api/v1/projects/$($project.id)/agent/actions/$($createProposal.pendingAction.id)/confirm" -Headers $headers
+$confirmHeaders = @{
+    Authorization = $headers.Authorization
+    "Idempotency-Key" = "v209-accept-confirm-$runId"
+}
+$confirmed = Invoke-RestMethod -Method Post -Uri "$WebUrl/api/v1/projects/$($project.id)/agent/actions/$($createProposal.pendingAction.id)/confirm" -Headers $confirmHeaders
 Assert-True ($confirmed.status -eq "EXECUTED" -and $confirmed.resultTask.title -eq "Verify V1 confirmation") "Confirmed task mismatch"
 
 $rejectProposal = Invoke-JsonPost "$WebUrl/api/v1/projects/$($project.id)/agent/chat" @{
     message = "create task: Must remain rejected; priority=LOW"
 } $headers
-$rejected = Invoke-RestMethod -Method Post -Uri "$WebUrl/api/v1/projects/$($project.id)/agent/actions/$($rejectProposal.pendingAction.id)/reject" -Headers $headers
+$rejectHeaders = @{
+    Authorization = $headers.Authorization
+    "Idempotency-Key" = "v209-accept-reject-$runId"
+}
+$rejected = Invoke-RestMethod -Method Post -Uri "$WebUrl/api/v1/projects/$($project.id)/agent/actions/$($rejectProposal.pendingAction.id)/reject" -Headers $rejectHeaders
 $tasks = Invoke-RestMethod -Uri "$WebUrl/api/v1/projects/$($project.id)/tasks" -Headers $headers
 Assert-True ($rejected.status -eq "REJECTED") "Reject response mismatch"
 Assert-True ($tasks.Count -eq 2) "Rejected action changed the task count"

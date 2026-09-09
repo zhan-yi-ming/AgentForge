@@ -69,6 +69,16 @@ mvnw.cmd verify
 
 测试名描述场景与结果，如 `createUser_normalizesEmail`、`createProject_rejectsMissingOwner`。测试应验证公共行为，避免绑定无意义的实现细节。
 
+## V2-09 Release Regression 门槛
+
+- V2-09 固定为 L3 Release Gate，不按本次 diff 裁剪：必须执行 Java `clean verify`、Agent Service 全量 pytest、Web 全量测试与 production build、Compose 配置检查、真实跨服务关键链路、Evaluation runner、敏感扫描和 Pi V2 Release Milestone Review。
+- 已确认 seam 为 Core `/api/v1` REST/SSE 与 application service、Agent `/internal/v1` HTTP/NDJSON 与 Context/Memory/Action Runtime 公共接口、Java→Python 跨进程最终业务结果、Web DOM/typed client、Evaluation CLI/dataset/report，以及 Compose/validation script 公共入口。
+- Release Regression 必须覆盖普通问答、RAG、Create/Update Task、High-risk Approval、Reject、Duplicate Request、Agent Retry、Service Restart/Resume、Cross Project、Unauthorized、Long Conversation、Trace 和 Evaluation；任何未执行项都必须记为未完成，不能用历史 Node 报告代替。
+- 跨服务测试只通过公开 API 观察业务结果和状态；允许额外检查 checkpoint 存在以证明持久化，但不能用直接数据库改写代替用户路径。
+- runner 必须失败关闭、逐阶段输出脱敏摘要、使用运行时随机测试凭据，并在成功或失败后精确清理专用进程、Compose project、网络、volume、日志和临时目录。
+- 补测试时继续使用 TDD：一个已确认公共 seam、一个真实红灯、一个最小实现；禁止测试私有实现、复制生产算法计算期望值或用过度 mock 替代 PostgreSQL/跨进程边界。
+- 全部门禁、文档一致性和 Close Gate 通过前，不得创建 `v2-stable` 标签。
+
 ## Day 4 质量门槛
 
 - Codex 执行 Agent Service pytest，覆盖 Chunk、hash Embedding、BM25、RRF、字符预算、来源去重、索引版本替换/删除和跨项目隔离。

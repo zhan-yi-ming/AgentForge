@@ -1,8 +1,8 @@
 # V2/V3 节点路线图
 
 - 状态：Accepted（路线已确认；各功能在实现前均为 Planned）
-- 当前状态：V1 completed；V2-01 Langfuse 基础 Trace completed；V2-02 Context Manager completed；V2-03 Conversation Summary + Token Budget completed；V2-04 Memory Namespace 隔离 completed；V2-05 完整 RBAC + Risk Engine completed；V2-06 Approval + Idempotency + Audit completed
-- Current Node：无（V2-07 已完成；V2-08 等待用户新的明确 Start Gate 授权）
+- 当前状态：V1 completed；V2-01 至 V2-09 completed；V2 Release Gate passed
+- Current Node：无（V2 已收口；V3-01 必须等待用户新的明确授权）
 - 开发协议：`../00-governance/v2-v3-node-development-protocol.md`
 
 本文是 V2/V3 开发顺序与 Node Scope 的唯一来源，同时规定验收标准、DeepSeek Pi Review 重点和 GitHub 展示重点。每次只完成一个 Node，禁止跨节点开发；完成后必须停止并等待用户明确授权下一 Node。

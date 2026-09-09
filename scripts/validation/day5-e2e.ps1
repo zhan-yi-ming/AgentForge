@@ -130,6 +130,22 @@ try {
         email = "day5-two-$runId@example.test"; displayName = "Day 5 Two"; password = "test-password-456"
     }
     $headersTwo = @{ Authorization = "Bearer $($authTwo.accessToken)" }
+    $unauthorizedDecisionHeaders = @{
+        Authorization = $headersTwo.Authorization
+        "Idempotency-Key" = "v209-unauthorized-$runId"
+    }
+    $createDecisionHeaders = @{
+        Authorization = $headersOne.Authorization
+        "Idempotency-Key" = "v209-create-$runId"
+    }
+    $updateDecisionHeaders = @{
+        Authorization = $headersOne.Authorization
+        "Idempotency-Key" = "v209-update-$runId"
+    }
+    $rejectDecisionHeaders = @{
+        Authorization = $headersOne.Authorization
+        "Idempotency-Key" = "v209-reject-$runId"
+    }
 
     $createChat = Invoke-ApiPost "$coreUrl/api/v1/projects/$($projectOne.id)/agent/chat" @{
         message = "把登录模块的改造需求整理成任务，优先级设为高。"
@@ -141,16 +157,16 @@ try {
 
     Assert-HttpError `
         "$coreUrl/api/v1/projects/$($projectOne.id)/agent/actions/$($createChat.pendingAction.id)/reject" `
-        $headersTwo 403
+        $unauthorizedDecisionHeaders 403
 
     $created = Invoke-EmptyPost `
         "$coreUrl/api/v1/projects/$($projectOne.id)/agent/actions/$($createChat.pendingAction.id)/confirm" `
-        $headersOne
+        $createDecisionHeaders
     Assert-True ($created.status -eq "EXECUTED") "Create action was not executed"
     Assert-True ($created.resultTask.title -eq "登录模块的改造需求") "Created Task title mismatch"
     $repeated = Invoke-EmptyPost `
         "$coreUrl/api/v1/projects/$($projectOne.id)/agent/actions/$($createChat.pendingAction.id)/confirm" `
-        $headersOne
+        $createDecisionHeaders
     Assert-True ($repeated.resultTask.id -eq $created.resultTask.id) "Repeated confirm returned another Task"
     $afterRepeatedConfirm = [int](Invoke-DatabaseScalar "select count(*) from task_item where project_id = '$($projectOne.id)'")
     Assert-True ($afterRepeatedConfirm -eq 1) "Repeated confirm duplicated Task"
@@ -163,7 +179,7 @@ try {
     Assert-True ($beforeUpdate.status -eq "TODO") "Task changed before update confirmation"
     $updated = Invoke-EmptyPost `
         "$coreUrl/api/v1/projects/$($projectOne.id)/agent/actions/$($updateChat.pendingAction.id)/confirm" `
-        $headersOne
+        $updateDecisionHeaders
     Assert-True ($updated.resultTask.status -eq "DONE" -and $updated.resultTask.priority -eq "LOW") `
         "Confirmed update did not apply proposed patch"
 
@@ -172,12 +188,12 @@ try {
     } $headersOne
     $rejected = Invoke-EmptyPost `
         "$coreUrl/api/v1/projects/$($projectOne.id)/agent/actions/$($rejectChat.pendingAction.id)/reject" `
-        $headersOne
+        $rejectDecisionHeaders
     $hasResultTask = $rejected.PSObject.Properties.Name -contains "resultTask"
     Assert-True ($rejected.status -eq "REJECTED" -and -not $hasResultTask) "Reject response mismatch"
     Assert-HttpError `
         "$coreUrl/api/v1/projects/$($projectOne.id)/agent/actions/$($rejectChat.pendingAction.id)/confirm" `
-        $headersOne 409
+        $rejectDecisionHeaders 409
     $finalTaskCount = [int](Invoke-DatabaseScalar "select count(*) from task_item where project_id = '$($projectOne.id)'")
     Assert-True ($finalTaskCount -eq 1) "Rejected action wrote a Task"
 

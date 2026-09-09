@@ -172,9 +172,16 @@ try {
     $oldVersionCount = [int](Invoke-DatabaseScalar "select count(*) from rag_chunk where source_id = '$($wiki.id)' and source_version <> $($updatedWiki.version)")
     Assert-True ($oldVersionCount -eq 0) "Old Wiki source version remains indexed"
 
+    Invoke-DatabaseScalar "update app_user set role = 'ADMIN' where id = '$($authOne.user.id)'" | Out-Null
+    $promotedRole = Invoke-DatabaseScalar "select role from app_user where id = '$($authOne.user.id)'"
+    Assert-True ($promotedRole -eq "ADMIN") "RAG deletion fixture was not promoted to ADMIN"
+    $adminAuth = Invoke-ApiPost "$coreUrl/api/v1/auth/login" @{
+        email = "day4-one-$runId@example.test"; password = "test-password-123"
+    }
+    $adminHeaders = @{ Authorization = "Bearer $($adminAuth.accessToken)" }
     Invoke-WebRequest -Method Delete `
         -Uri "$coreUrl/api/v1/projects/$($projectOne.id)/tasks/$($task.id)?version=$($task.version)" `
-        -Headers $headersOne | Out-Null
+        -Headers $adminHeaders | Out-Null
     $syncChat = Invoke-ApiPost "$coreUrl/api/v1/projects/$($projectOne.id)/agent/chat" @{
         message = "Summarize Quasar security ownership"
     } $headersOne
