@@ -52,4 +52,4 @@ foreach ($deployScript in $deployScripts) {
     }
 }
 
-Write-Host "Production Compose boundary passed: only gateway publishes 80/443; all 5 services use 10m x 3 logs; deploy scripts avoid unsupported Compose v5 build flags."
+Write-Host "Production Compose boundary passed: only gateway publishes 80/443; all 8 services use 10m x 3 logs; deploy scripts avoid unsupported Compose v5 build flags."

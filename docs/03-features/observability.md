@@ -12,7 +12,9 @@
 
 V2-01 覆盖 JSON Chat 与流式 Chat 的根请求、Agent、prepare、retrieval、tool 和 LLM generation 基础观测。Langfuse 默认关闭，启用时连接用户自行提供的 Langfuse Cloud 或自托管实例。
 
-不包含 Langfuse Server 部署、复杂 Dashboard、Eval、告警、成本预算、跨服务 W3C context、日志系统重构、聊天历史或 V2-02 Context Manager。
+V2 stable 后的独立运维增强额外提供单机 Grafana + Loki + Alloy 日志界面。它收集 `agentforge` Compose project 的容器标准输出/错误，预置 Loki 数据源与 `AgentForge Logs` dashboard，可按服务、关键词和 `request_id` 查询。
+
+仍不包含 Langfuse Server 部署、复杂 Dashboard、主机/应用 metrics、告警、成本预算、跨服务 W3C context 或日志系统重构。日志界面不替代 Langfuse Trace，两者通过 `request_id` 人工关联。
 
 ## 关键流程
 
@@ -42,6 +44,8 @@ Langfuse 保存的是外部观测数据，不是业务事实；数据库 schema 
 
 只有内部认证成功的 Chat 才建立 Trace。禁止写入 message、answer、retrieved context、source excerpt、Tool arguments/title/description、JWT、密码、内部 token、provider key、DSN、Cookie、请求/响应 headers 或原始异常文本。Langfuse Trace 不公开；public/secret key 只从运行时环境读取。
 
+Grafana 仅通过现有 HTTPS gateway 的 `/grafana/` 暴露，不发布独立主机端口；匿名访问和用户自助注册关闭，管理员密码来自服务器上权限为 `0600`/`0400` 的环境文件。Loki 与 Alloy 仅在内部 Compose 网络可达。Alloy 只采集 Compose project `agentforge`，但读取 Docker socket 仍属于高权限边界，具体取舍见 ADR-0023。日志中可能含用户/项目标识等运维元数据，禁止把完整日志公开或转发给第三方。
+
 ## 失败与排查
 
 - 没有 Trace：检查 enabled、public/secret key、host 和 Agent Service 安全日志；业务仍应正常。
@@ -57,7 +61,10 @@ Langfuse 保存的是外部观测数据，不是业务事实；数据库 schema 
 - 验证同步与流式模型 usage metadata 能写入 generation；缺失 usage 时不伪造。
 - 验证 disabled 与 observer 自身故障均不影响 Chat。
 - 运行 Python 全量 pytest、Java `clean verify`、Web 回归、核心跨进程 smoke、配置检查、敏感扫描和 Pi Milestone Review。
+- 日志界面增强通过生产 Compose 渲染与安全边界 contract、Nginx `/grafana/` 子路径、Loki/Alloy 配置、Grafana provisioning 及容器 smoke 验收；确认只有 gateway 发布主机端口，未登录不能查询日志。
 
 ## 已知限制与后续计划
 
 V2-01 不传播 Langfuse/Otel trace id 到 Java，也不保存聊天 history；同一 thread 的请求通过 session/thread 字段聚合，但 Agent state 持久化属于 V2-07。Context composition、预算和 Eval 分别属于 V2-02/V2-03/V2-08，不在本节点实现。
+
+单机 Loki 使用 filesystem storage，只面向当前低日志量 Demo，不提供高可用或按磁盘剩余空间自动停止写入。默认 retention 为 7 天；观测栈故障不影响业务，但故障期间的集中日志可能缺失，原 Docker bounded logs 仍是短期兜底。

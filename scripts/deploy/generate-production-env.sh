@@ -27,12 +27,19 @@ DB_PASSWORD="$(openssl rand -hex 24)"
 JWT_SECRET="$(openssl rand -base64 48 | tr -d '\n')"
 AGENT_TOKEN="$(openssl rand -hex 32)"
 CORE_TOKEN="$(openssl rand -hex 32)"
+GRAFANA_PASSWORD="$(openssl rand -hex 24)"
 cat >"${TARGET}" <<EOF
 PUBLIC_HOST=${PUBLIC_HOST}
+PUBLIC_URL_HOST=${ISSUER_HOST}
 POSTGRES_DB=agentforge
 POSTGRES_USER=agentforge
 POSTGRES_PASSWORD=${DB_PASSWORD}
 AGENTFORGE_POSTGRES_VOLUME=agentforge-postgres-data
+AGENTFORGE_LOKI_VOLUME=agentforge-loki-data
+AGENTFORGE_ALLOY_VOLUME=agentforge-alloy-data
+AGENTFORGE_GRAFANA_VOLUME=agentforge-grafana-data
+GRAFANA_ADMIN_USER=agentforge-admin
+GRAFANA_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
 AGENTFORGE_JWT_SECRET=${JWT_SECRET}
 AGENTFORGE_JWT_ISSUER=https://${ISSUER_HOST}/core-api
 AGENTFORGE_JWT_TTL=PT30M
@@ -62,4 +69,4 @@ LETSENCRYPT_EMAIL=
 EOF
 chmod 600 "${TARGET}"
 echo "Created ${TARGET}. Replace AGENTFORGE_AGENT_LLM_API_KEY on the server before deployment."
-echo "The public interview Demo account was added; keep all service credentials private."
+echo "The public interview Demo account and a private Grafana administrator were added; keep all service credentials private."

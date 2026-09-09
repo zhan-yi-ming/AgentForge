@@ -142,6 +142,75 @@ services:
     logging: *bounded-logging
     networks: [app]
 
+  loki:
+    image: grafana/loki:3.7.0
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./observability/loki/config.yaml:/etc/loki/config.yaml:ro
+      - agentforge-loki-data:/loki
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging: *bounded-logging
+    networks: [app]
+
+  alloy:
+    image: grafana/alloy:v1.19.0
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - agentforge-alloy-data:/var/lib/alloy/data
+    depends_on:
+      loki:
+        condition: service_started
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    cap_add: [DAC_OVERRIDE]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging: *bounded-logging
+    networks: [app]
+
+  grafana:
+    image: grafana/grafana:12.3.11
+    environment:
+      GF_SERVER_ROOT_URL: https://${PUBLIC_URL_HOST:?set PUBLIC_URL_HOST}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?set GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_COOKIE_SAMESITE: strict
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/agentforge-logs.json
+    volumes:
+      - agentforge-grafana-data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      loki:
+        condition: service_started
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging: *bounded-logging
+    networks: [app]
+
 networks:
   app:
     driver: bridge
@@ -149,3 +218,9 @@ networks:
 volumes:
   agentforge-postgres-data:
     name: ${AGENTFORGE_POSTGRES_VOLUME:-agentforge-postgres-data}
+  agentforge-loki-data:
+    name: ${AGENTFORGE_LOKI_VOLUME:-agentforge-loki-data}
+  agentforge-alloy-data:
+    name: ${AGENTFORGE_ALLOY_VOLUME:-agentforge-alloy-data}
+  agentforge-grafana-data:
+    name: ${AGENTFORGE_GRAFANA_VOLUME:-agentforge-grafana-data}

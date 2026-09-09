@@ -14,6 +14,7 @@ compose build agent-service
 compose up -d agent-service
 compose build web
 compose up -d web
-compose pull gateway
+compose pull loki alloy grafana gateway
+compose up -d loki alloy grafana
 compose up -d gateway
 compose ps

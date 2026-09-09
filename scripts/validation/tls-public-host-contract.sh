@@ -326,6 +326,8 @@ AGENTFORGE_AI_DAILY_LIMIT=30
 AGENTFORGE_DEMO_FIXED_EMAIL=210168y@gmail.com
 AGENTFORGE_DEMO_FIXED_PASSWORD=Z1060168
 AGENTFORGE_AGENT_LLM_PROVIDER=disabled
+GRAFANA_ADMIN_USER=agentforge-admin
+GRAFANA_ADMIN_PASSWORD=aaaaaaaaaaaaaaaaaaaaaaaa
 EOF
     chmod 600 "${env_file}"
 
@@ -360,7 +362,9 @@ EOF
         "${REPO_UNDER_TEST}/scripts/deploy/generate-production-env.sh" example.com disabled >/dev/null
 
     assert_line 'PUBLIC_HOST=example.com' "${env_file}"
+    assert_line 'PUBLIC_URL_HOST=example.com' "${env_file}"
     assert_line 'AGENTFORGE_JWT_ISSUER=https://example.com/core-api' "${env_file}"
+    assert_line 'GRAFANA_ADMIN_USER=agentforge-admin' "${env_file}"
     assert_line 'AGENTFORGE_AGENT_CONTEXT_TOKEN_BUDGET=8192' "${env_file}"
     assert_line 'AGENTFORGE_AGENT_CONTEXT_RECENT_TURNS=4' "${env_file}"
     assert_line 'AGENTFORGE_AGENT_CONTEXT_SUMMARY_TOKEN_BUDGET=800' "${env_file}"
@@ -375,6 +379,7 @@ EOF
         "${REPO_UNDER_TEST}/scripts/deploy/generate-production-env.sh" 2001:db8::10 disabled >/dev/null
 
     assert_line 'PUBLIC_HOST=2001:db8::10' "${ipv6_env_file}"
+    assert_line 'PUBLIC_URL_HOST=[2001:db8::10]' "${ipv6_env_file}"
     assert_line 'AGENTFORGE_JWT_ISSUER=https://[2001:db8::10]/core-api' "${ipv6_env_file}"
 }
 

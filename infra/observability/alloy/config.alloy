@@ -1,0 +1,43 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+discovery.docker "agentforge" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+}
+
+discovery.relabel "agentforge" {
+  targets = discovery.docker.agentforge.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    regex         = "agentforge"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "agentforge" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.relabel.agentforge.output
+  labels        = { "stack" = "agentforge" }
+  forward_to    = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

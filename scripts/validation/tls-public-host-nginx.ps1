@@ -38,6 +38,7 @@ function Test-SingleServerNameScenario {
         --env "PUBLIC_WWW_HOST=" `
         --add-host "core-api:127.0.0.1" `
         --add-host "web:127.0.0.1" `
+        --add-host "grafana:127.0.0.1" `
         --mount $templateMount `
         --mount $TlsMount `
         nginx:1.29-alpine nginx -T 2>&1 | Out-String)
@@ -77,6 +78,7 @@ try {
         --env "PUBLIC_WWW_HOST=www.example.com" `
         --add-host "core-api:127.0.0.1" `
         --add-host "web:127.0.0.1" `
+        --add-host "grafana:127.0.0.1" `
         --mount $mount `
         --mount $tlsMount `
         nginx:1.29-alpine nginx -T 2>&1 | Out-String)

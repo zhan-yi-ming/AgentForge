@@ -26,6 +26,8 @@ set +a
 : "${AGENTFORGE_CORE_INTERNAL_TOKEN:?AGENTFORGE_CORE_INTERNAL_TOKEN is required}"
 : "${AGENTFORGE_DEMO_FIXED_EMAIL:?AGENTFORGE_DEMO_FIXED_EMAIL is required}"
 : "${AGENTFORGE_DEMO_FIXED_PASSWORD:?AGENTFORGE_DEMO_FIXED_PASSWORD is required}"
+: "${GRAFANA_ADMIN_USER:?GRAFANA_ADMIN_USER is required}"
+: "${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}"
 
 is_public_host "${PUBLIC_HOST}" || {
     echo "PUBLIC_HOST must be a valid IPv4, IPv6, or DNS domain." >&2
@@ -37,6 +39,14 @@ is_public_host "${PUBLIC_HOST}" || {
 }
 [[ "${#AGENTFORGE_AGENT_INTERNAL_TOKEN}" -ge 32 && "${#AGENTFORGE_CORE_INTERNAL_TOKEN}" -ge 32 ]] || {
     echo "Internal tokens must be at least 32 characters." >&2
+    exit 1
+}
+[[ "${GRAFANA_ADMIN_USER}" =~ ^[A-Za-z0-9._-]{3,64}$ ]] || {
+    echo "GRAFANA_ADMIN_USER must contain 3 to 64 safe username characters." >&2
+    exit 1
+}
+[[ "${#GRAFANA_ADMIN_PASSWORD}" -ge 16 ]] || {
+    echo "GRAFANA_ADMIN_PASSWORD must contain at least 16 characters." >&2
     exit 1
 }
 JWT_BYTES="$(printf '%s' "${AGENTFORGE_JWT_SECRET}" | base64 -d 2>/dev/null | wc -c | tr -d ' ')" || {

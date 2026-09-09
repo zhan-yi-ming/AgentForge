@@ -107,7 +107,11 @@ load_public_config() {
             PUBLIC_WWW_HOST="www.${PUBLIC_HOST}"
         fi
     fi
-    export PUBLIC_HOST PUBLIC_HOST_TYPE PUBLIC_WWW_HOST
+    PUBLIC_URL_HOST="${PUBLIC_HOST}"
+    if is_ipv6_address "${PUBLIC_HOST}"; then
+        PUBLIC_URL_HOST="[${PUBLIC_HOST}]"
+    fi
+    export PUBLIC_HOST PUBLIC_HOST_TYPE PUBLIC_WWW_HOST PUBLIC_URL_HOST
 }
 
 load_demo_config() {

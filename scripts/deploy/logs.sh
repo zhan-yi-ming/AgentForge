@@ -9,7 +9,7 @@ if [[ "${SERVICE}" == "all" ]]; then
     compose logs --tail 200
 else
     case "${SERVICE}" in
-        postgres|core-api|agent-service|web|gateway) compose logs --tail 200 "${SERVICE}" ;;
+        postgres|core-api|agent-service|web|gateway|grafana|loki|alloy) compose logs --tail 200 "${SERVICE}" ;;
         *) echo "Unknown service: ${SERVICE}" >&2; exit 1 ;;
     esac
 fi
