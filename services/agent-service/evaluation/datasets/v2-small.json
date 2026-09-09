@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "name": "agentforge-v2-small",
+  "corpus": [
+    {
+      "id": "wiki-java-boundary",
+      "sourceType": "WIKI",
+      "title": "Deterministic write boundary",
+      "content": "Java validates authorization and owns all business writes. Python produces Agent intent."
+    },
+    {
+      "id": "wiki-risk-policy",
+      "sourceType": "WIKI",
+      "title": "Risk and approval policy",
+      "content": "The Risk Engine and RBAC run before execution. High risk task updates require approval."
+    },
+    {
+      "id": "wiki-context",
+      "sourceType": "WIKI",
+      "title": "Project context retrieval",
+      "content": "RAG retrieves authorized Wiki and Task sources from the current project namespace."
+    },
+    {
+      "id": "task-checkpoint",
+      "sourceType": "TASK",
+      "title": "Checkpoint restart verification",
+      "content": "Verify interrupt checkpoint, Python restart, approval resume, and idempotent task execution."
+    },
+    {
+      "id": "task-ui-preview",
+      "sourceType": "TASK",
+      "title": "Polish markdown preview",
+      "content": "Improve the React markdown preview and loading feedback."
+    },
+    {
+      "id": "task-mobile-sync",
+      "sourceType": "TASK",
+      "title": "Mobile offline sync",
+      "content": "Design mobile offline synchronization for field devices."
+    }
+  ],
+  "ragCases": [
+    {
+      "id": "rag-wiki-java-boundary",
+      "query": "Which service owns authorization and business writes?",
+      "relevantSourceIds": ["wiki-java-boundary"],
+      "k": 2
+    },
+    {
+      "id": "rag-task-restart",
+      "query": "checkpoint Python restart approval resume",
+      "relevantSourceIds": ["task-checkpoint"],
+      "k": 2
+    },
+    {
+      "id": "rag-wiki-and-task-approval",
+      "query": "approval risk task execution",
+      "relevantSourceIds": ["wiki-risk-policy", "task-checkpoint"],
+      "k": 3
+    },
+    {
+      "id": "rag-semantic-no-hit-signal",
+      "query": "handset disconnected mirroring",
+      "relevantSourceIds": ["task-mobile-sync"],
+      "k": 1
+    }
+  ],
+  "answerCases": [
+    {
+      "id": "answer-faithful-boundary",
+      "answer": "Java owns business writes.",
+      "context": "Java validates authorization and owns all business writes."
+    },
+    {
+      "id": "answer-mixed-support",
+      "answer": "Python produces Agent intent. Python writes business data.",
+      "context": "Python produces Agent intent. Java owns all business writes."
+    },
+    {
+      "id": "answer-faithful-recovery",
+      "answer": "The checkpoint supports restart and resume.",
+      "context": "The persistent checkpoint supports Python restart and approval resume."
+    }
+  ],
+  "toolCases": [
+    {
+      "id": "tool-create-with-parameters",
+      "input": "create task: Ship V2 release; status=todo; priority=high",
+      "expectedProposal": {
+        "actionType": "CREATE_TASK",
+        "title": "Ship V2 release",
+        "status": "TODO",
+        "priority": "HIGH"
+      }
+    },
+    {
+      "id": "tool-update-with-parameters",
+      "input": "update task 11111111-1111-4111-8111-111111111111 version 3: status=done; priority=low",
+      "expectedProposal": {
+        "actionType": "UPDATE_TASK",
+        "taskId": "11111111-1111-4111-8111-111111111111",
+        "expectedVersion": 3,
+        "status": "DONE",
+        "priority": "LOW"
+      }
+    },
+    {
+      "id": "tool-chinese-create",
+      "input": "把恢复流程整理成任务，优先级设为高。",
+      "expectedProposal": {
+        "actionType": "CREATE_TASK",
+        "title": "恢复流程",
+        "description": "把恢复流程整理成任务，优先级设为高。",
+        "status": "TODO",
+        "priority": "HIGH"
+      }
+    },
+    {
+      "id": "tool-no-tool-question",
+      "input": "Which service owns business writes?",
+      "expectedProposal": null
+    }
+  ]
+}

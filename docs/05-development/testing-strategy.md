@@ -115,6 +115,15 @@ Day 4 跨进程闭环由仓库脚本执行：
 - 运行真实 Core API、Agent Service 与 PostgreSQL 的跨进程闭环：Tool proposal interrupt 后重启 Python，再 confirm、same-key replay，并断言 Task 只写一次且 checkpoint 已持久化；所有进程、容器和卷必须清理。
 - 本节点是状态机、Schema 和跨服务契约 L3 变化：最低门禁为 Agent pytest、Core `clean verify`、Compose config、上述 restart smoke、diff/docs/敏感扫描与 Pi Milestone Review。未修改 Web 契约或实现时不机械运行 Web 套件。
 
+## V2-08 质量门槛
+
+- 固定 dataset 至少覆盖 Wiki、Task、多 gold/无命中、Create/Update Tool、完整 Tool 参数与 no-tool；gold 不得进入 subject 输入。
+- RAG 指标使用独立手算样例验证 Recall@K、MRR、Hit Rate 和宏平均，检索 source 排名与 Answer Faithfulness 分开报告。
+- Tool Selection Accuracy 验证 Tool/no-tool 选择；Task Success Rate 必须比较规范化后的完整 Tool 参数，不能只比较工具名。
+- Faithfulness 使用的确定性方法、阈值与限制必须写入报告，不得宣称等价于语义事实判断。
+- runner 必须可从 CLI 重复执行，输出带 dataset hash、逐样本证据与指标定义的真实 JSON report；除生成时间外，同输入报告稳定。
+- 本节点最低门禁为 evaluation 定向红绿测试、Agent Service 全量 pytest、真实 runner/report、diff/docs/敏感扫描与 Pi Milestone Review。未修改 Java、Web、数据库或公共 HTTP 契约时不机械运行对应套件。
+
 ## 2026-09-05 历史决定：曾停用 Pi
 
 用户曾撤销 Pi 审查与测试授权，该决定及 Day 1–4 复核保留在 `docs/07-changes/2026-09-05-disable-pi-and-day1-day4-audit.md` 供历史追溯。随后用户重新授权每阶段一次性 Pi 只读代码审核，但没有恢复 Pi 测试、monitor、OnCodexWake 或自动阶段推进；Codex 始终直接执行并记录全部测试证据。

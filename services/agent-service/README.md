@@ -9,3 +9,13 @@
 V2-01 增加可选的 Langfuse fail-open Trace，覆盖 request、Agent、retrieval、tool 和 LLM generation；默认关闭。启用时按 `.env.example` 设置 public key、secret key、host 与 environment，凭据不得提交。
 
 它不能直接读取或写入 Core API 的业务表；Python 只写可重建的 `rag_chunk` 派生索引，任何业务修改仍必须通过 Java 的权限和审批校验。Embedding 固定使用无 key 的 hash provider；生成式回答可选择 DeepSeek、智谱或通义千问，key 只从本地环境读取。安装：`python -m pip install -e .[test]`；启动：`uvicorn agentforge_agent.main:app --reload --port 8000`；测试由 Codex 直接执行 `pytest` 并记录机器结果。
+
+V2-08 提供离线 Evaluation Pipeline。固定小数据集不读取生产数据库或凭据；在本目录执行：
+
+```powershell
+.\.venv\Scripts\python.exe -m agentforge_agent.evaluation.runner `
+  --dataset evaluation/datasets/v2-small.json `
+  --output evaluation/reports/v2-baseline.json
+```
+
+报告分别列出 RAG Recall@K/MRR/Hit Rate、Answer Faithfulness 词项支持代理指标，以及 Tool Selection Accuracy/完整参数 Task Success Rate。Faithfulness 是确定性回归信号，不代表语义蕴含或线上事实正确性。

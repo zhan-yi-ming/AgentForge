@@ -16,6 +16,7 @@
 - `conversation-history.md`：V2-05 受 Project/User/Thread 隔离保护的持久化历史会话。
 - `approval-idempotency-and-audit.md`：V2-06 五态 Approval、幂等执行与追加式审计，已实现。
 - `agent-runtime.md`：V2-07 PostgreSQL checkpoint、LangGraph interrupt 与跨重启 resume，已实现。
+- `evaluation.md`：V2-08 固定 dataset、RAG/Answer/Tool runner、指标边界与真实报告，已实现。
 - `rag-retrieval.md`：Day 4 Wiki/Task Chunk、Embedding、BM25、RRF、Context 与来源引用，已实现并通过真实 pgvector 与跨进程验证。
 - `tool-calling-and-confirmation.md`：Day 5 create/update task 意图、待确认 action 与 Java 确定性写回，已实现。
 - `web-workspace.md`：Day 6 登录、项目选择、Wiki/Task、AI Chat、人工确认与 Markdown 预览，已实现并在 Day 7 完成真实浏览器验收。
@@ -25,4 +26,4 @@
 
 以下文档尚未创建，表示功能也不应开始实现：
 
-- V2-07 可恢复执行已完成；V2-08 Evaluation 等待新的明确 Start Gate。Memory Namespace 仅表示 Agent 记忆归属，不代表长期记忆或完整 SaaS 多租户。
+- V2-08 Evaluation 已完成；V2-09 Release Gate 等待新的明确 Start Gate。Memory Namespace 仅表示 Agent 记忆归属，不代表长期记忆或完整 SaaS 多租户。

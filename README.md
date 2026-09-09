@@ -16,6 +16,7 @@
 - 已完成：V1.2 固定面试账号、随机备用账号、SSE 流式回答和视觉体验升级。
 - 已完成：V2-01–V2-04 Langfuse Trace、Context Manager、Conversation Summary / Token Budget 与完整 Memory Namespace 隔离。
 - 已完成：V2-05–V2-07 Java 集中式 RBAC/Risk、持久化会话、五态 Approval/幂等/Audit，以及 PostgreSQL-backed LangGraph interrupt/resume；Agent Service 重启后仍可恢复待确认动作，业务写入继续由 Java 确定性执行。
+- 已完成：V2-08 可重复离线 Evaluation Pipeline，固定小数据集覆盖 Wiki/Task 检索、Answer Faithfulness、Create/Update Tool 完整参数和 no-tool。当前小型基线为 RAG Recall@K/MRR/Hit Rate 0.75、词项支持 Faithfulness 0.833、Tool Selection/Task Success 1.0；这些数字仅是回归信号，不代表线上质量或语义事实正确性。
 
 ## 先读文档
 
@@ -23,7 +24,8 @@
 - [产品概览](docs/01-product/product-overview.md)
 - [系统架构](docs/02-architecture/system-overview.md)
 - [本地开发](docs/05-development/local-development.md)
-- [当前变更](docs/07-changes/2026-09-09-v2-07-langgraph-checkpoint-resume.md)
+- [当前变更](docs/07-changes/2026-09-09-v2-08-evaluation.md)
+- [Evaluation Pipeline](docs/03-features/evaluation.md)
 - [公开仓库安全](docs/00-governance/public-repository-security.md)
 - [单机生产部署](docs/06-operations/production-single-host.md)
 

@@ -1,0 +1,214 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-09T00:25:59.745815Z",
+  "dataset": {
+    "name": "agentforge-v2-small",
+    "schemaVersion": 1,
+    "sha256": "ec65505c47bd9351f0a10f6b56c8814fe8b069dc202f5de1730036397fdf252a"
+  },
+  "subject": "agentforge-current-code-offline-v1",
+  "metrics": {
+    "recallAtK": 0.75,
+    "mrr": 0.75,
+    "hitRate": 0.75,
+    "faithfulness": 0.8333333333333334,
+    "toolSelectionAccuracy": 1.0,
+    "taskSuccessRate": 1.0
+  },
+  "methods": {
+    "rag": {
+      "unit": "source-id",
+      "ranking": "hash-vector-plus-bm25-rrf"
+    },
+    "faithfulness": {
+      "kind": "lexical-claim-support-proxy",
+      "supportThreshold": 0.8,
+      "limitation": "Deterministic regression proxy; it does not establish semantic entailment or factual correctness."
+    },
+    "tool": {
+      "selection": "exact action type including no-tool",
+      "taskSuccess": "exact normalized proposal including all parameters"
+    }
+  },
+  "cases": {
+    "rag": [
+      {
+        "id": "rag-wiki-java-boundary",
+        "k": 2,
+        "relevantSourceIds": [
+          "wiki-java-boundary"
+        ],
+        "retrievedSourceIds": [
+          "wiki-java-boundary",
+          "wiki-risk-policy",
+          "wiki-context",
+          "task-checkpoint",
+          "task-ui-preview",
+          "task-mobile-sync"
+        ],
+        "recallAtK": 1.0,
+        "reciprocalRank": 1.0,
+        "hitRate": 1.0
+      },
+      {
+        "id": "rag-task-restart",
+        "k": 2,
+        "relevantSourceIds": [
+          "task-checkpoint"
+        ],
+        "retrievedSourceIds": [
+          "task-checkpoint",
+          "wiki-risk-policy",
+          "wiki-java-boundary",
+          "task-mobile-sync",
+          "task-ui-preview",
+          "wiki-context"
+        ],
+        "recallAtK": 1.0,
+        "reciprocalRank": 1.0,
+        "hitRate": 1.0
+      },
+      {
+        "id": "rag-wiki-and-task-approval",
+        "k": 3,
+        "relevantSourceIds": [
+          "task-checkpoint",
+          "wiki-risk-policy"
+        ],
+        "retrievedSourceIds": [
+          "wiki-risk-policy",
+          "task-checkpoint",
+          "wiki-context",
+          "task-mobile-sync",
+          "task-ui-preview",
+          "wiki-java-boundary"
+        ],
+        "recallAtK": 1.0,
+        "reciprocalRank": 1.0,
+        "hitRate": 1.0
+      },
+      {
+        "id": "rag-semantic-no-hit-signal",
+        "k": 1,
+        "relevantSourceIds": [
+          "task-mobile-sync"
+        ],
+        "retrievedSourceIds": [
+          "task-checkpoint",
+          "task-mobile-sync",
+          "task-ui-preview",
+          "wiki-java-boundary",
+          "wiki-risk-policy",
+          "wiki-context"
+        ],
+        "recallAtK": 0.0,
+        "reciprocalRank": 0.0,
+        "hitRate": 0.0
+      }
+    ],
+    "answer": [
+      {
+        "id": "answer-faithful-boundary",
+        "faithfulness": 1.0,
+        "claims": [
+          {
+            "text": "Java owns business writes.",
+            "tokenSupport": 1.0,
+            "supported": true
+          }
+        ]
+      },
+      {
+        "id": "answer-mixed-support",
+        "faithfulness": 0.5,
+        "claims": [
+          {
+            "text": "Python produces Agent intent.",
+            "tokenSupport": 1.0,
+            "supported": true
+          },
+          {
+            "text": "Python writes business data.",
+            "tokenSupport": 0.75,
+            "supported": false
+          }
+        ]
+      },
+      {
+        "id": "answer-faithful-recovery",
+        "faithfulness": 1.0,
+        "claims": [
+          {
+            "text": "The checkpoint supports restart and resume.",
+            "tokenSupport": 1.0,
+            "supported": true
+          }
+        ]
+      }
+    ],
+    "tool": [
+      {
+        "id": "tool-create-with-parameters",
+        "expectedProposal": {
+          "actionType": "CREATE_TASK",
+          "title": "Ship V2 release",
+          "status": "TODO",
+          "priority": "HIGH"
+        },
+        "actualProposal": {
+          "actionType": "CREATE_TASK",
+          "title": "Ship V2 release",
+          "status": "TODO",
+          "priority": "HIGH"
+        },
+        "selectionAccuracy": 1.0,
+        "taskSuccess": 1.0
+      },
+      {
+        "id": "tool-update-with-parameters",
+        "expectedProposal": {
+          "actionType": "UPDATE_TASK",
+          "taskId": "11111111-1111-4111-8111-111111111111",
+          "expectedVersion": 3,
+          "status": "DONE",
+          "priority": "LOW"
+        },
+        "actualProposal": {
+          "actionType": "UPDATE_TASK",
+          "taskId": "11111111-1111-4111-8111-111111111111",
+          "expectedVersion": 3,
+          "status": "DONE",
+          "priority": "LOW"
+        },
+        "selectionAccuracy": 1.0,
+        "taskSuccess": 1.0
+      },
+      {
+        "id": "tool-chinese-create",
+        "expectedProposal": {
+          "actionType": "CREATE_TASK",
+          "title": "恢复流程",
+          "description": "把恢复流程整理成任务，优先级设为高。",
+          "status": "TODO",
+          "priority": "HIGH"
+        },
+        "actualProposal": {
+          "actionType": "CREATE_TASK",
+          "title": "恢复流程",
+          "description": "把恢复流程整理成任务，优先级设为高。",
+          "status": "TODO",
+          "priority": "HIGH"
+        },
+        "selectionAccuracy": 1.0,
+        "taskSuccess": 1.0
+      },
+      {
+        "id": "tool-no-tool-question",
+        "expectedProposal": null,
+        "actualProposal": null,
+        "selectionAccuracy": 1.0,
+        "taskSuccess": 1.0
+      }
+    ]
+  }
+}
