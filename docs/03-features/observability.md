@@ -44,7 +44,7 @@ Langfuse 保存的是外部观测数据，不是业务事实；数据库 schema 
 
 只有内部认证成功的 Chat 才建立 Trace。禁止写入 message、answer、retrieved context、source excerpt、Tool arguments/title/description、JWT、密码、内部 token、provider key、DSN、Cookie、请求/响应 headers 或原始异常文本。Langfuse Trace 不公开；public/secret key 只从运行时环境读取。
 
-Grafana 仅通过现有 HTTPS gateway 的 `/grafana/` 暴露，不发布独立主机端口；匿名访问和用户自助注册关闭，管理员密码来自服务器上权限为 `0600`/`0400` 的环境文件。Loki 与 Alloy 仅在内部 Compose 网络可达。Alloy 只采集 Compose project `agentforge`，但读取 Docker socket 仍属于高权限边界，具体取舍见 ADR-0023。日志中可能含用户/项目标识等运维元数据，禁止把完整日志公开或转发给第三方。
+Grafana 仅通过现有 HTTPS gateway 的 `/grafana/` 暴露，不发布独立主机端口；匿名访问和用户自助注册关闭，精确登录入口受 Nginx 限流，管理员密码来自服务器上权限为 `0600`/`0400` 的环境文件。Loki 与 Alloy 仅在内部 Compose 网络可达。Alloy 只采集 Compose project `agentforge`，但读取 Docker socket 仍属于高权限边界，具体取舍见 ADR-0023。日志中可能含用户/项目标识等运维元数据，禁止把完整日志公开或转发给第三方。
 
 ## 失败与排查
 
@@ -67,4 +67,4 @@ Grafana 仅通过现有 HTTPS gateway 的 `/grafana/` 暴露，不发布独立�
 
 V2-01 不传播 Langfuse/Otel trace id 到 Java，也不保存聊天 history；同一 thread 的请求通过 session/thread 字段聚合，但 Agent state 持久化属于 V2-07。Context composition、预算和 Eval 分别属于 V2-02/V2-03/V2-08，不在本节点实现。
 
-单机 Loki 使用 filesystem storage，只面向当前低日志量 Demo，不提供高可用或按磁盘剩余空间自动停止写入。默认 retention 为 7 天；观测栈故障不影响业务，但故障期间的集中日志可能缺失，原 Docker bounded logs 仍是短期兜底。
+单机 Loki 使用 filesystem storage，只面向当前低日志量 Demo，不提供高可用或按磁盘剩余空间自动停止写入。默认 retention 为 7 天；观测栈故障不影响业务容器或业务健康门禁，但健康检查会输出 warning，故障期间的集中日志可能缺失，原 Docker bounded logs 仍是短期兜底。

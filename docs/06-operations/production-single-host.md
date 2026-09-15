@@ -65,7 +65,7 @@ compose logs --since 30m --no-color agent-service core-api
 
 ```text
 GRAFANA_ADMIN_USER=agentforge-admin
-GRAFANA_ADMIN_PASSWORD=<至少 16 字符的随机值>
+GRAFANA_ADMIN_PASSWORD=<至少 24 字符、同时包含字母和数字的随机值>
 ```
 
 部署后访问 `https://<PUBLIC_HOST>/grafana/`。匿名访问和自助注册关闭，只有 Grafana 账号可进入；Loki、Alloy 和 Grafana 不发布额外主机端口。首页预置 `AgentForge Logs` dashboard：
@@ -74,7 +74,11 @@ GRAFANA_ADMIN_PASSWORD=<至少 16 字符的随机值>
 - `search` 输入普通关键词或 `request_id` 值；这是日志行包含过滤，不创建高基数标签。
 - 时间范围默认最近 30 分钟，可在右上角调整；Loki 默认只保留最近 7 天。
 
+Nginx 对精确的 `/grafana/login` 入口复用登录限流，避免暴力尝试；dashboard 静态资源和已登录日志查询不使用该低速率限制。`search` 使用 JSON 字符串格式化后的 LogQL 纯文本包含查询，引号、反斜杠和换行不会改变查询结构，输入也不会被当成正则表达式。
+
 Grafana 是运维入口，不使用 AgentForge Demo 账号体系。浏览器返回 502 时先运行 `compose ps grafana loki alloy`；Grafana 无数据时查看 `scripts/deploy/logs.sh alloy` 和 `scripts/deploy/logs.sh loki`，确认 Docker socket 可读、Loki ready 且目标容器属于 Compose project `agentforge`。按 `request_id` 排障时，先从浏览器响应获得 ID，再在 dashboard 的 `search` 中输入完整值并同时选择 `core-api` 与 `agent-service`。
+
+`health-check.sh` 把 PostgreSQL、Core API、Agent Service、Web、gateway 及其 HTTPS/API 认证作为硬门禁；Grafana、Loki、Alloy 或 Grafana 认证不可用时输出 warning 但不让业务健康检查失败。需要发布日志能力时仍必须单独处理该 warning，并用 dashboard smoke 验收，不能把业务健康通过误报为日志能力正常。
 
 Loki filesystem volume 是可丢弃的运维日志副本，不纳入 PostgreSQL 业务备份，也不是高可用存储。7 天 retention 不按剩余磁盘空间自动调整；磁盘紧张时先确认 volume 占用和 retention 是否生效，不得直接删除 PostgreSQL volume。停止或回滚观测栈不影响业务容器；自动回滚保留 Grafana/Loki named volume，人工删除它们会不可恢复地丢失 dashboard 本地状态和集中日志。
 

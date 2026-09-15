@@ -23,6 +23,8 @@ AgentForge V2 stable 的生产容器使用带上限的 Docker JSON 日志，维�
 - Loki 使用 TSDB 索引和本地 filesystem named volume，启用 7 天 retention；它是可丢弃的运维日志副本，不是业务事实库。
 - Alloy 使用官方推荐的 Docker discovery / Docker log source，只保留 Compose project `agentforge`，把 Compose service 映射为低基数 `service` 标签。
 - 业务容器不依赖观测容器；观测栈停止时业务继续运行。
+- 统一健康检查对五个业务服务保持失败即阻断，对 Grafana/Loki/Alloy 只输出 warning；日志能力的发布验收另由观测 smoke 保证。
+- Grafana 精确登录入口复用 Nginx 登录限流；dashboard 搜索变量使用转义后的正则格式，管理员密码执行可自动验证的最小强度规则。
 - 不安装 Loki Docker logging driver，避免日志后端故障改变业务容器日志写入路径。
 
 ## 结果

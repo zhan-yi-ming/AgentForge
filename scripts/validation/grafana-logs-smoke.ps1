@@ -16,7 +16,14 @@ $lokiVolume = "$project-loki"
 $alloyVolume = "$project-alloy"
 $grafanaVolume = "$project-grafana"
 $adminUser = "agentforge-smoke"
-$adminPassword = "grafana-smoke-password-1234"
+$passwordBytes = New-Object byte[] 24
+$passwordGenerator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+try {
+    $passwordGenerator.GetBytes($passwordBytes)
+} finally {
+    $passwordGenerator.Dispose()
+}
+$adminPassword = "Af9" + [Convert]::ToBase64String($passwordBytes).TrimEnd('=').Replace('+', 'A').Replace('/', 'B')
 $network = "${project}_app"
 
 $previousLokiVolume = $env:AGENTFORGE_LOKI_VOLUME
@@ -28,6 +35,18 @@ $previousAdminPassword = $env:GRAFANA_ADMIN_PASSWORD
 function Invoke-Compose {
     & docker compose -p $project --env-file $envPath -f $composeFile @args
     if ($LASTEXITCODE -ne 0) { throw "docker compose failed: $($args -join ' ')" }
+}
+
+function Invoke-GrafanaAdminCurl {
+    param(
+        [string]$ContainerId,
+        [string]$Url
+    )
+
+    $curlConfig = "user = `"${adminUser}:${adminPassword}`""
+    $response = $curlConfig | & docker exec -i $ContainerId curl --config - --fail --silent $Url
+    if ($LASTEXITCODE -ne 0) { throw "Authenticated Grafana request failed." }
+    return $response
 }
 
 try {
@@ -58,8 +77,17 @@ try {
     }
 
     $alloyLogs = (& docker logs $serviceIds.alloy 2>&1 | Out-String)
-    if ($alloyLogs -match 'Error:|failed to|level=error') {
-        throw "Alloy reported an error:`n$alloyLogs"
+    $blockingAlloyErrors = @(
+        $alloyLogs -split '\r?\n' | Where-Object {
+            $_ -match 'Error:|failed to|level=error' -and
+            -not (
+                $_ -match 'status=400' -and
+                $_ -match 'timestamp too old|entry too far behind'
+            )
+        }
+    )
+    if ($blockingAlloyErrors.Count -ne 0) {
+        throw "Alloy reported an error:`n$($blockingAlloyErrors -join "`n")"
     }
 
     & docker exec $serviceIds.grafana curl --fail --silent `
@@ -73,17 +101,15 @@ try {
         throw "Expected unauthenticated Grafana search status 401, received $unauthenticatedStatus."
     }
 
-    $dashboardSearch = & docker exec $serviceIds.grafana curl --fail --silent `
-        --user "${adminUser}:${adminPassword}" `
-        'http://localhost:3000/grafana/api/search?query=AgentForge%20Logs'
-    if ($LASTEXITCODE -ne 0 -or ($dashboardSearch -join "`n") -notmatch 'agentforge-logs') {
+    $dashboardSearch = Invoke-GrafanaAdminCurl -ContainerId $serviceIds.grafana `
+        -Url 'http://localhost:3000/grafana/api/search?query=AgentForge%20Logs'
+    if (($dashboardSearch -join "`n") -notmatch 'agentforge-logs') {
         throw "Provisioned AgentForge Logs dashboard was not returned."
     }
 
-    $dataSourceHealth = & docker exec $serviceIds.grafana curl --fail --silent `
-        --user "${adminUser}:${adminPassword}" `
-        http://localhost:3000/grafana/api/datasources/uid/agentforge-loki/health
-    if ($LASTEXITCODE -ne 0 -or ($dataSourceHealth -join "`n") -notmatch '"status"\s*:\s*"OK"') {
+    $dataSourceHealth = Invoke-GrafanaAdminCurl -ContainerId $serviceIds.grafana `
+        -Url 'http://localhost:3000/grafana/api/datasources/uid/agentforge-loki/health'
+    if (($dataSourceHealth -join "`n") -notmatch '"status"\s*:\s*"OK"') {
         throw "Provisioned Loki data source is not healthy."
     }
 

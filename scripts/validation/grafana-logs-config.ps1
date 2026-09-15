@@ -15,6 +15,8 @@ $lokiConfig = Join-Path $root "infra/observability/loki/config.yaml"
 $dataSourceConfig = Join-Path $root "infra/observability/grafana/provisioning/datasources/loki.yaml"
 $dashboardProvider = Join-Path $root "infra/observability/grafana/provisioning/dashboards/provider.yaml"
 $dashboardFile = Join-Path $root "infra/observability/grafana/dashboards/agentforge-logs.json"
+$healthCheck = Join-Path $root "scripts/deploy/health-check.sh"
+$smokeTest = Join-Path $root "scripts/validation/grafana-logs-smoke.ps1"
 
 $json = docker compose --env-file $envPath -f $composeFile config --format json
 if ($LASTEXITCODE -ne 0) { throw "Production Compose did not render." }
@@ -72,7 +74,8 @@ foreach ($applicationService in 'postgres','core-api','agent-service','web','gat
 
 $nginx = Get-Content -Raw -LiteralPath $nginxTemplate
 if ($nginx -notmatch 'location\s+\^~\s+/grafana/' -or
-    $nginx -notmatch 'proxy_pass\s+http://grafana:3000') {
+    $nginx -notmatch 'proxy_pass\s+http://grafana:3000' -or
+    $nginx -notmatch '(?s)location\s+=\s+/grafana/login\s*\{.*?limit_req\s+zone=login_per_ip') {
     throw "Nginx does not expose the Grafana sub-path."
 }
 
@@ -105,6 +108,24 @@ if ($dashboard.title -ne 'AgentForge Logs' -or
     @($dashboard.templating.list | Where-Object name -eq 'search').Count -ne 1 -or
     @($dashboard.panels).Count -lt 1) {
     throw "The AgentForge Logs dashboard must expose service and search controls."
+}
+$expectedSearchExpression = '{stack="agentforge", service=~"$service"} |= ${search:json}'
+if ($dashboard.panels[0].targets[0].expr -ne $expectedSearchExpression) {
+    throw "The dashboard search variable must use JSON string escaping before reaching LogQL."
+}
+
+$healthCheckContent = Get-Content -Raw -LiteralPath $healthCheck
+if ($healthCheckContent -notmatch 'APPLICATION_SERVICES=' -or
+    $healthCheckContent -notmatch 'OBSERVABILITY_SERVICES=' -or
+    $healthCheckContent -notmatch '(?i)warning.*observability') {
+    throw "Business and observability health checks must have separate failure semantics."
+}
+
+$smokeContent = Get-Content -Raw -LiteralPath $smokeTest
+if ($smokeContent -notmatch 'RandomNumberGenerator' -or
+    $smokeContent -match 'grafana-smoke-password-1234' -or
+    $smokeContent -match '--user') {
+    throw "The Grafana smoke test must generate a one-time administrator password at runtime."
 }
 
 Write-Host "Grafana logs config passed: authenticated sub-path, internal-only services, project-scoped collection, seven-day retention, and provisioned dashboard."

@@ -27,7 +27,7 @@ DB_PASSWORD="$(openssl rand -hex 24)"
 JWT_SECRET="$(openssl rand -base64 48 | tr -d '\n')"
 AGENT_TOKEN="$(openssl rand -hex 32)"
 CORE_TOKEN="$(openssl rand -hex 32)"
-GRAFANA_PASSWORD="$(openssl rand -hex 24)"
+GRAFANA_PASSWORD="Af9$(openssl rand -hex 24)"
 cat >"${TARGET}" <<EOF
 PUBLIC_HOST=${PUBLIC_HOST}
 PUBLIC_URL_HOST=${ISSUER_HOST}

@@ -45,8 +45,10 @@ is_public_host "${PUBLIC_HOST}" || {
     echo "GRAFANA_ADMIN_USER must contain 3 to 64 safe username characters." >&2
     exit 1
 }
-[[ "${#GRAFANA_ADMIN_PASSWORD}" -ge 16 ]] || {
-    echo "GRAFANA_ADMIN_PASSWORD must contain at least 16 characters." >&2
+[[ "${#GRAFANA_ADMIN_PASSWORD}" -ge 24 &&
+   "${GRAFANA_ADMIN_PASSWORD}" =~ [A-Za-z] &&
+   "${GRAFANA_ADMIN_PASSWORD}" =~ [0-9] ]] || {
+    echo "GRAFANA_ADMIN_PASSWORD must contain at least 24 characters including an ASCII letter and a digit." >&2
     exit 1
 }
 JWT_BYTES="$(printf '%s' "${AGENTFORGE_JWT_SECRET}" | base64 -d 2>/dev/null | wc -c | tr -d ' ')" || {

@@ -23,7 +23,7 @@
         {
           "datasource": { "type": "loki", "uid": "agentforge-loki" },
           "editorMode": "code",
-          "expr": "{stack=\"agentforge\", service=~\"$service\"} |= `$search`",
+          "expr": "{stack=\"agentforge\", service=~\"$service\"} |= ${search:json}",
           "queryType": "range",
           "refId": "A"
         }

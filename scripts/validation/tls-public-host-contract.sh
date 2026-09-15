@@ -327,7 +327,7 @@ AGENTFORGE_DEMO_FIXED_EMAIL=210168y@gmail.com
 AGENTFORGE_DEMO_FIXED_PASSWORD=Z1060168
 AGENTFORGE_AGENT_LLM_PROVIDER=disabled
 GRAFANA_ADMIN_USER=agentforge-admin
-GRAFANA_ADMIN_PASSWORD=aaaaaaaaaaaaaaaaaaaaaaaa
+GRAFANA_ADMIN_PASSWORD=RandomGrafanaPassword2026
 EOF
     chmod 600 "${env_file}"
 
@@ -338,6 +338,18 @@ EOF
     )"
     [[ "${validation_output}" == *'Production environment validation passed.'* ]] ||
         fail 'valid root-domain production environment was rejected'
+
+    sed -i 's#^GRAFANA_ADMIN_PASSWORD=.*#GRAFANA_ADMIN_PASSWORD=aaaaaaaaaaaaaaaaaaaaaaaa#' "${env_file}"
+    set +e
+    rejection_output="$(
+        AGENTFORGE_REPO_DIR="${REPO_UNDER_TEST}" \
+        AGENTFORGE_ENV_FILE="${env_file}" \
+            "${REPO_UNDER_TEST}/scripts/deploy/validate-env.sh" 2>&1
+    )"
+    rejection_status=$?
+    set -e
+    [[ ${rejection_status} -ne 0 && "${rejection_output}" == *'GRAFANA_ADMIN_PASSWORD'* ]] ||
+        fail 'production validation accepted a repeated-character Grafana administrator password'
 }
 
 run_domain_environment_generation() {
@@ -429,6 +441,58 @@ EOF
         fail 'TLS entrypoint did not reject a malformed IPv6 PUBLIC_HOST'
 }
 
+run_observability_health_fail_open() {
+    local scenario_root="${TEST_ROOT}/health-observability-down"
+    local env_file="${scenario_root}/agentforge.env"
+    local fake_bin="${scenario_root}/bin"
+    mkdir -p "${fake_bin}"
+    cat >"${env_file}" <<'EOF'
+PUBLIC_HOST=example.com
+POSTGRES_DB=agentforge
+POSTGRES_USER=agentforge
+EOF
+    chmod 600 "${env_file}"
+
+    cat >"${fake_bin}/docker" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+case "$*" in
+    *'ps --status running -q postgres core-api agent-service web gateway'*)
+        printf '%s\n' postgres core-api agent-service web gateway
+        ;;
+    *'ps --status running -q loki alloy grafana'*)
+        ;;
+    *)
+        echo "Unexpected docker arguments: $*" >&2
+        exit 1
+        ;;
+esac
+EOF
+    chmod +x "${fake_bin}/docker"
+
+    cat >"${fake_bin}/curl" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+if [[ "$*" == *'/api/v1/users/me'* ]]; then
+    printf '401'
+fi
+EOF
+    chmod +x "${fake_bin}/curl"
+
+    health_output="$(
+        PATH="${fake_bin}:${PATH}" \
+        AGENTFORGE_REPO_DIR="${REPO_UNDER_TEST}" \
+        AGENTFORGE_ENV_FILE="${env_file}" \
+        AGENTFORGE_STATE_DIR="${scenario_root}/state" \
+        AGENTFORGE_BACKUP_DIR="${scenario_root}/backups" \
+            "${REPO_UNDER_TEST}/scripts/deploy/health-check.sh" 2>&1
+    )"
+    [[ "${health_output}" == *'WARNING: Observability is degraded'* ]] ||
+        fail 'health check did not report degraded observability'
+    [[ "${health_output}" == *'AgentForge application HTTPS and authentication are healthy'* ]] ||
+        fail 'observability failure incorrectly blocked application health'
+}
+
 run_ipv4_issue_and_sync
 run_root_domain_issue_and_sync
 run_www_domain_issue_and_sync
@@ -437,4 +501,5 @@ run_root_domain_bootstrap_certificate
 run_domain_environment_validation
 run_domain_environment_generation
 run_invalid_public_host_rejection
-echo 'TLS public host contract passed: IPv4/IPv6/domain issue, renewal, bootstrap, validation, generation, and rejection.'
+run_observability_health_fail_open
+echo 'TLS public host contract passed: IPv4/IPv6/domain issue, renewal, bootstrap, validation, generation, rejection, and observability fail-open health.'

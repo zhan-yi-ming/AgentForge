@@ -1,7 +1,7 @@
 # Grafana 日志界面（独立运维增强）
 
 - 日期：2026-09-09
-- 状态：In Progress（用户要求创建紧急可回滚检查点；Pi 审核和生产部署仍待后续完成）
+- 状态：Implemented（代码、验证与 Pi Diff Review 已完成；生产部署需另行授权）
 - 阶段：V2 stable 后的独立运维增强（不属于 V3 Node）
 - 交付目标：远程分支 `codex/pre-v3-grafana-logs`
 
@@ -65,21 +65,40 @@
 - 固化后的最终 smoke：`& .\scripts\validation\grafana-logs-smoke.ps1`，退出码 0；认证、dashboard、Loki datasource、project-scoped 日志采集均通过，脚本确认专用容器和 volumes 无残留。
 - `git diff --check` 已运行并退出码 0；仅报告两个既有 PowerShell 文件未来可能发生 LF→CRLF 转换的 warning，无空白错误。
 
-### 尚未完成
+### 2026-09-14 检查点续作
 
-- 未运行最终 gitleaks/敏感信息扫描。
-- 未执行 L2 DeepSeek Pi Diff Review，也没有生成本次 `docs/08-reviews/` 报告。
-- 未把本次文件单独暂存；未创建 Git commit、未推送远端、未核验远端引用。
+- 远端 preflight：本地 `HEAD` 与 `origin/codex/pre-v3-grafana-logs` 均为 `a143e7803da95e0e6b14c09d63b7e95b917da307`；用户原有 Markdown、`.worktrees/` 与 DOCX 仍保持未暂存/未跟踪且未进入本次范围。
+- ref-to-ref 规划：以 `af7afa3a2e743a3a8e4dce63845a7b62d20e28da` 为 base、`HEAD` 为 target，对 24 个显式路径运行规划器，退出码 0；结果仍为 L2、Deployment/Docs/TlsDeployment/Unknown、Diff Review，fingerprint 为 `b5292e7928176be730c171385f5e7f2de90571f0d6f91f51271951aa2e234cae`。
+- 安全复核：45,009 字节统一 diff 的私钥、GitHub/AWS/OpenAI key、JWT 与 Bearer 正则均为 0 命中；随后 `zricethezav/gitleaks:v8.30.1 detect --pipe --no-banner --redact --exit-code 1` 扫描完整 ref-to-ref diff 约 51.40 KB，退出码 0，`no leaks found`。
+- 不依赖真实业务环境的门禁重新通过：`grafana-logs-config.ps1`、`v1-1-production-config.ps1`、Git Bash parser 与 `tls-public-host-nginx.ps1` 均退出码 0；Compose 仍为 8 个服务、仅 gateway 发布 80/443，Nginx IPv4/根域名/已有 `www` 配置通过。
+- 真实 smoke 红灯：在本机已有超过 7 天的 `agentforge` 容器 bounded logs 时，`grafana-logs-smoke.ps1` 退出码 1。Alloy 已正常运行并连接 Loki，但首次回放旧日志被 Loki retention 以 HTTP 400 `timestamp too old` 拒绝；脚本把该预期丢弃与真正采集故障一并判为致命错误。本次随机项目的容器、网络和三个 volumes 已全部清理。
+- 修复边界：第一次最小过滤后，第二次红灯捕获 Loki 对旧回放的等价 HTTP 400 `entry too far behind`；最终 smoke 只忽略同时包含 `status=400` 和 `timestamp too old` / `entry too far behind` 的旧条目拒绝行，继续阻断其他 `Error:`、`failed to` 和 `level=error`。随后必须用同一真实链路验证当前 `observability-smoke` 日志仍成功进入 Loki。
+- 真实 smoke 绿灯：修复后再次运行 `& .\scripts\validation\grafana-logs-smoke.ps1`，退出码 0；在旧日志仍存在的同一 Docker 环境中，Grafana 认证、dashboard、Loki datasource 和当前 `observability-smoke` project-scoped 日志采集均通过，随机项目的容器、网络和三个 volumes 均已清理。
+- 预审核 INDEX 门禁（证据回填前）：只暂存本记录与 smoke 判别修复，用户原有内容仍未暂存；以旧 base 到 INDEX 的 24 文件完整范围运行规划器，退出码 0，L2 / Diff Review，fingerprint 为 `0486ae8c343b7d8e0c655f059a0e529fe1fab6ea1b9ee22c0b3943095bb696ea`。`git diff --cached --check` 退出码 0；Gitleaks v8.30.1 扫描约 53.70 KB，退出码 0，`no leaks found`。
+
+### 生产部署后续
+
 - 未部署到生产服务器，也未执行公网 `/grafana/` 验收；现有服务器私有 `.env` 仍需添加 Grafana 管理员配置。
+
+### Pi Attempt 1 研判
+
+- Pi Diff Review 报告：`docs/08-reviews/2026-09-15-review-pre-v3-grafana-logs-attempt-1.md`，结果 `NEEDS_FIX`。
+- Issue 1 采纳：Compose 依赖已经保证业务运行不依赖观测栈，但 `update.sh` / `rollback.sh` 共用的 `health-check.sh` 会因任一观测容器停止而失败，和 fail-open 运维契约不一致。业务五服务及 HTTPS/API 认证保持硬门禁；Grafana/Loki/Alloy 与 Grafana 认证检查改为非零 warning。
+- Issue 2 采纳：先以 Grafana regex formatter 修复反引号插值，Attempt 2 的 S1 建议进一步收敛为 `${search:json}` 与 LogQL `|=` 纯文本包含，完整保护字符串定界符并保持关键词语义。
+- Issue 3 采纳：生产 Grafana 管理员密码改为至少 24 字符、同时包含 ASCII 字母与数字且不能全部为同一字符；生成器使用 `Af9` 类别前缀和 48 字符随机 hex。文档同步为可验证要求，仍建议只使用随机生成值。
+- Issue 4 采纳：只对精确 `/grafana/login` 入口复用现有 `login_per_ip` 限流，避免给 dashboard 静态资源和日志查询整体限流。
+- Issue 5 采纳：smoke 改为运行时用密码学安全随机源生成一次性管理员密码，不把固定测试口令保存在仓库。
+- 修复验证：更新后的 `grafana-logs-config.ps1` 首次因缺少精确登录限流退出码 1；Linux `tls-public-host-contract.sh` 首次因重复字符 Grafana 密码仍被接受退出码 1。实现后两者均退出码 0，后者额外模拟五个业务服务运行、三个观测服务停止，确认业务健康通过且输出 observability warning。
+- 回归门禁：`v1-1-production-config.ps1`、Git Bash parser、ShellCheck v0.11.0、真实 Nginx IPv4/根域名/已有 `www` 解析均退出码 0；配置仍为 8 服务、仅 gateway 发布 80/443。
+- 最终真实 smoke：运行时密码学随机管理员密码通过 curl stdin config 认证，不进入 curl 命令行参数；Grafana 登录保护、dashboard、Loki datasource、当前 project-scoped 日志采集均通过，退出码 0，随机容器、网络和三个 volumes 全部清理。
+- Pi Attempt 2 结果 `PASS`，五个阻断项全部关闭。唯一低风险建议 S1 指出 regex formatter 不转义 LogQL 双引号/换行；采纳为 `${search:json}` + `|=` 纯文本包含，避免查询结构变化或把输入解释为正则。该项属于 PASS 后纯建议，按审核规则不触发第三轮 Pi，只重跑相关配置与真实 smoke。
+- S1 红灯与回归：更新配置契约后，旧 dashboard 表达式使 `grafana-logs-config.ps1` 退出码 1；最小实现后配置契约和 `grafana-logs-smoke.ps1` 均退出码 0，Grafana provisioning、认证、Loki datasource 与当前日志采集通过，专用资源全部清理。
 
 ## 后续接手步骤
 
-1. 先检查 `git status` 和本记录列出的范围。保留用户原有的 `docs/07-changes/2026-09-05-disable-pi-and-day1-day4-audit.md` 修改、`.worktrees/` 与 `AgentForge_产品规划与三阶段迭代路线.docx`，不得把它们混入本次提交或发送给外部 Reviewer。
-2. 复核最终 diff，重点检查 Alloy Docker socket 权限、Grafana 子路径、生产 `.env` 升级兼容和 `grafana-logs-smoke.ps1` 的精确清理。
-3. 对本次显式文件执行最终敏感扫描；不要扫描或输出本机真实 `.env` 内容。
-4. 仅暂存本次 Grafana 范围，以 `HEAD → INDEX` 调用一次 L2 Pi Diff Review。按照项目规则，Pi 只读审核，不修改、不测试、不提交。
-5. 逐条判断 Pi finding；只有可复现的阻断问题才修复并重跑受影响验证。回填本记录并将状态改为 `Implemented`。
-6. 确认暂存区只包含本次范围后创建可读提交，非强制推送 `codex/pre-v3-grafana-logs` 并核验远端 commit。生产发布仍需用户对 main 与服务器变更另行明确授权。
+1. 生产发布仍需用户对共享 `main` 与服务器变更另行明确授权。
+2. 发布前在服务器私有 `/opt/agentforge/env/.env` 增加满足新规则的 Grafana 管理员配置，运行 `validate-env.sh`，再按运维文档执行更新和公网验收。
+3. 公网验收必须检查 `/grafana/` 登录、错误登录限流、预置 dashboard、按 service/request_id 查询、观测故障 warning 与业务健康 fail-open；真实凭据和日志不得进入报告。
 
 本次特殊交接不修改 `AGENTS.md`，也不改变其中的文档先行、测试、Pi 只读审核、提交和推送门禁。
 
