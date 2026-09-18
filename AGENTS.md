@@ -29,7 +29,7 @@
 ## Pi 一次性只读审核
 
 - L0/L1 默认不调用 Pi；L2 做 Diff Review；L3、Node、累计门禁和 Release 做 Milestone Review。只有真实阻塞项修复后才复审，纯建议不触发下一轮。
-- Codex 完成相称测试、清理和敏感扫描后，可使用用户持续授权调用 DeepSeek Pi V4 Flash（`deepseek/deepseek-v4-flash`）；Pi 只读，不测试、不修改、不 monitor、不提交、不推进阶段。
+- Codex 完成相称测试、清理和敏感扫描后，可使用用户持续授权调用 DeepSeek Pi V4.1 Flash（`deepseek/deepseek-flash`）；Pi 只读，不测试、不修改、不 monitor、不提交、不推进阶段。
 - 唯一连接说明是 `docs/06-operations/pi-review-connection.md`。启动器或指定模型不可用时立即请用户处理；禁止全盘搜索、安装尝试、自动切换模型或循环重试。
 - 只发送已扫描的本次 diff、必要接口、当前范围文档和结构化测试摘要；不得发送凭据或完整敏感日志。Codex 逐条判断 finding，只修复可复现的严重缺陷、不可运行、安全/数据一致性、真实契约冲突、架构边界破坏或明显偏离目标。
 

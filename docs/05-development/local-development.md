@@ -65,7 +65,7 @@ V2-07 使用 `AGENTFORGE_AGENT_CHECKPOINT_DB_DSN` 持久化待决 Action workflo
 
 | provider | 默认模型 | 默认 base URL |
 | --- | --- | --- |
-| `deepseek` | `deepseek-v4-flash` | `https://api.deepseek.com` |
+| `deepseek` | `deepseek-flash` | `https://api.deepseek.com` |
 | `zhipu` | `glm-4-flash-250414` | `https://open.bigmodel.cn/api/paas/v4` |
 | `qwen` | `qwen-plus` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
 

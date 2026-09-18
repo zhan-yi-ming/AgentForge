@@ -42,3 +42,7 @@ Core API/PostgreSQL 保存完成的 user/assistant exchange，提供项目内会
 ## 已知限制与后续计划
 
 历史用于展示和继续发送，不会在 Agent Service 重启后自动重建 Python Conversation Summary。该恢复能力属于 V2-07。
+
+## V3 前置修复（P3-01，Implemented）
+
+浏览器使用 `/chat` 建立空白会话视图；首条消息创建新的 conversationId，后续消息仅使用该 ID。`/chat/:conversationId` 只加载路径指定且属于当前 project/user 的详情；点击另一历史会话替换当前会话内容并取消旧流，浏览器前进/后退及刷新遵守相同作用域。详情加载失败不回退为其他会话，也不在路由中放 userId。删除和未决 Action 清理由 P3-02 处理。

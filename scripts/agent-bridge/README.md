@@ -4,12 +4,12 @@
 
 ## 目录文件说明
 
-- `run-review.ps1`：执行单次、带超时的 Pi V4-pro 只读审查，输出独立报告。
+- `run-review.ps1`：使用 `deepseek/deepseek-flash` 执行单次、带超时的 Pi 只读审查，输出独立报告。
 - `review-loop.ps1`：唯一的阶段状态机入口；负责历史补审、修复后复审、三次上限和人工接管。
 - `review-state.ps1`：无 Git、文件或 Pi 副作用的 review outcome 纯函数，供编排器和回归测试共同使用。
 - `bridge-monitor.ps1`：常驻后台守护脚本，周期性调用 `review-loop.ps1`；当 Codex 额度耗尽时自动进入 5 小时倒计时休眠，并在恢复后生成续跑指令。
 - `Test-ReviewBridge.ps1`：不调用 Pi 的回归入口，验证脚本语法、BUSY 互斥、异常释放锁、DryRun 不写状态和 JSON 状态输出。
-- `run-validation.ps1`：以 V4-pro 启动受限验证会话；允许 read/grep/find/ls 与 PowerShell 执行 Prompt 明确列出的测试和清理动作，禁止 edit/write、业务文件写入和 Git 改写，并复用状态与实时日志。
+- `run-validation.ps1`：已停用的历史 V4-pro 受限验证会话入口；保留原脚本供审计，不参与当前 `deepseek/deepseek-flash` 只读审核。
 - `Start-BridgeMonitor.ps1`：在当前开发工作树中隐藏启动并复用 monitor。
 - `Show-ReviewStatus.ps1`：一次性或持续显示 monitor、锁、阶段队列、Pi 进程和日志进度。
 - `review-stages.json`：Day 1、Day 2 的版本化历史审查边界。
@@ -21,7 +21,7 @@
 
 ## 审查模型硬约束
 
-代码审查只能使用完整模型选择器 `deepseek/deepseek-v4-pro`。桥接脚本不允许降级为 `deepseek-v4-flash` 或其他 Flash 模型；每次调用前检查模型目录，并在 Pi 非零退出或没有返回报告时明确失败。失败的提交不会被标记为已审查，不能用速度换审查质量。
+代码审查使用完整模型选择器 `deepseek/deepseek-flash`，对应 DeepSeek V4.1 Flash 官方 API 模型。桥接脚本不允许自动切换到旧兼容名或其他模型；每次调用前检查模型目录，并在 Pi 非零退出或没有返回报告时明确失败。失败的提交不会被标记为已审查。
 
 ## 常见使用场景
 

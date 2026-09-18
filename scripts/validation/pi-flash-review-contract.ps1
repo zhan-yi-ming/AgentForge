@@ -17,7 +17,7 @@ function Get-ReviewFailure {
     }
 }
 
-$flashFailure = Get-ReviewFailure -Model 'deepseek/deepseek-v4-flash'
+$flashFailure = Get-ReviewFailure -Model 'deepseek/deepseek-flash'
 if ($flashFailure -notmatch '审查范围没有文件变化') {
     throw "The configured Flash model did not pass preflight before the empty-diff guard: $flashFailure"
 }
@@ -32,4 +32,9 @@ if ($oldModelFailure -notmatch 'ValidateSet|验证集|validation set') {
     throw "The former V4-pro model was not rejected by the public review entrypoint: $oldModelFailure"
 }
 
-Write-Host 'Pi Flash review contract passed: explicit/default Flash selected; former model rejected; no diff sent.'
+$legacyFlashFailure = Get-ReviewFailure -Model 'deepseek/deepseek-v4-flash'
+if ($legacyFlashFailure -notmatch 'ValidateSet|验证集|validation set') {
+    throw "The retired V4 Flash compatibility model was not rejected: $legacyFlashFailure"
+}
+
+Write-Host 'Pi V4.1 Flash review contract passed: explicit/default deepseek-flash selected; legacy models rejected; no diff sent.'

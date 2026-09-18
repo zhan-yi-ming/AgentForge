@@ -1,7 +1,7 @@
 # Pi 一次性只读审核连接指南
 
 - 状态：Accepted
-- 适用范围：提交前 DeepSeek Pi V4 Flash 代码审核
+- 适用范围：提交前 DeepSeek Pi V4.1 Flash 代码审核
 
 ## 唯一支持的调用链
 
@@ -10,7 +10,7 @@ Codex 完成实现、真实测试、清理和敏感信息扫描后，在创建 G
 ```text
 run-review.ps1
   -> AGENTFORGE_PI_CMD 指定的 pi.cmd
-  -> deepseek/deepseek-v4-flash
+  -> deepseek/deepseek-flash
   -> docs/08-reviews/ 下的独立报告
 ```
 
@@ -18,7 +18,7 @@ Pi 只读取已扫描的阶段 diff、必要接口和结构化测试摘要，不
 
 ## 持续授权范围
 
-用户已明确持续授权：当本阶段代码和文档完成，且 Codex 已亲自完成真实测试、清理与敏感信息扫描后，Codex 可直接调用本机已配置的 Pi 启动器，将本阶段源码、配置、测试和文档 diff 发送给外部 DeepSeek Pi V4 Flash 做一次只读审核，无需每次重新询问授权。2026-09-18 用户明确要求从 V4-pro 切换为目录中的精确非视觉模型 `deepseek/deepseek-v4-flash`。
+用户已明确持续授权：当本阶段代码和文档完成，且 Codex 已亲自完成真实测试、清理与敏感信息扫描后，Codex 可直接调用本机已配置的 Pi 启动器，将本阶段源码、配置、测试和文档 diff 发送给外部 DeepSeek Pi V4.1 Flash 做一次只读审核，无需每次重新询问授权。2026-09-18 用户根据 DeepSeek 官方文档明确指定 API 模型 `deepseek-flash`，Pi 使用完整选择器 `deepseek/deepseek-flash`。旧 `deepseek-v4-flash` 是临时兼容名，不作为审核入口。
 
 该授权允许使用本机 Pi 已有的登录状态或凭证完成连接，但不允许读取、打印、复制或把认证凭证内容发送进审核 Prompt。`.env`、API key、访问令牌、密码、私钥和敏感日志始终不得进入 diff 或 Pi 输入；敏感扫描命中时必须在调用外部模型前停止。
 
@@ -49,10 +49,10 @@ if ([string]::IsNullOrWhiteSpace($piCommand) -or -not (Test-Path -LiteralPath $p
     $piCommand = $piInPath.Source
 }
 
-$catalog = (& $piCommand --list-models deepseek-v4-flash 2>&1) -join "`n"
+$catalog = (& $piCommand --list-models deepseek-flash 2>&1) -join "`n"
 if ($LASTEXITCODE -ne 0) { throw "Pi model catalog failed with exit code $LASTEXITCODE" }
-if ($catalog -notmatch '(?m)^deepseek\s+deepseek-v4-flash\s') {
-    throw 'deepseek/deepseek-v4-flash is absent from the Pi model catalog.'
+if ($catalog -notmatch '(?m)^deepseek\s+deepseek-flash\s') {
+    throw 'deepseek/deepseek-flash is absent from the Pi model catalog.'
 }
 $catalog
 ```
@@ -60,10 +60,10 @@ $catalog
 真实目录表必须在同一行包含 provider 和 model：
 
 ```text
-deepseek  deepseek-v4-flash
+deepseek  deepseek-flash
 ```
 
-审核命令使用的完整模型选择器则是 `deepseek/deepseek-v4-flash`；表格显示格式和命令选择器格式不同，不应混用，也不选择 `deepseek-v4-flash-vision-exp`。
+审核命令使用的完整模型选择器是 `deepseek/deepseek-flash`；表格显示格式和命令选择器格式不同。V4.1 Flash 本身具备视觉能力，但本项目只发送经扫描的文本差异，不发送图片；不得选择旧兼容名或视觉实验版。
 
 启动器缺失、模型目录非零退出或未列出该精确模型时，立即停止并请用户处理。禁止尝试安装 Pi、猜测多个路径、自动换用其他模型或循环重试。
 

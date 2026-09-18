@@ -1,11 +1,8 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { normalizeMarkdownContent } from "./markdown";
 
-export function normalizeMarkdownContent(content: string) {
-  const trimmed = content.trim();
-  const fenced = trimmed.match(/^```(?:markdown|md)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i);
-  return fenced ? fenced[1].trim() : content;
-}
+export { normalizeMarkdownContent } from "./markdown";
 
 export function MarkdownPreview({ content }: { content: string }) {
   const normalizedContent = normalizeMarkdownContent(content);

@@ -22,6 +22,8 @@
 
 ## 索引
 
+- `2026-09-18-pi-v41-flash-review-repair.md`：确认 DeepSeek V4.1 Flash 官方 API 标识，刷新本机 Pi 模型目录并修复审核入口。
+- `2026-09-18-pre-v3-chat-experience-plan.md`：在 V3-01 前分阶段修复聊天、审批、语音与 Wiki 可视化；P3-01 已实现独立路由和按需加载页面。
 - `2026-09-18-pi-flash-review-model.md`：按用户要求将当前 Pi 只读审核入口固定为 DeepSeek V4 Flash，保留失败即停止与敏感扫描边界。
 - `2026-09-08-visual-refresh.md`：收敛 Web 浅色视觉、替换登录页标语并清理个人/面试官文案。
 - `2026-09-07-v2-02-context-manager-and-wiki-draft-safety.md`：建立 V2-02 ContextBundle，并同步修复 AI 整理真实增量预览与新 Wiki 草稿/title 行为。

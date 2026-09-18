@@ -1,18 +1,18 @@
-import { FormEvent, PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, PointerEvent as ReactPointerEvent, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiProblem, createApiClient, type AgentAction, type ApiClient, type ConversationSummary, type Project, type Task, type WikiPage } from "./api";
-import { MarkdownPreview, normalizeMarkdownContent } from "./MarkdownPreview";
+import { normalizeMarkdownContent } from "./markdown";
+import { parseRoute, useAppRoute } from "./route";
+import type { ChatHistoryItem } from "./pages/ChatPage";
+
+const ChatPage = lazy(() => import("./pages/ChatPage"));
+const WikiPage = lazy(() => import("./pages/WikiPage"));
+const TaskView = lazy(() => import("./pages/TaskView"));
+const FormatView = lazy(() => import("./pages/FormatView"));
 
 const TOKEN_KEY = "agentforge.accessToken";
 const ONBOARDING_KEY = "agentforge.onboardingComplete";
 const LOGIN_FAILURE_MESSAGE = "请联系我 向我索要体验账号";
 const DEFAULT_FORMATTED_WIKI_TITLE = "AI 整理文档";
-
-type ChatHistoryItem = {
-  id: string;
-  question: string;
-  answer: string;
-  sources: { title: string; excerpt: string }[];
-};
 
 type WorkspacePanel = "wiki" | "tasks" | "format";
 
@@ -42,10 +42,6 @@ function isAbortError(cause: unknown) {
     "name" in cause && cause.name === "AbortError";
 }
 
-function streamingPreviewText(content: string) {
-  return content.replace(/^```(?:markdown|md)?[ \t]*\r?\n/i, "");
-}
-
 function formattedWikiTitle(content: string) {
   let fenceMarker = "";
   for (const line of normalizeMarkdownContent(content).split(/\r?\n/)) {
@@ -66,6 +62,7 @@ function formattedWikiTitle(content: string) {
 
 export function App({ api: injectedApi }: { api?: ApiClient }) {
   const api = useMemo(() => injectedApi ?? createApiClient(() => sessionStorage.getItem(TOKEN_KEY)), [injectedApi]);
+  const { route, navigate } = useAppRoute();
   const [authenticated, setAuthenticated] = useState(() => Boolean(sessionStorage.getItem(TOKEN_KEY)));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -110,6 +107,9 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const wikiPanel = useRef<HTMLElement | null>(null);
   const chatSequence = useRef(0);
   const chatModeRef = useRef(false);
+  const activeConversationLoad = useRef(0);
+  const loadingConversationId = useRef<string | undefined>(undefined);
+  const previousRoutePath = useRef(window.location.pathname);
   const decisionKeys = useRef(new Map<string, string>());
 
   const resetWorkspaceState = useCallback(() => {
@@ -157,11 +157,12 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
       if (cause.status === 401) {
         sessionStorage.removeItem(TOKEN_KEY);
         resetWorkspaceState();
+        navigate("/");
         setAuthenticated(false);
       }
       setError(`${cause.detail}${cause.requestId ? ` · request ${cause.requestId}` : ""}`);
     } else setError(cause instanceof Error ? cause.message : "请求失败，请稍后重试。");
-  }, [resetWorkspaceState]);
+  }, [resetWorkspaceState, navigate]);
 
   const loadTasks = useCallback(async (selectedProjectId: string) => {
     setTasks(await api.listTasks(selectedProjectId));
@@ -189,6 +190,8 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   useEffect(() => {
     if (!projectId) return;
     activeProjectId.current = projectId;
+    activeConversationLoad.current += 1;
+    loadingConversationId.current = undefined;
     streamAbort.current?.abort();
     formatAbort.current?.abort();
     let active = true;
@@ -215,13 +218,20 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     return () => { active = false; streamAbort.current?.abort(); formatAbort.current?.abort(); };
   }, [api, projectId, report, selectWiki]);
 
-  async function openConversation(summary: ConversationSummary) {
+  async function openConversation(selectedConversationId: string) {
     if (!projectId) return;
     const requestedProjectId = projectId;
+    const load = ++activeConversationLoad.current;
+    loadingConversationId.current = selectedConversationId;
+    streamAbort.current?.abort();
+    navigate(`/chat/${encodeURIComponent(selectedConversationId)}`);
     setBusy(true); setError("");
+    setChatHistory([]);
+    setConversationId(undefined);
+    setPendingAction(undefined);
     try {
-      const detail = await api.getConversation(requestedProjectId, summary.conversationId);
-      if (activeProjectId.current !== requestedProjectId) return;
+      const detail = await api.getConversation(requestedProjectId, selectedConversationId);
+      if (activeProjectId.current !== requestedProjectId || activeConversationLoad.current !== load) return;
       const items: ChatHistoryItem[] = [];
       let pendingQuestion: typeof detail.messages[number] | undefined;
       let activeItem: ChatHistoryItem | undefined;
@@ -247,12 +257,70 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
       setHistoryOpen(false);
       setChatMode(true);
       chatModeRef.current = true;
+      navigate(`/chat/${encodeURIComponent(detail.conversationId)}`);
     } catch (cause) {
-      if (activeProjectId.current === requestedProjectId) report(cause);
+      if (activeProjectId.current === requestedProjectId && activeConversationLoad.current === load) report(cause);
     } finally {
-      if (activeProjectId.current === requestedProjectId) setBusy(false);
+      if (activeProjectId.current === requestedProjectId && activeConversationLoad.current === load) {
+        loadingConversationId.current = undefined;
+        setBusy(false);
+      }
     }
   }
+
+  function newChat() {
+    activeConversationLoad.current += 1;
+    loadingConversationId.current = undefined;
+    streamAbort.current?.abort();
+    setConversationId(undefined);
+    setChatHistory([]);
+    setExpandedChatIds(new Set());
+    setPendingAction(undefined);
+    setChatMessage("");
+    setBusy(false);
+    setStreaming(false);
+    setError("");
+    setHistoryOpen(false);
+    setChatMode(true);
+    chatModeRef.current = true;
+    navigate("/chat");
+  }
+
+  useEffect(() => {
+    if (!authenticated || !projectId) return;
+    const routeChanged = previousRoutePath.current !== window.location.pathname;
+    previousRoutePath.current = window.location.pathname;
+    if (routeChanged && route.page !== "chat") {
+      activeConversationLoad.current += 1;
+      loadingConversationId.current = undefined;
+      streamAbort.current?.abort();
+      setBusy(false);
+    }
+    if (route.page === "chat") {
+      setChatMode(true);
+      chatModeRef.current = true;
+      if (route.conversationId && route.conversationId !== conversationId &&
+        loadingConversationId.current !== route.conversationId) {
+        void openConversation(route.conversationId);
+      } else if (!route.conversationId && routeChanged && (loadingConversationId.current || conversationId)) {
+        activeConversationLoad.current += 1;
+        loadingConversationId.current = undefined;
+        streamAbort.current?.abort();
+        setConversationId(undefined);
+        setChatHistory([]);
+        setPendingAction(undefined);
+      }
+    } else if (route.page === "wiki") {
+      setChatMode(false);
+      chatModeRef.current = false;
+      setActivePanel("wiki");
+    } else {
+      setChatMode(false);
+      chatModeRef.current = false;
+    }
+  // The selected route or project is the load trigger; openConversation validates late responses.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authenticated, projectId, route.page, route.conversationId]);
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -293,13 +361,18 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setFormatApplied(true);
     setWikiFeedback("已应用到 Wiki 草稿，请确认后保存");
     setActivePanel("wiki");
+    navigate("/wiki");
     setPreviewOpen(true);
     wikiPanel.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   }
 
   function openPanel(panel: WorkspacePanel) {
+    activeConversationLoad.current += 1;
+    loadingConversationId.current = undefined;
+    streamAbort.current?.abort();
     setActivePanel(panel);
     setChatMode(false);
+    navigate(panel === "wiki" ? "/wiki" : "/");
     setChatExpanded(false);
     setProjectsOpen(false);
     setTasksOpen(false);
@@ -307,6 +380,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   }
 
   function openChatTool(panel: WorkspacePanel) {
+    if (panel === "wiki") { openPanel("wiki"); return; }
     setActivePanel((current) => current === panel ? null : panel);
     setProjectsOpen(false);
     setTasksOpen(false);
@@ -316,14 +390,19 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   function enterChatMode() {
     chatModeRef.current = true;
     setChatMode(true);
+    navigate(conversationId ? `/chat/${encodeURIComponent(conversationId)}` : "/chat");
     setActivePanel(null);
     setChatExpanded(true);
     setUnreadChat(false);
   }
 
   function leaveChatMode() {
+    activeConversationLoad.current += 1;
+    loadingConversationId.current = undefined;
+    streamAbort.current?.abort();
     chatModeRef.current = false;
     setChatMode(false);
+    navigate("/");
     setActivePanel(null);
     setChatExpanded(true);
     setProjectsOpen(false);
@@ -334,6 +413,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   function logout() {
     sessionStorage.removeItem(TOKEN_KEY);
     resetWorkspaceState();
+    navigate("/");
     setAuthenticated(false);
     setEmail("");
     setPassword("");
@@ -386,17 +466,19 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     try {
       const result = await api.chatStream(projectId, question, conversationId, {
         onMetadata: (metadata) => {
-          if (activeProjectId.current !== requestedProjectId) return;
+          if (activeProjectId.current !== requestedProjectId || streamAbort.current !== controller ||
+            controller.signal.aborted || parseRoute(window.location.pathname).page !== "chat") return;
           setConversationId(metadata.conversationId);
+          navigate(`/chat/${encodeURIComponent(metadata.conversationId)}`, true);
           setChatHistory((current) => current.map((item) => item.id === historyId ? { ...item, sources: metadata.sources } : item));
         },
         onDelta: (text) => {
-          if (activeProjectId.current === requestedProjectId) {
+          if (activeProjectId.current === requestedProjectId && streamAbort.current === controller && !controller.signal.aborted) {
             setChatHistory((current) => current.map((item) => item.id === historyId ? { ...item, answer: item.answer + text } : item));
           }
         },
       }, controller.signal);
-      if (activeProjectId.current !== requestedProjectId) return;
+      if (activeProjectId.current !== requestedProjectId || streamAbort.current !== controller || controller.signal.aborted) return;
       setConversationId(result.conversationId);
       setChatHistory((current) => current.map((item) => item.id === historyId ? { ...item, answer: result.answer, sources: result.sources } : item));
       setPendingAction(result.pendingAction);
@@ -406,8 +488,10 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         if (activeProjectId.current === requestedProjectId) setConversationSummaries(items);
       }).catch(report);
     } catch (cause) {
-      setChatHistory((current) => current.filter((item) => item.id !== historyId));
-      if (!isAbortError(cause)) report(cause);
+      if (streamAbort.current === controller) {
+        setChatHistory((current) => current.filter((item) => item.id !== historyId));
+        if (!isAbortError(cause)) report(cause);
+      }
     } finally {
       if (streamAbort.current === controller) {
         streamAbort.current = undefined;
@@ -527,29 +611,26 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
       <button className="rail-button" aria-expanded={historyOpen} onClick={() => { setHistoryOpen((open) => !open); setProjectsOpen(false); setTasksOpen(false); }}><span>◴</span><small>历史</small></button>
       {(chatHistory.length > 0 || streaming) && <button className="rail-button conversation-button" onClick={enterChatMode}><span>◌</span><small>对话</small>{unreadChat && <i className="unread-badge" aria-label="有新的 AI 回答" />}</button>}
     </div>}
-    {projectsOpen && <aside className="floating-drawer projects-drawer"><div className="drawer-heading"><div><span className="section-label">WORKSPACES</span><strong>项目空间</strong></div><button className="drawer-close" aria-label="关闭项目空间" onClick={() => setProjectsOpen(false)}>×</button></div>{projects.map((project) => <button key={project.id} className={project.id === projectId ? "project active" : "project"} onClick={() => { setProjectId(project.id); setProjectsOpen(false); }}><strong>{project.name}</strong><span>{project.description || "暂无描述"}</span></button>)}{!projects.length && <p className="empty-state">还没有项目</p>}</aside>}
-    {historyOpen && <aside className="floating-drawer history-drawer"><div className="drawer-heading"><div><span className="section-label">HISTORY</span><strong>历史会话</strong></div><button className="drawer-close" aria-label="关闭历史会话" onClick={() => setHistoryOpen(false)}>×</button></div>{conversationSummaries.map((conversation) => <button key={conversation.conversationId} className="project" onClick={() => void openConversation(conversation)} disabled={busy}><strong>{conversation.preview}</strong><span>{conversation.messageCount} 条消息</span></button>)}{!conversationSummaries.length && <p className="empty-state">暂无历史会话</p>}</aside>}
+    {projectsOpen && <aside className="floating-drawer projects-drawer"><div className="drawer-heading"><div><span className="section-label">WORKSPACES</span><strong>项目空间</strong></div><button className="drawer-close" aria-label="关闭项目空间" onClick={() => setProjectsOpen(false)}>×</button></div>{projects.map((project) => <button key={project.id} className={project.id === projectId ? "project active" : "project"} onClick={() => { setProjectId(project.id); if (route.page === "chat") navigate("/chat"); setProjectsOpen(false); }}><strong>{project.name}</strong><span>{project.description || "暂无描述"}</span></button>)}{!projects.length && <p className="empty-state">还没有项目</p>}</aside>}
+    {historyOpen && <aside className="floating-drawer history-drawer"><div className="drawer-heading"><div><span className="section-label">HISTORY</span><strong>历史会话</strong></div><button className="drawer-close" aria-label="关闭历史会话" onClick={() => setHistoryOpen(false)}>×</button></div><button className="ghost" onClick={newChat}>新建会话</button>{conversationSummaries.map((conversation) => <button key={conversation.conversationId} className="project" onClick={() => void openConversation(conversation.conversationId)} disabled={busy}><strong>{conversation.preview}</strong><span>{conversation.messageCount} 条消息</span></button>)}{!conversationSummaries.length && <p className="empty-state">暂无历史会话</p>}</aside>}
     {tasksOpen && <aside className="floating-drawer tasks-drawer"><div className="drawer-heading"><div><span className="section-label">EXECUTION</span><strong>执行任务</strong></div><button className="drawer-close" aria-label="关闭执行任务" onClick={() => setTasksOpen(false)}>×</button></div><div className="task-list">{tasks.map((task) => <article key={task.id}><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><h3>{task.title}</h3><p>{task.description || "暂无描述"}</p><footer><span>{task.status.replace("_", " ")}</span><span>v{task.version}</span></footer></article>)}{!tasks.length && <p className="empty-state">暂无任务，可让 Agent 提出一个。</p>}</div></aside>}
     <main className="workspace centered-workspace">
       {error && <p role="alert" className="error banner">{error}</p>}
-      <section className={chatMode ? `panel agent-panel chat-session${chatExpanded ? " composer-expanded" : ""}` : activePanel ? `panel agent-panel chat-collapsed${chatExpanded ? " composer-expanded" : ""}` : "panel agent-panel home-chat composer-expanded"}><div className="panel-heading"><div><span className="eyebrow">AI COPILOT</span><h2>项目对话</h2></div>{conversationId && <span className="conversation">会话 {conversationId.slice(0, 8)}</span>}</div>
-        {!activePanel && !chatMode && <div className="agent-welcome"><span className="agent-orb">✦</span><div><strong>你好，我是 AgentForge</strong><p>我会结合当前项目的 Wiki 与任务回答，并在写入前征求你的确认。</p></div></div>}
-        {!chatMode && renderChatComposer()}
-        {chatHistory.length > 0 && <div className="conversation-history">{chatHistory.map((item, index) => {
-          const expanded = expandedChatIds.has(item.id);
-          const isLatest = index === chatHistory.length - 1;
-          return <article className="history-item" key={item.id}>
-            <button type="button" className="history-toggle" aria-expanded={expanded} onClick={() => setExpandedChatIds((current) => {
-              const next = new Set(current);
-              if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
-              return next;
-            })}><span>{item.question}</span><small>{expanded ? "收起" : "展开"}</small></button>
-            {expanded && <div className={streaming && isLatest ? "answer streaming" : "answer"}><div className="answer-label"><span>AI 回答</span>{streaming && isLatest && <span className="stream-state"><i /> 正在流式生成</span>}</div>{item.answer ? <MarkdownPreview content={item.answer} /> : <div className="typing-dots"><i /><i /><i /></div>}{item.sources.length > 0 && <div className="sources"><p className="section-label">已引用项目来源</p>{item.sources.map((source) => <article key={`${source.title}-${source.excerpt}`}><strong>{source.title}</strong><span>{source.excerpt}</span></article>)}</div>}</div>}
-          </article>;
-        })}</div>}
-        {pendingAction && <div className="action-card"><span className="eyebrow">等待你的确认</span><h3>{pendingAction.title || pendingAction.actionType}</h3><p>{pendingAction.description || `${pendingAction.taskStatus ?? ""} ${pendingAction.priority ?? ""}`}</p><div><button onClick={() => void decideAction("confirm")} disabled={busy}>确认执行</button><button className="danger" onClick={() => void decideAction("reject")} disabled={busy}>拒绝</button></div></div>}
-        {chatMode && renderChatComposer()}
-      </section>
+      {chatMode ? <Suspense fallback={<p role="status">正在打开聊天…</p>}><ChatPage
+        conversationId={conversationId} history={chatHistory} expandedIds={expandedChatIds}
+        streaming={streaming} pendingAction={pendingAction} busy={busy} expandedComposer={chatExpanded}
+        composer={renderChatComposer()} onNewChat={newChat}
+        onToggle={(id) => setExpandedChatIds((current) => {
+          const next = new Set(current);
+          if (next.has(id)) next.delete(id); else next.add(id);
+          return next;
+        })}
+        onDecision={(decision) => void decideAction(decision)}
+      /></Suspense> : <section className={activePanel ? `panel agent-panel chat-collapsed${chatExpanded ? " composer-expanded" : ""}` : "panel agent-panel home-chat composer-expanded"}>
+        <div className="panel-heading"><div><span className="eyebrow">AI COPILOT</span><h2>项目对话</h2></div>{conversationId && <span className="conversation">会话 {conversationId.slice(0, 8)}</span>}</div>
+        {!activePanel && <div className="agent-welcome"><span className="agent-orb">✦</span><div><strong>你好，我是 AgentForge</strong><p>我会结合当前项目的 Wiki 与任务回答，并在写入前征求你的确认。</p></div></div>}
+        {renderChatComposer()}
+      </section>}
 
       <section className={chatMode ? activePanel ? "workspace-panel chat-tool-window" : "workspace-panel workspace-hidden" : "workspace-panel"} ref={wikiPanel}>
         {chatMode && activePanel && <button className="drawer-close chat-tool-close" aria-label="关闭悬浮工作台" onClick={() => setActivePanel(null)}>×</button>}
@@ -558,19 +639,25 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
           <button className={activePanel === "tasks" ? "active" : ""} onClick={() => openPanel("tasks")}>执行任务 <span>{tasks.length}</span></button>
           <button className={activePanel === "format" ? "active" : ""} onClick={() => openPanel("format")}>AI 文本整理</button>
         </nav>}
-        {activePanel === "wiki" && <div className="workspace-view wiki-panel">
-          <div className="panel-heading"><div><span className="eyebrow">KNOWLEDGE</span><h2>Wiki 工作台</h2></div><div className="heading-actions"><div className="new-wiki-wrap"><button className="ghost" onClick={() => setWikiCreateOpen((open) => !open)}>新建页面 <span>＋</span></button>{wikiCreateOpen && <div className="new-wiki-menu"><button onClick={createBlankWiki}><strong>空白页面</strong><small>从零开始记录项目知识</small></button><button onClick={createWikiWithAi}><strong>AI 整理</strong><small>把零散内容整理成 Wiki 草稿</small></button></div>}</div><button className="preview-toggle" onClick={() => setPreviewOpen((open) => !open)}>{previewOpen ? "隐藏预览" : "打开预览"}</button></div></div>
-          <div className="wiki-layout"><nav className="wiki-list">{wikiPages.map((page) => <button key={page.id} className={page.id === wikiId ? "active" : ""} onClick={() => selectWiki(page)}>{page.title}</button>)}</nav>
-            <div className="editor"><input aria-label="Wiki 标题" placeholder="页面标题" value={wikiTitle} onChange={(event) => { setWikiTitle(event.target.value); setWikiFeedback(""); }} maxLength={200} />
-              <textarea aria-label="Wiki Markdown 草稿" placeholder="# 从这里开始记录…" value={wikiContent} onChange={(event) => { setWikiContent(event.target.value); setWikiFeedback(""); }} maxLength={100000} />
-              <button onClick={saveWiki} disabled={busy || !wikiTitle.trim()}>保存 Wiki</button>
-              {wikiFeedback && <p role="status" className="success">{wikiFeedback}</p>}</div>
-          </div>
-        </div>}
-        {activePanel === "tasks" && <div className="workspace-view tasks-view"><div className="panel-heading"><div><span className="eyebrow">EXECUTION</span><h2>执行任务</h2></div><span className="count">{tasks.length}</span></div><p className="task-explanation">这里只展示明确创建并经你确认的任务；普通提问和 Wiki 保存不会新增任务。</p><div className="task-list">{tasks.map((task) => <article key={task.id}><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><h3>{task.title}</h3><p>{task.description || "暂无描述"}</p><footer><span>{task.status.replace("_", " ")}</span><span>v{task.version}</span></footer></article>)}{!tasks.length && <p className="empty-state">暂无任务，可让 Agent 提出一个。</p>}</div></div>}
-        {activePanel === "format" && <div className="workspace-view format-view"><div className="panel-heading"><div><span className="eyebrow">DRAFT LAB</span><h2>AI 文本整理</h2></div><span className="safe-note">预览优先 · 不自动写回</span></div><div className="format-grid"><div><label>待整理原文<textarea value={formatInput} onChange={(event) => setFormatInput(event.target.value)} placeholder="粘贴零散会议记录或技术笔记…" /></label><button onClick={() => void formatText()} disabled={busy || streaming || !formatInput.trim()}>AI 整理并预览</button></div><div><p className="section-label">整理结果</p>{formatComplete ? <MarkdownPreview content={formattedText} /> : formattedText ? <div className="streaming-preview" aria-live="polite">{streamingPreviewText(formattedText)}</div> : <MarkdownPreview content="" />}{formattedText && <button className="ghost" onClick={applyFormattedText} disabled={busy || !formatComplete || formatApplied}>应用到 Wiki 草稿</button>}</div></div></div>}
+        {activePanel === "wiki" && <Suspense fallback={<p role="status">正在打开 Wiki…</p>}><WikiPage
+          pages={wikiPages} selectedId={wikiId} title={wikiTitle} content={wikiContent} feedback={wikiFeedback}
+          busy={busy} createOpen={wikiCreateOpen} previewOpen={previewOpen}
+          previewPosition={previewPosition} previewSize={previewSize} onSelect={selectWiki}
+          onTitleChange={(value) => { setWikiTitle(value); setWikiFeedback(""); }}
+          onContentChange={(value) => { setWikiContent(value); setWikiFeedback(""); }}
+          onSave={() => void saveWiki()} onToggleCreate={() => setWikiCreateOpen((open) => !open)}
+          onBlank={createBlankWiki} onCreateWithAi={createWikiWithAi}
+          onTogglePreview={() => setPreviewOpen((open) => !open)} onClosePreview={() => setPreviewOpen(false)}
+          onPreviewPointerDown={startPreviewDrag} onPreviewPointerMove={movePreviewDrag}
+          onPreviewPointerUp={endPreviewDrag}
+        /></Suspense>}
+        {activePanel === "tasks" && <Suspense fallback={<p role="status">正在打开任务…</p>}><TaskView tasks={tasks} /></Suspense>}
+        {activePanel === "format" && <Suspense fallback={<p role="status">正在打开整理…</p>}><FormatView
+          input={formatInput} text={formattedText} complete={formatComplete} applied={formatApplied}
+          busy={busy} streaming={streaming} onInput={setFormatInput}
+          onFormat={() => void formatText()} onApply={applyFormattedText}
+        /></Suspense>}
       </section>
-      {previewOpen && activePanel === "wiki" && wikiContent.trim() && <aside className="preview-float" style={{ transform: `translate(calc(-50% + ${previewPosition.x}px), calc(-50% + ${previewPosition.y}px))`, width: previewSize.width, height: previewSize.height }}><div className="preview-float-heading" onPointerDown={startPreviewDrag} onPointerMove={movePreviewDrag} onPointerUp={endPreviewDrag}><div><span className="section-label">LIVE PREVIEW</span><strong>实时预览</strong></div><button className="drawer-close" aria-label="关闭实时预览" onClick={() => setPreviewOpen(false)}>×</button></div><div className="preview-float-body"><MarkdownPreview content={wikiContent} /></div></aside>}
     </main>
     {onboardingOpen && <div className="onboarding-backdrop"><section className="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title"><span className="eyebrow">WHY AGENTFORGE</span><h2 id="onboarding-title">让项目知识真正参与执行</h2><p>AgentForge 把分散在 Wiki、任务和对话里的上下文放到同一个工作台，让团队更快理解问题、形成决策，并在确认后安全落地。</p><div className="onboarding-value"><span>问题</span><strong>信息散落，判断依赖个人记忆，执行容易失真。</strong><span>方法</span><strong>从项目上下文出发，让 AI 先解释、再提议，最后由人确认。</strong></div><div className="onboarding-modules"><details open><summary>项目空间</summary><p>切换项目时，Wiki、任务与对话上下文会严格隔离，避免跨项目混淆。</p></details><details><summary>项目对话</summary><p>直接询问架构、需求和风险；回答会带来源，涉及业务写入时会等待你的确认。</p></details><details><summary>Wiki 工作台</summary><p>把稳定知识沉淀为可编辑页面，并用底部预览窗即时检查 Markdown 结构。</p></details><details><summary>AI 文本整理</summary><p>把会议记录或技术笔记整理为可审阅的 Wiki 草稿，不会自动写回。</p></details></div><button onClick={completeOnboarding}>开始体验</button></section></div>}
   </div>;
