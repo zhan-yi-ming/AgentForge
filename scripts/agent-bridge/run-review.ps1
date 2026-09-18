@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    使用 DeepSeek V4-pro 对一个 Git 交付范围执行有超时保护的只读审查。
+    使用 DeepSeek V4 Flash 对一个 Git 交付范围执行有超时保护的只读审查。
 .DESCRIPTION
     将明确的 Git diff、文件清单与上一轮报告摘要写入临时提示词，再调用 Pi。
     成功时写入一份独立报告，并把机器可读的 REVIEW_RESULT 返回给 review-loop。
@@ -22,8 +22,8 @@ param(
     [ValidateSet("Diff", "Milestone")]
     [string]$ReviewMode = "Diff",
     [string[]]$ContextFiles = @(),
-    [ValidateSet("deepseek/deepseek-v4-pro")]
-    [string]$Model = "deepseek/deepseek-v4-pro"
+    [ValidateSet("deepseek/deepseek-v4-flash")]
+    [string]$Model = "deepseek/deepseek-v4-flash"
 )
 
 Set-StrictMode -Version Latest
@@ -42,9 +42,9 @@ if ([string]::IsNullOrWhiteSpace($PiCmd) -or -not (Test-Path -LiteralPath $PiCmd
     $PiCmd = $PiInPath.Source
 }
 
-$ModelCatalog = & $PiCmd --list-models "v4-pro" 2>&1
-if ($LASTEXITCODE -ne 0 -or (($ModelCatalog -join "`n") -notmatch '(?m)\bdeepseek\b.*\bdeepseek-v4-pro\b')) {
-    throw "Pi 模型目录中未找到 deepseek/deepseek-v4-pro；审查已停止，禁止降级到 Flash。"
+$ModelCatalog = & $PiCmd --list-models "deepseek-v4-flash" 2>&1
+if ($LASTEXITCODE -ne 0 -or (($ModelCatalog -join "`n") -notmatch '(?m)^deepseek\s+deepseek-v4-flash\s')) {
+    throw "Pi 模型目录中未找到 deepseek/deepseek-v4-flash；审查已停止，禁止自动切换模型。"
 }
 
 $IsWorktreeReview = $TargetRef -eq "WORKTREE"
@@ -226,7 +226,7 @@ try {
 - 日期：$Today
 - 审查阶段：$StageName
 - 审查对象：$TargetCommit（基线：$BaseCommit）
-- 审查工具：Pi Agent（DeepSeek V4-pro，只读）
+- 审查工具：Pi Agent（DeepSeek V4 Flash，只读）
 - REVIEW_RESULT: $Result
 - Pi 进程超时上限：$TimeoutSeconds 秒
 

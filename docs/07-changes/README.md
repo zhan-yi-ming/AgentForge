@@ -22,6 +22,7 @@
 
 ## 索引
 
+- `2026-09-18-pi-flash-review-model.md`：按用户要求将当前 Pi 只读审核入口固定为 DeepSeek V4 Flash，保留失败即停止与敏感扫描边界。
 - `2026-09-08-visual-refresh.md`：收敛 Web 浅色视觉、替换登录页标语并清理个人/面试官文案。
 - `2026-09-07-v2-02-context-manager-and-wiki-draft-safety.md`：建立 V2-02 ContextBundle，并同步修复 AI 整理真实增量预览与新 Wiki 草稿/title 行为。
 - `2026-09-07-test-evidence-command-reproducibility.md`：强制每个成功验证记录完整可执行命令，禁止仅用勾选、PASS 或“同一命令”作为证据。

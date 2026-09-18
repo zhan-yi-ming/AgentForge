@@ -16,7 +16,7 @@
 
 ## 2026-09-05 当前分工
 
-用户已明确重新授权 Pi 仅执行代码审核；测试仍由 Codex 执行。用户同时持续授权：Codex 在每个阶段完成真实测试和敏感信息扫描后，可把该阶段的源码、配置、测试与文档 diff 发送给外部 DeepSeek Pi V4-pro。旧 monitor、OnCodexWake、Pi validation 与自动阶段推进保持停用。Pi 需要登录、额度或环境介入时立即请用户处理，不做无限循环重试。
+用户已明确重新授权 Pi 仅执行代码审核；测试仍由 Codex 执行。用户同时持续授权：Codex 在每个阶段完成真实测试和敏感信息扫描后，可把该阶段的源码、配置、测试与文档 diff 发送给外部 DeepSeek Pi V4 Flash（`deepseek/deepseek-v4-flash`）。旧 monitor、OnCodexWake、Pi validation 与自动阶段推进保持停用。Pi 需要登录、额度或环境介入时立即请用户处理，不做无限循环重试。
 
 持续授权不需要逐次确认：实现完成且 Codex 门禁通过后直接触发一次审核。可以使用本机 Pi 现有登录状态建立连接，但不得读取、输出或发送实际认证凭证；敏感信息扫描必须发生在外部发送之前。具体命令和启动器配置见 `../06-operations/pi-review-connection.md`。
 

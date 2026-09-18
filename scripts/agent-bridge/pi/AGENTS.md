@@ -4,8 +4,8 @@
 
 ## 固定模型
 
-- 必须使用 `deepseek/deepseek-v4-pro`。
-- 禁止使用或降级到任何 Flash 模型。
+- 必须使用 `deepseek/deepseek-v4-flash`。
+- 禁止自动切换到其他模型；指定模型不可用时停止并请求用户处理。
 
 ## 当前模式
 
