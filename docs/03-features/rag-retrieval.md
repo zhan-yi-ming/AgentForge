@@ -22,6 +22,8 @@ Day 4 包含 Wiki/Task Chunk、384 维 Embedding、BM25、RRF、Retrieved Contex
 4. 查询分别进入向量召回和 BM25 召回。RRF 按两个排名融合，不直接比较异构分数。
 5. 最多 6 个 Chunk 进入有字符预算的 Retrieved Context。确定性 responder 根据 Context 给出摘要；Chat 响应同时返回去重后的来源列表。
 
+P3-04 起，结构化来源列表只包含完成回答实际标注的已授权检索资料。检索候选以稳定编号进入模型上下文；回答使用 `【来源编号】` 标注资料，Python 将有效编号映射回 sourceType/sourceId/title/excerpt。没有有效标注时 `sources=[]`，不把候选自动列为引用。流式响应直到 complete 才确定准确来源。
+
 ## 接口
 
 - 公共入口保持 `POST /api/v1/projects/{projectId}/agent/chat`，成功响应新增 `sources` 数组。

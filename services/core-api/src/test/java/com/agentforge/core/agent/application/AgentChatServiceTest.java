@@ -162,13 +162,15 @@ class AgentChatServiceTest {
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
+        AgentSource citedSource = new AgentSource("WIKI", UUID.randomUUID(), "Architecture", "Java owns writes.");
         AuthenticatedActor actor = new AuthenticatedActor(userId, false);
         org.mockito.Mockito.doAnswer(invocation -> {
             java.util.function.Consumer<AgentStreamEvent> sink = invocation.getArgument(6);
             sink.accept(AgentStreamEvent.metadata(conversationId, "request-stream", List.of()));
             sink.accept(AgentStreamEvent.delta("第一段"));
             sink.accept(AgentStreamEvent.delta("，第二段"));
-            sink.accept(AgentStreamEvent.complete(null));
+            sink.accept(new AgentStreamEvent("complete", null, null, List.of(citedSource),
+                    null, null, null, null));
             return null;
         }).when(client).stream(eq(projectId), eq(userId), eq(false), eq("hello"), eq(null),
                 eq("request-stream"), any());
@@ -182,13 +184,14 @@ class AgentChatServiceTest {
                 .containsExactly("metadata", "delta", "delta", "complete");
         assertThat(events).extracting(AgentStreamEvent::text)
                 .containsExactly(null, "第一段", "，第二段", null);
+        assertThat(events.getLast().sources()).containsExactly(citedSource);
         InOrder order = inOrder(projectAccess, quota, client);
         order.verify(projectAccess).requireAccess(projectId, actor);
         order.verify(quota).consume(userId);
         order.verify(client).stream(eq(projectId), eq(userId), eq(false), eq("hello"), eq(null),
                 eq("request-stream"), any());
         verify(history).appendCompletedExchange(
-                projectId, actor, conversationId, "hello", "第一段，第二段", List.of());
+                projectId, actor, conversationId, "hello", "第一段，第二段", List.of(citedSource));
     }
 
     @Test

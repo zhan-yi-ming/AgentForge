@@ -17,7 +17,7 @@ from agentforge_agent.context import ConversationMemory, MemoryNamespace, TokenC
 from agentforge_agent.errors import LlmDependencyError
 from agentforge_agent.main import app
 from agentforge_agent.retrieval import RetrievalResult
-from agentforge_agent.schemas import ChatSource
+from agentforge_agent.schemas import ChatSource, ToolProposal
 
 
 client = TestClient(app)
@@ -47,7 +47,7 @@ class FakeRetrievalService:
             excerpt="Java owns authentication and writes.",
         )
         return RetrievalResult(
-            context="[WIKI:test] Architecture\nJava owns authentication and writes.",
+            context=f"【来源1】 [WIKI:{source.source_id}] Architecture\nJava owns authentication and writes.",
             sources=[source],
         )
 
@@ -166,6 +166,25 @@ def test_chat_uses_configured_llm_responder() -> None:
 
     assert response.status_code == 200
     assert response.json()["answer"] == "AI answer for: explain the architecture"
+    assert response.json()["sources"] == []
+
+
+def test_chat_returns_only_sources_cited_by_completed_answer() -> None:
+    def cited_responder(state):
+        return "Java owns business writes.【来源1】"
+
+    app.dependency_overrides[get_responder] = lambda: cited_responder
+    try:
+        response = client.post(
+            "/internal/v1/chat",
+            headers={"X-AgentForge-Internal-Token": TOKEN},
+            json=chat_request(message="who owns writes?"),
+        )
+    finally:
+        app.dependency_overrides.pop(get_responder, None)
+
+    assert response.status_code == 200
+    assert [source["title"] for source in response.json()["sources"]] == ["Architecture"]
 
 
 def test_chat_stream_emits_metadata_deltas_and_complete_in_order() -> None:
@@ -188,9 +207,34 @@ def test_chat_stream_emits_metadata_deltas_and_complete_in_order() -> None:
         "delta",
         "complete",
     ]
-    assert events[0]["sources"][0]["sourceType"] == "WIKI"
+    assert events[0]["sources"] == []
     assert [event["text"] for event in events[1:3]] == ["第一段", "，第二段"]
+    assert events[-1]["sources"] == []
     assert events[-1]["toolProposal"] is None
+
+
+def test_chat_stream_sends_only_cited_sources_at_completion() -> None:
+    class CitingResponder:
+        def __call__(self, state):
+            return "Java owns writes.【来源1】"
+
+        def stream(self, state):
+            yield "Java owns writes."
+            yield "【来源1】"
+
+    app.dependency_overrides[get_responder] = lambda: CitingResponder()
+    try:
+        response = client.post(
+            "/internal/v1/chat/stream",
+            headers={"X-AgentForge-Internal-Token": TOKEN},
+            json=chat_request(message="who owns writes?"),
+        )
+    finally:
+        app.dependency_overrides.pop(get_responder, None)
+
+    events = [__import__("json").loads(line) for line in response.text.splitlines()]
+    assert events[0]["sources"] == []
+    assert [source["title"] for source in events[-1]["sources"]] == ["Architecture"]
 
 
 def test_chat_stream_reports_a_waiting_action_conflict() -> None:
@@ -640,6 +684,28 @@ def test_chat_proposes_create_task_without_executing_it() -> None:
         "status": "TODO",
         "priority": "HIGH",
     }
+
+
+def test_chat_uses_natural_language_planner_to_propose_action() -> None:
+    class NaturalResponder:
+        def __call__(self, state):
+            return "请审核任务提案。"
+
+        def plan_tool(self, bundle):
+            return ToolProposal(action_type="CREATE_TASK", title="登录回归清单", status="TODO", priority="HIGH")
+
+    app.dependency_overrides[get_responder] = lambda: NaturalResponder()
+    try:
+        response = client.post(
+            "/internal/v1/chat",
+            headers={"X-AgentForge-Internal-Token": TOKEN},
+            json=chat_request(message="请帮我新增一个高优先级任务，标题是登录回归清单"),
+        )
+    finally:
+        app.dependency_overrides.pop(get_responder, None)
+
+    assert response.status_code == 200
+    assert response.json()["toolProposal"]["title"] == "登录回归清单"
 
 
 def test_chat_proposes_explicit_task_update() -> None:

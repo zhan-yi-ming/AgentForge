@@ -1,5 +1,6 @@
 # 变更记录
 
+- `2026-09-19-p3-04-natural-tool-and-citations.md`：自然语言 Action 意图、引用与回答绑定、DeepSeek 默认 API 名称。
 - `2026-09-19-p3-03-chat-interface.md`：聊天输入框、引用折叠与悬浮确认界面。
 - `2026-09-18-p3-02-conversation-lifecycle.md`：单会话删除、审批冲突与旧回复可见性修复。
 

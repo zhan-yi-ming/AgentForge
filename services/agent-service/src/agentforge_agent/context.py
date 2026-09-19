@@ -5,7 +5,7 @@ from threading import RLock
 from typing import Literal
 from uuid import UUID, uuid4
 
-from .retrieval import RetrievalResult
+from .retrieval import RetrievalResult, TaskTarget
 from .schemas import ChatSource, ToolProposal
 
 
@@ -76,6 +76,7 @@ class ProjectContext:
 class RetrievedContext:
     content: str = ""
     sources: tuple[ChatSource, ...] = ()
+    task_targets: tuple[TaskTarget, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -305,6 +306,7 @@ class ContextManager:
             retrieved=RetrievedContext(
                 content=result.context,
                 sources=tuple(result.sources),
+                task_targets=result.task_targets,
             ),
         )
 

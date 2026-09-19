@@ -13,6 +13,7 @@
 - `CREATE_TASK`：title 必填；description、status、priority 可选，默认值沿用 Task API。
 - `UPDATE_TASK`：taskId、expectedVersion 必填；title、description、status、priority 至少提供一项。
 - V1 planner 支持明确的中英文创建表达，以及包含 Task UUID 与 version 的明确更新表达。无法唯一确定动作、目标或版本时返回普通回答而不生成 proposal。
+- P3-04 在启用 LLM 时增加自然语言意图规划：模型只能输出 CREATE_TASK、UPDATE_TASK 或无动作。更新目标必须映射到当前项目检索到的已授权 Task 身份与版本，无法唯一确定时不生成 proposal；显式命令与无模型模式仍可走原确定性 planner。Java 对一切提案继续执行白名单、权限、版本、风险和人工确认，不接受模型的可信策略字段。
 
 ## 关键流程
 

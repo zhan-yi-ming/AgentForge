@@ -13,6 +13,8 @@ Responder 支持 `disabled`、`deepseek`、`zhipu`、`qwen` 四种模式。`disa
 
 模型调用只影响 `answer`。Tool proposal 仍由确定性白名单 planner 产生，模型不能直接执行或扩大业务操作；Java 的校验、人工确认与确定性写回边界不变。兼容模型客户端对 SDK 判定为可重试的瞬时失败最多额外重试一次；provider 缺少 key、持续认证/限流/网络失败或响应无有效文本时，公共入口仍返回 503，响应不包含 key 或上游响应正文。
 
+P3-04 后启用模型时，模型可在隔离的规划调用中生成受严格校验的 Action Intent，但不能执行业务操作；禁用模型时保留确定性 planner。DeepSeek 的默认 API 模型名为 `deepseek-flash`。生成回答的引用由实际标注的检索来源筛选，流式完成事件提供最终来源。
+
 V1.1 公网 Demo 在 Java 信任边界为每个认证用户执行 PostgreSQL 原子 UTC 日配额；超限返回 429 且不调用 Agent Service。Agent Service 同时给兼容模型配置最大输出 Token。具体行为见 `public-demo-protection.md`。
 
 V1.2 保留原 JSON 入口并新增真实流式入口。Java 在响应开始前同步完成 Bearer、项目权限、输入和 UTC 日配额校验；Python 在完成 LangGraph 的 prepare/retrieve/plan 后，通过模型原生 stream 输出 NDJSON。Java 将事件转换为 SSE：`metadata` 提供 conversationId、requestId 与 sources，多个 `delta` 逐步提供回答文本，`complete` 提供最终 pendingAction（可空），`error` 表示响应开始后的通用流错误。浏览器不得把尚未收到 `complete` 的回答视为完成。

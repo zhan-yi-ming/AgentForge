@@ -8,6 +8,7 @@ from .context import ContextBundle, ContextManager, ConversationMemory, MemoryNa
 from .observability import NullObservation
 from .retrieval import RetrievalResult
 from .tool_planner import plan_tool
+from .schemas import ToolProposal
 
 
 class ChatState(TypedDict, total=False):
@@ -20,6 +21,7 @@ class ChatState(TypedDict, total=False):
 
 
 Responder = Callable[[ChatState], str]
+ToolPlanner = Callable[[ContextBundle], ToolProposal | None]
 
 
 def deterministic_responder(state: ChatState) -> str:
@@ -38,9 +40,10 @@ def build_chat_graph(
     responder: Responder = deterministic_responder,
     observation=None,
     conversation_memory: ConversationMemory | None = None,
+    tool_planner: ToolPlanner | None = None,
 ):
     parent = observation or NullObservation()
-    prepare, retrieve, plan = _context_nodes(retriever, parent, conversation_memory)
+    prepare, retrieve, plan = _context_nodes(retriever, parent, conversation_memory, tool_planner)
 
     def respond(state: ChatState) -> dict[str, str]:
         observation = parent.child("llm", "generation")
@@ -72,11 +75,12 @@ def build_chat_context_graph(
     retriever: Retriever,
     observation=None,
     conversation_memory: ConversationMemory | None = None,
+    tool_planner: ToolPlanner | None = None,
 ):
     """Run deterministic preparation, retrieval and tool planning before streaming."""
 
     parent = observation or NullObservation()
-    prepare, retrieve, plan = _context_nodes(retriever, parent, conversation_memory)
+    prepare, retrieve, plan = _context_nodes(retriever, parent, conversation_memory, tool_planner)
 
     builder = StateGraph(ChatState)
     builder.add_node("prepare", prepare)
@@ -93,6 +97,7 @@ def _context_nodes(
     retriever: Retriever,
     parent,
     conversation_memory: ConversationMemory | None,
+    tool_planner: ToolPlanner | None,
 ):
     def prepare(state: ChatState) -> dict[str, object]:
         def operation() -> dict[str, object]:
@@ -145,7 +150,7 @@ def _context_nodes(
             bundle = state["context_bundle"]
             return {
                 "context_bundle": ContextManager.with_tool(
-                    bundle, plan_tool(bundle.working.message)
+                    bundle, tool_planner(bundle) if tool_planner is not None else plan_tool(bundle.working.message)
                 )
             }
 

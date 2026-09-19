@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import re
 from uuid import UUID
 
 from .config import Settings
@@ -13,6 +14,14 @@ from .schemas import ChatSource
 class RetrievalResult:
     context: str
     sources: list[ChatSource]
+    task_targets: tuple["TaskTarget", ...] = ()
+
+
+@dataclass(frozen=True)
+class TaskTarget:
+    task_id: UUID
+    version: int
+    title: str
 
 
 class RetrievalService:
@@ -73,7 +82,11 @@ class RetrievalService:
         ranked_ids = reciprocal_rank_fusion([vector_ids, lexical_ids], self.top_k)
         ranked_chunks = [chunks[chunk_id] for chunk_id in ranked_ids if chunk_id in chunks]
         context, included = _build_context(ranked_chunks, self.context_char_budget)
-        return RetrievalResult(context=context, sources=_deduplicate_sources(included))
+        return RetrievalResult(
+            context=context,
+            sources=_deduplicate_sources(included),
+            task_targets=_task_targets(included),
+        )
 
 
 class DisabledRetrievalService:
@@ -91,17 +104,25 @@ class DisabledRetrievalService:
 def _build_context(chunks: list[StoredChunk], char_budget: int) -> tuple[str, list[StoredChunk]]:
     blocks: list[str] = []
     included: list[StoredChunk] = []
+    source_numbers: dict[tuple[str, UUID], int] = {}
     used = 0
     for chunk in chunks:
-        block = f"[{chunk.source_type}:{chunk.source_id}] {chunk.title}\n{chunk.content.strip()}"
+        source_key = (chunk.source_type, chunk.source_id)
+        number = source_numbers.get(source_key, len(source_numbers) + 1)
+        prefix = f"【来源{number}】 [{chunk.source_type}:{chunk.source_id}] {chunk.title}\n"
+        content = chunk.content.strip()
         remaining = char_budget - used
         if remaining <= 0:
             break
+        if not content or remaining <= len(prefix):
+            break
+        block = prefix + content
         if len(block) > remaining:
             block = block[:remaining].rstrip()
         if block:
             blocks.append(block)
             included.append(chunk)
+            source_numbers[source_key] = number
             used += len(block) + 2
     return "\n\n".join(blocks), included
 
@@ -122,3 +143,25 @@ def _deduplicate_sources(chunks: list[StoredChunk]) -> list[ChatSource]:
             excerpt=excerpt,
         ))
     return result
+
+
+def cited_sources(answer: str, candidates: list[ChatSource] | tuple[ChatSource, ...]) -> list[ChatSource]:
+    """Return only authorized sources explicitly numbered in the completed answer."""
+    result: list[ChatSource] = []
+    seen: set[int] = set()
+    for match in re.finditer(r"【来源([1-9][0-9]*)】", answer):
+        index = int(match.group(1)) - 1
+        if 0 <= index < len(candidates) and index not in seen:
+            result.append(candidates[index])
+            seen.add(index)
+    return result
+
+
+def _task_targets(chunks: list[StoredChunk]) -> tuple[TaskTarget, ...]:
+    result: list[TaskTarget] = []
+    seen: set[UUID] = set()
+    for chunk in chunks:
+        if chunk.source_type == "TASK" and chunk.source_id not in seen:
+            result.append(TaskTarget(chunk.source_id, chunk.source_version, chunk.title))
+            seen.add(chunk.source_id)
+    return tuple(result)

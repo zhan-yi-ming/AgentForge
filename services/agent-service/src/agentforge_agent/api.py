@@ -17,7 +17,7 @@ from .errors import LlmDependencyError, RagDependencyError
 from .graph import build_chat_context_graph, build_chat_graph
 from .llm import build_responder
 from .observability import build_observability
-from .retrieval import DisabledRetrievalService, RetrievalService
+from .retrieval import DisabledRetrievalService, RetrievalService, cited_sources
 from .schemas import (
     ChatRequest,
     ChatResponse,
@@ -110,6 +110,7 @@ def chat(
                 responder,
                 observation=agent_observation,
                 conversation_memory=conversation_memory,
+                tool_planner=getattr(responder, "plan_tool", None),
             )
             state = chat_graph.invoke(
                 {
@@ -158,7 +159,7 @@ def chat(
         conversation_id=bundle.conversation.conversation_id,
         answer=state["answer"],
         request_id=bundle.project.request_id,
-        sources=list(bundle.retrieved.sources),
+        sources=cited_sources(state["answer"], bundle.retrieved.sources),
         tool_proposal=bundle.tool.proposal,
     )
 
@@ -187,6 +188,7 @@ def chat_stream(
             retrieval_service.retrieve,
             observation=agent_observation,
             conversation_memory=conversation_memory,
+            tool_planner=getattr(responder, "plan_tool", None),
         ).invoke(
             {
                 "namespace": namespace,
@@ -222,10 +224,7 @@ def chat_stream(
                         state["context_bundle"].conversation.conversation_id
                     ),
                     "requestId": state["context_bundle"].project.request_id,
-                    "sources": [
-                        source.model_dump(mode="json", by_alias=True)
-                        for source in state["context_bundle"].retrieved.sources
-                    ],
+                    "sources": [],
                 }
             )
             observed_stream = getattr(responder, "stream_observed", None)
@@ -254,6 +253,12 @@ def chat_stream(
             yield encode(
                 {
                     "type": "complete",
+                    "sources": [
+                        source.model_dump(mode="json", by_alias=True)
+                        for source in cited_sources(
+                            "".join(answer_parts), bundle.retrieved.sources
+                        )
+                    ],
                     "toolProposal": proposal.model_dump(mode="json", by_alias=True)
                     if proposal is not None
                     else None,

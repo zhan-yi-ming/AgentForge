@@ -54,6 +54,7 @@ class AgentChatApiTest {
     void chatStreamReturnsIncrementalSseContract() throws Exception {
         UUID projectId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
+        UUID sourceId = UUID.randomUUID();
         AgentChatCommand command = new AgentChatCommand(
                 projectId, new com.agentforge.core.security.AuthenticatedActor(UUID.randomUUID(), false),
                 "hello", null, "request-stream");
@@ -64,7 +65,9 @@ class AgentChatApiTest {
             sink.accept(AgentStreamEvent.metadata(conversationId, "request-stream", List.of()));
             sink.accept(AgentStreamEvent.delta("第一段"));
             sink.accept(AgentStreamEvent.delta("，第二段"));
-            sink.accept(AgentStreamEvent.complete(null));
+            sink.accept(new AgentStreamEvent("complete", null, null,
+                    List.of(new AgentSource("WIKI", sourceId, "Architecture", "Java owns writes.")),
+                    null, null, null, null));
             return null;
         }).when(agentChatService).stream(eq(command), any());
 
@@ -83,7 +86,8 @@ class AgentChatApiTest {
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("event:metadata")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString(
                         "data:{\"text\":\"\\u7B2C\\u4E00\\u6BB5\"}")))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("event:complete")));
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("event:complete")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(sourceId.toString())));
     }
 
     @Test

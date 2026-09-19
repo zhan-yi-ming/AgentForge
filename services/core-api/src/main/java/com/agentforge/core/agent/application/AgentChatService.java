@@ -102,6 +102,9 @@ public class AgentChatService {
                     else if ("delta".equals(event.type()) && event.text() != null) {
                         answer.append(event.text());
                     }
+                    else if ("complete".equals(event.type())) {
+                        sources.set(event.sources());
+                    }
                     AgentStreamEvent finalized = finalizeEvent(command, effectiveConversationId.get(), event);
                     sink.accept(finalized);
                     if ("complete".equals(finalized.type())) {
@@ -142,6 +145,6 @@ public class AgentChatService {
                     command.requestId())
                     .orElse(null);
         }
-        return AgentStreamEvent.completed(pendingAction);
+        return AgentStreamEvent.completed(pendingAction, event.sources());
     }
 }

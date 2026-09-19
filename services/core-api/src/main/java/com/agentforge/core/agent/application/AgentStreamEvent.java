@@ -31,7 +31,7 @@ public record AgentStreamEvent(
         return new AgentStreamEvent("complete", null, null, List.of(), null, proposal, null, null);
     }
 
-    public static AgentStreamEvent completed(AgentActionView action) {
-        return new AgentStreamEvent("complete", null, null, List.of(), null, null, action, null);
+    public static AgentStreamEvent completed(AgentActionView action, List<AgentSource> sources) {
+        return new AgentStreamEvent("complete", null, null, sources, null, null, action, null);
     }
 }

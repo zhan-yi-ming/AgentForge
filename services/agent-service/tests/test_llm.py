@@ -19,7 +19,7 @@ from agentforge_agent.llm import (
     PromptComposer,
     build_responder,
 )
-from agentforge_agent.retrieval import RetrievalResult
+from agentforge_agent.retrieval import RetrievalResult, TaskTarget
 from agentforge_agent.schemas import ToolProposal
 
 
@@ -140,6 +140,75 @@ def test_compatible_responder_does_not_feed_tool_context_back_to_model() -> None
     assert "Private tool proposal description" not in prompt
 
 
+def test_model_planner_proposes_task_from_natural_language() -> None:
+    model = FakeChatModel('{"actionType":"CREATE_TASK","title":"整理登录模块回归清单","priority":"HIGH"}')
+    responder = CompatibleLlmResponder(model)
+
+    proposal = responder.plan_tool(context_state("请帮我新增一个高优先级任务，标题是整理登录模块回归清单")["context_bundle"])
+
+    assert proposal == ToolProposal(
+        action_type="CREATE_TASK", title="整理登录模块回归清单",
+        status="TODO", priority="HIGH",
+    )
+
+
+def test_model_planner_rejects_unretrieved_update_target() -> None:
+    model = FakeChatModel(
+        '{"actionType":"UPDATE_TASK","taskId":"%s","expectedVersion":3,"status":"DONE"}'
+        % uuid4()
+    )
+    responder = CompatibleLlmResponder(model)
+
+    assert responder.plan_tool(context_state("把登录任务改为完成")["context_bundle"]) is None
+
+
+def test_model_planner_uses_only_retrieved_task_version() -> None:
+    task_id = uuid4()
+    bundle = ContextManager.with_retrieval(
+        context_state("把登录任务标记完成")["context_bundle"],
+        RetrievalResult(context="", sources=[], task_targets=(TaskTarget(task_id, 3, "登录任务"),)),
+    )
+    valid = FakeChatModel(
+        '{"actionType":"UPDATE_TASK","taskId":"%s","expectedVersion":3,"status":"DONE"}'
+        % task_id
+    )
+    forged = FakeChatModel(
+        '{"actionType":"UPDATE_TASK","taskId":"%s","expectedVersion":3,"status":"DONE","projectId":"other"}'
+        % task_id
+    )
+
+    assert CompatibleLlmResponder(valid).plan_tool(bundle) == ToolProposal(
+        action_type="UPDATE_TASK", task_id=task_id, expected_version=3, status="DONE"
+    )
+    assert CompatibleLlmResponder(forged).plan_tool(bundle) is None
+
+
+def test_deepseek_planner_requests_official_json_output_mode() -> None:
+    class JsonModeModel(FakeChatModel):
+        bound_options = None
+
+        def bind(self, **options):
+            self.bound_options = options
+            return self
+
+    model = JsonModeModel('{"actionType":"NONE"}')
+
+    assert CompatibleLlmResponder(model, provider="deepseek").plan_tool(
+        context_state("解释登录流程")["context_bundle"]
+    ) is None
+    assert model.bound_options == {"response_format": {"type": "json_object"}, "max_tokens": 512}
+
+
+@pytest.mark.parametrize("content", [
+    '{"actionType":["CREATE_TASK"],"title":"Unsafe"}',
+    '{"actionType":"CREATE_TASK","title":"Unsafe","priority":[]}',
+])
+def test_model_planner_fails_closed_on_wrong_json_field_types(content) -> None:
+    responder = CompatibleLlmResponder(FakeChatModel(content))
+
+    assert responder.plan_tool(context_state("请创建任务")["context_bundle"]) is None
+
+
 def test_prompt_composer_enforces_total_budget_and_protects_retrieval() -> None:
     counter = TokenCounter()
     conversation_id = uuid4()
@@ -254,7 +323,7 @@ def test_prompt_composer_drops_last_recent_exchange_atomically() -> None:
 @pytest.mark.parametrize(
     ("provider", "expected_url", "expected_model"),
     [
-        ("deepseek", "https://api.deepseek.com", "deepseek-v4-flash"),
+        ("deepseek", "https://api.deepseek.com", "deepseek-flash"),
         ("zhipu", "https://open.bigmodel.cn/api/paas/v4", "glm-4-flash-250414"),
         ("qwen", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"),
     ],

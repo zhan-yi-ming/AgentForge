@@ -128,6 +128,7 @@ export function createApiClient(getToken: () => string | null): ApiClient {
         if (text) callbacks.onDelta?.(text);
       } else if (eventName === "complete") {
         pendingAction = (data.pendingAction ?? undefined) as AgentAction | undefined;
+        if (metadata) metadata = { ...metadata, sources: (data.sources ?? []) as AgentSource[] };
         completed = true;
       } else if (eventName === "error") {
         throw new ApiProblem(503, String(data.message ?? "AI service is temporarily unavailable."));

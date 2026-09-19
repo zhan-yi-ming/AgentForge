@@ -93,6 +93,7 @@ public class AgentChatController {
                 data.put("text", event.text());
             }
             else if ("complete".equals(event.type())) {
+                data.put("sources", event.sources());
                 data.put("pendingAction", event.pendingAction() == null
                         ? null
                         : AgentActionResponse.from(event.pendingAction()));

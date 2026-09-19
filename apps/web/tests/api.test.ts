@@ -102,9 +102,12 @@ describe("API client", () => {
     );
 
     await vi.waitFor(() => expect(deltas).toEqual(["你", "好"]));
-    streamController.enqueue(encoder.encode('event: complete\ndata: {"pendingAction":null}\n\n'));
+    streamController.enqueue(encoder.encode('event: complete\ndata: {"pendingAction":null,"sources":[{"sourceType":"WIKI","sourceId":"wiki-1","title":"Architecture","excerpt":"Java owns writes"}]}\n\n'));
     streamController.close();
     const result = await resultPromise;
     expect(result).toMatchObject({ conversationId: "conversation-1", answer: "你好", requestId: "r1" });
+    expect(result.sources).toEqual([{
+      sourceType: "WIKI", sourceId: "wiki-1", title: "Architecture", excerpt: "Java owns writes",
+    }]);
   });
 });

@@ -44,6 +44,8 @@ Python 不返回 actionId/status，也不执行写入。Java 不信任 proposal�
 
 `POST /internal/v1/chat/stream` 使用相同 header 与 body，返回 `application/x-ndjson`。事件为 `metadata`、`delta`、`complete` 或 `error`，每行一个 JSON 对象。`complete` 可包含 Python `toolProposal`，但不包含 actionId/status；Java 消费并执行与 JSON 入口完全相同的白名单校验和 pending action 持久化。内部流不得直接暴露给浏览器。
 
+P3-04 起 `metadata.sources` 为空，仅表示来源尚未结算；`complete.sources` 包含最终回答实际标注的授权来源。Java 转换为 SSE `complete` 时保留最终来源，与 `pendingAction` 一起交给 Web。同步 JSON `sources` 使用同一筛选规则，已完成历史只保存最终来源。旧客户端忽略新增 complete 字段仍能读取回答，更新后的客户端必须以 complete 来源覆盖 metadata 的空数组。
+
 V2-01 不改变上述 HTTP schema。Python 在内部 token 校验成功后用 body 的 `requestId`、`projectId` 和实际 `conversationId` 建立 Langfuse 关联；当请求未传 conversationId 时，Python 先生成一次 UUID，并保证 Trace 的 `thread_id`、metadata 事件/JSON 响应的 `conversationId` 一致。Langfuse trace id 不进入公共或内部 API。观测失败不得改变状态码、NDJSON 事件或 Java 的确定性处理。
 
 V2-02 同样不改变 HTTP schema。上述请求字段在 Python prepare 阶段构建内部 `ContextBundle`；同步与流式路径共用 Working、Conversation、Project、Retrieved、Tool Context 的生产过程。ContextBundle 不序列化到响应，既有 conversationId、requestId、sources、answer/toolProposal 语义保持不变。
