@@ -685,6 +685,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         conversationId={conversationId} history={chatHistory} expandedIds={expandedChatIds}
         streaming={streaming} pendingAction={pendingAction} busy={busy} expandedComposer={chatExpanded}
         composer={renderChatComposer()} onNewChat={newChat}
+        projectId={projectId ?? ""} api={api} onVoiceTranscript={(text) => setChatMessage((current) => current.trim() ? `${current.trim()} ${text}` : text)}
         onToggle={(id) => setExpandedChatIds((current) => {
           const next = new Set(current);
           if (next.has(id)) next.delete(id); else next.add(id);

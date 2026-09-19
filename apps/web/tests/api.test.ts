@@ -2,6 +2,16 @@ import { describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../src/api";
 
 describe("API client", () => {
+  it("uploads voice PCM through the scoped authenticated API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await createApiClient(() => "token-123").appendVoiceAudio("project-1", "session-1", new Uint8Array([1, 2]));
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/v1/projects/project-1/agent/asr/sessions/session-1/audio");
+    expect(init.method).toBe("POST");
+    expect((init.headers as Headers).get("Authorization")).toBe("Bearer token-123");
+    expect((init.headers as Headers).get("Content-Type")).toBe("application/octet-stream");
+  });
   it("sends the caller idempotency key when confirming an action", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: "EXECUTED" }), {
       status: 200, headers: { "Content-Type": "application/json" },

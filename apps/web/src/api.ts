@@ -11,6 +11,7 @@ export type AgentAction = {
   resultTask?: Task; createdAt: string; decidedAt?: string;
 };
 export type AgentChat = { conversationId: string; answer: string; requestId: string; sources: AgentSource[]; pendingAction?: AgentAction };
+export type VoiceSnapshot = { sessionId: string; text: string; finished: boolean };
 export type ConversationSummary = { conversationId: string; preview: string; messageCount: number; createdAt: string; updatedAt: string };
 export type ConversationMessage = { role: "USER" | "ASSISTANT"; content: string; sources: AgentSource[]; createdAt: string };
 export type ConversationDetail = ConversationSummary & { messages: ConversationMessage[] };
@@ -43,6 +44,11 @@ export interface ApiClient {
   deleteConversation(projectId: string, conversationId: string): Promise<void>;
   chat(projectId: string, message: string, conversationId?: string): Promise<AgentChat>;
   chatStream(projectId: string, message: string, conversationId: string | undefined, callbacks: AgentStreamCallbacks, signal?: AbortSignal): Promise<AgentChat>;
+  startVoice(projectId: string): Promise<{ sessionId: string }>;
+  appendVoiceAudio(projectId: string, sessionId: string, audio: Uint8Array): Promise<void>;
+  getVoice(projectId: string, sessionId: string): Promise<VoiceSnapshot>;
+  finishVoice(projectId: string, sessionId: string): Promise<VoiceSnapshot>;
+  cancelVoice(projectId: string, sessionId: string): Promise<void>;
   confirmAction(projectId: string, actionId: string, idempotencyKey: string): Promise<AgentAction>;
   rejectAction(projectId: string, actionId: string, idempotencyKey: string): Promise<AgentAction>;
 }
@@ -163,6 +169,19 @@ export function createApiClient(getToken: () => string | null): ApiClient {
     deleteConversation: (projectId, conversationId) => request(`/api/v1/projects/${projectId}/agent/conversations/${conversationId}`, { method: "DELETE" }),
     chat: (projectId, message, conversationId) => request(`/api/v1/projects/${projectId}/agent/chat`, { method: "POST", body: JSON.stringify({ message, conversationId }) }),
     chatStream,
+    startVoice: (projectId) => request(`/api/v1/projects/${projectId}/agent/asr/sessions`, { method: "POST" }),
+    appendVoiceAudio: async (projectId, sessionId, audio) => {
+      const headers = new Headers({ "Content-Type": "application/octet-stream" });
+      const token = getToken();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+      const body = audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength) as ArrayBuffer;
+      const response = await fetch(`/api/v1/projects/${projectId}/agent/asr/sessions/${sessionId}/audio`,
+        { method: "POST", headers, body });
+      if (!response.ok) throw new ApiProblem(response.status, "Voice recognition is unavailable.");
+    },
+    getVoice: (projectId, sessionId) => request(`/api/v1/projects/${projectId}/agent/asr/sessions/${sessionId}`),
+    finishVoice: (projectId, sessionId) => request(`/api/v1/projects/${projectId}/agent/asr/sessions/${sessionId}/finish`, { method: "POST" }),
+    cancelVoice: (projectId, sessionId) => request(`/api/v1/projects/${projectId}/agent/asr/sessions/${sessionId}`, { method: "DELETE" }),
     confirmAction: (projectId, actionId, idempotencyKey) => request(`/api/v1/projects/${projectId}/agent/actions/${actionId}/confirm`, {
       method: "POST", headers: { "Idempotency-Key": idempotencyKey },
     }),

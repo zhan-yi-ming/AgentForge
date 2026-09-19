@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import type { AgentAction, AgentSource } from "../api";
+import type { AgentAction, AgentSource, ApiClient } from "../api";
 import { MarkdownPreview } from "../MarkdownPreview";
 import { ActionApprovalDialog } from "./ActionApprovalDialog";
+import VoiceInput from "./VoiceInput";
 
 export type ChatHistoryItem = {
   id: string;
@@ -19,13 +20,16 @@ type Props = {
   busy: boolean;
   expandedComposer: boolean;
   composer: ReactNode;
+  projectId: string;
+  api: ApiClient;
+  onVoiceTranscript: (text: string) => void;
   onNewChat: () => void;
   onToggle: (id: string) => void;
   onDecision: (decision: "confirm" | "reject") => void;
 };
 
 export default function ChatPage({ conversationId, history, expandedIds, streaming, pendingAction,
-  busy, expandedComposer, composer, onNewChat, onToggle, onDecision }: Props) {
+  busy, expandedComposer, composer, projectId, api, onVoiceTranscript, onNewChat, onToggle, onDecision }: Props) {
   const [openSources, setOpenSources] = useState<Set<string>>(() => new Set());
   const [dismissedActionId, setDismissedActionId] = useState<string>();
   const reopenRef = useRef<HTMLButtonElement>(null);
@@ -47,6 +51,7 @@ export default function ChatPage({ conversationId, history, expandedIds, streami
     })}</div>}
     {pendingAction && dismissedActionId === pendingAction.id && <button type="button" className="pending-action-reopen" ref={reopenRef} onClick={() => setDismissedActionId(undefined)}>继续处理待确认操作</button>}
     {pendingAction && dismissedActionId !== pendingAction.id && <ActionApprovalDialog action={pendingAction} busy={busy} onClose={dismissAction} onDecision={onDecision} />}
+    <VoiceInput api={api} projectId={projectId} onTranscript={onVoiceTranscript} />
     {composer}
   </section>;
 }

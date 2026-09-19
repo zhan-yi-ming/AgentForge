@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     embedding_provider: Literal["hash"] = "hash"
     embedding_dimensions: int = Field(default=384, ge=384, le=384)
     llm_provider: Literal["disabled", "deepseek", "zhipu", "qwen"] = "disabled"
+    asr_api_key: SecretStr | None = None
+    asr_workspace_id: str | None = None
+    asr_region: Literal["cn-beijing", "ap-southeast-1"] = "cn-beijing"
+    asr_model: Literal["qwen3-asr-flash-realtime"] = "qwen3-asr-flash-realtime"
     llm_api_key: SecretStr | None = None
     llm_base_url: str | None = None
     llm_model: str | None = None
@@ -49,6 +53,15 @@ class Settings(BaseSettings):
     rag_top_k: int = Field(default=6, ge=1, le=20)
     rag_candidate_k: int = Field(default=12, ge=1, le=50)
     rag_context_char_budget: int = Field(default=4000, ge=500, le=12000)
+
+    @field_validator("asr_workspace_id")
+    @classmethod
+    def validate_asr_workspace_id(cls, value: str | None) -> str | None:
+        if not value:
+            return None
+        if not 1 <= len(value) <= 128 or not all(ch.isascii() and (ch.isalnum() or ch in "_-") for ch in value):
+            raise ValueError("Invalid ASR workspace ID.")
+        return value
 
     @field_validator("langfuse_environment")
     @classmethod

@@ -26,6 +26,7 @@ function api(overrides: Partial<ApiClient> = {}): ApiClient {
     listTasks: vi.fn().mockResolvedValue([task]),
     listConversations: vi.fn().mockResolvedValue([]), getConversation: vi.fn(), deleteConversation: vi.fn().mockResolvedValue(undefined),
     chat: vi.fn(), chatStream: vi.fn(), confirmAction: vi.fn(), rejectAction: vi.fn(),
+    startVoice: vi.fn(), appendVoiceAudio: vi.fn(), getVoice: vi.fn(), finishVoice: vi.fn(), cancelVoice: vi.fn(),
     ...overrides,
   };
 }

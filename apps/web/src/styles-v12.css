@@ -729,6 +729,8 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 .chat-session { min-height: calc(100vh - 90px); padding-bottom: 170px; }
 .chat-session .conversation-history { flex: none; min-height: auto; max-height: none; overflow: visible; padding-bottom: 1rem; }
 .chat-session .chat-composer { position: fixed; z-index: 9; left: 50%; right: auto; bottom: 1rem; transform: translateX(-50%); margin: 0; }
+.chat-session .voice-input { position: fixed; z-index: 9; bottom: 7.4rem; left: 50%; transform: translateX(-50%); width: min(100%, 820px); display: flex; align-items: center; gap: .5rem; padding: .35rem .6rem; border-radius: 12px; background: var(--surface); box-shadow: 0 4px 16px rgba(28,28,26,.08); }
+.chat-session .voice-input span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .78rem; color: var(--muted); }
 .pending-action-reopen { position: fixed; z-index: 10; bottom: 8.3rem; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 3rem); box-shadow: 0 8px 28px rgba(28,28,26,.12); }
 .approval-backdrop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 1rem; background: rgba(19, 21, 24, .5); backdrop-filter: blur(4px); }
 .approval-dialog { width: min(100%, 520px); max-height: min(780px, calc(100dvh - 2rem)); overflow: auto; padding: clamp(1.2rem, 3vw, 2rem); border: 1px solid var(--line-strong); border-radius: 18px; background: var(--surface); box-shadow: 0 24px 80px rgba(19,21,24,.22); }

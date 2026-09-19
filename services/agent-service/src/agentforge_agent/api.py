@@ -3,10 +3,12 @@ import hmac
 import json
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 
 from .config import Settings, get_settings
+from .asr import AsrInvalidAudio, AsrNotFound, AsrScope, AsrService, AsrUnavailable
 from .action_runtime import (
     ActionWorkflowConflict,
     ActionWorkflowNotFound,
@@ -27,6 +29,22 @@ from .schemas import (
 )
 
 router = APIRouter()
+
+
+@lru_cache
+def get_asr_service() -> AsrService:
+    return AsrService(get_settings())
+
+
+def _asr_call(operation):
+    try:
+        return operation()
+    except AsrNotFound as exception:
+        raise HTTPException(status_code=404, detail="Voice session was not found.") from exception
+    except AsrInvalidAudio as exception:
+        raise HTTPException(status_code=400, detail="Invalid voice chunk.") from exception
+    except AsrUnavailable as exception:
+        raise HTTPException(status_code=503, detail="Voice recognition is unavailable.") from exception
 
 
 @lru_cache
@@ -76,6 +94,43 @@ def require_internal_token(
     expected = settings.internal_token.get_secret_value()
     if token is None or not hmac.compare_digest(token, expected):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid internal credentials.")
+
+
+@router.post("/internal/v1/asr/sessions", dependencies=[Depends(require_internal_token)])
+def asr_start(scope: AsrScope, service: AsrService = Depends(get_asr_service)):
+    session_id = _asr_call(lambda: service.start(scope.project_id, scope.user_id))
+    return {"sessionId": session_id}
+
+
+@router.post("/internal/v1/asr/sessions/{session_id}/audio", status_code=204,
+             dependencies=[Depends(require_internal_token)])
+async def asr_audio(session_id: UUID, request: Request,
+                    project_id: UUID = Query(alias="projectId"), user_id: UUID = Query(alias="userId"),
+                    service: AsrService = Depends(get_asr_service)):
+    audio = bytearray()
+    async for chunk in request.stream():
+        audio.extend(chunk)
+        if len(audio) > AsrService.MAX_CHUNK:
+            raise HTTPException(status_code=400, detail="Invalid voice chunk.")
+    await run_in_threadpool(_asr_call, lambda: service.append(session_id, project_id, user_id, bytes(audio)))
+
+
+@router.get("/internal/v1/asr/sessions/{session_id}", dependencies=[Depends(require_internal_token)])
+def asr_status(session_id: UUID, project_id: UUID = Query(alias="projectId"),
+               user_id: UUID = Query(alias="userId"), service: AsrService = Depends(get_asr_service)):
+    return _asr_call(lambda: service.status(session_id, project_id, user_id))
+
+
+@router.post("/internal/v1/asr/sessions/{session_id}/finish", dependencies=[Depends(require_internal_token)])
+def asr_finish(session_id: UUID, scope: AsrScope, service: AsrService = Depends(get_asr_service)):
+    return _asr_call(lambda: service.finish(session_id, scope.project_id, scope.user_id))
+
+
+@router.delete("/internal/v1/asr/sessions/{session_id}", status_code=204,
+               dependencies=[Depends(require_internal_token)])
+def asr_cancel(session_id: UUID, project_id: UUID = Query(alias="projectId"),
+               user_id: UUID = Query(alias="userId"), service: AsrService = Depends(get_asr_service)):
+    _asr_call(lambda: service.cancel(session_id, project_id, user_id))
 
 
 @router.get("/health", response_model=HealthResponse)

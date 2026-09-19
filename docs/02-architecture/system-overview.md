@@ -1,4 +1,6 @@
 # 系统架构总览
+P3-05 语音输入新增 `Web /chat → Core API（JWT、项目权限、额度）→ Agent Service（短期内存 ASR 会话）→ 阿里云 Qwen3-ASR-Flash-Realtime`。音频和供应商凭据只在此链路短暂使用；Chat/Task 持久化仍只处理用户最终主动发送的文字。信任边界及多实例限制见 ADR-0027。
+
 
 - 状态：Accepted
 - 当前实现范围：V1 / Day 1–Day 7 已实现并通过本地完整栈验收
