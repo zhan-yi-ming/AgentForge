@@ -1,5 +1,6 @@
 # 变更记录
 
+- `2026-09-19-p3-03-chat-interface.md`：聊天输入框、引用折叠与悬浮确认界面。
 - `2026-09-18-p3-02-conversation-lifecycle.md`：单会话删除、审批冲突与旧回复可见性修复。
 
 - `2026-09-09-pre-v3-grafana-logs.md`：在 V3 前以 Grafana、Loki 与 Alloy 提供受认证的单机容器日志查询界面。

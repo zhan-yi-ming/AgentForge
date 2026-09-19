@@ -383,6 +383,10 @@ label { display: grid; gap: 0.45rem; font-weight: 500; font-size: 0.9rem; }
 .sources { border-top: 1px solid var(--line); margin-top: 0.8rem; padding-top: 0.8rem; }
 .sources article { display: grid; gap: 0.15rem; font-size: 0.8rem; margin-top: 0.5rem; }
 .sources article span { color: var(--muted); }
+.sources-toggle { display: inline-flex; align-items: center; gap: .55rem; border: 0; padding: .2rem 0; background: transparent; color: var(--muted); font-size: .78rem; font-weight: 600; }
+.sources-toggle:hover { color: var(--ink); background: transparent; }
+.sources-toggle span { font-size: 1rem; line-height: 1; }
+.sources-list { padding: .3rem 0 .15rem; }
 
 .action-card {
   margin-top: 1.25rem;
@@ -725,6 +729,17 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 .chat-session { min-height: calc(100vh - 90px); padding-bottom: 170px; }
 .chat-session .conversation-history { flex: none; min-height: auto; max-height: none; overflow: visible; padding-bottom: 1rem; }
 .chat-session .chat-composer { position: fixed; z-index: 9; left: 50%; right: auto; bottom: 1rem; transform: translateX(-50%); margin: 0; }
+.pending-action-reopen { position: fixed; z-index: 10; bottom: 8.3rem; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 3rem); box-shadow: 0 8px 28px rgba(28,28,26,.12); }
+.approval-backdrop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 1rem; background: rgba(19, 21, 24, .5); backdrop-filter: blur(4px); }
+.approval-dialog { width: min(100%, 520px); max-height: min(780px, calc(100dvh - 2rem)); overflow: auto; padding: clamp(1.2rem, 3vw, 2rem); border: 1px solid var(--line-strong); border-radius: 18px; background: var(--surface); box-shadow: 0 24px 80px rgba(19,21,24,.22); }
+.approval-dialog h2 { margin: .35rem 0 .4rem; font-size: 1.45rem; }
+.approval-intro { margin: 0 0 1.1rem; color: var(--muted); font-size: .88rem; line-height: 1.55; }
+.approval-fields { display: grid; gap: .65rem; margin: 0 0 1.35rem; }
+.approval-fields > div { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); gap: .6rem; border-bottom: 1px solid var(--line); padding: .4rem 0 .65rem; }
+.approval-fields dt { color: var(--muted); font-size: .8rem; }
+.approval-fields dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: .88rem; }
+.approval-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .55rem; }
+.approval-actions button { min-height: 38px; }
 .conversation-button { position: relative; }
 .unread-badge { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: #c73b36; border: 2px solid var(--surface); }
 .chat-tool-window { position: fixed; z-index: 15; top: calc(50% + 38px); left: 50%; width: min(860px, calc(100vw - 9rem)); max-height: min(720px, calc(100vh - 7.5rem)); transform: translate(-50%, -50%); overflow: auto; box-shadow: 0 22px 60px rgba(28,28,26,.16); }
@@ -735,6 +750,7 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
   .topbar.chat-mode .topbar-logo { margin-left: 2.6rem; }
   .chat-session { padding-bottom: 155px; }
   .chat-session .chat-composer { left: calc(50% + 1.5rem); width: calc(100vw - 4.8rem); }
+  .pending-action-reopen { left: calc(50% + 1.5rem); bottom: 7.5rem; }
   .chat-tool-window { width: calc(100vw - 5.5rem); max-height: calc(100vh - 3rem); left: calc(50% + 2rem); }
 }
 

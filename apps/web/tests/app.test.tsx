@@ -59,10 +59,12 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: /^Earlier question/ }));
     expect(window.location.pathname).toBe("/chat/conversation-old");
     expect(await screen.findByText("Earlier answer")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "放大聊天输入框" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "新建会话" }));
     expect(window.location.pathname).toBe("/chat");
     expect(screen.queryByText("Earlier answer")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "放大聊天输入框" })).toBeInTheDocument();
   });
 
   it("deletes one selected history entry only after manual confirmation", async () => {
@@ -83,6 +85,12 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: /历史/ }));
     await user.click(screen.getByRole("button", { name: "删除会话 Earlier question" }));
     expect(mockApi.deleteConversation).not.toHaveBeenCalled();
+    expect(within(screen.getByRole("dialog", { name: "删除聊天记录" }))
+      .getByRole("button", { name: "取消" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "删除聊天记录" })).not.toBeInTheDocument();
+    expect(mockApi.deleteConversation).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "删除会话 Earlier question" }));
     await user.click(within(screen.getByRole("dialog", { name: "删除聊天记录" }))
       .getByRole("button", { name: "确认删除" }));
     await waitFor(() => expect(mockApi.deleteConversation).toHaveBeenCalledWith(project.id, "conversation-old"));
@@ -470,6 +478,67 @@ describe("App", () => {
     expect(olderToggle).toHaveAttribute("aria-expanded", "true");
     await user.click(olderToggle);
     expect(screen.queryByText("First answer")).not.toBeInTheDocument();
+  });
+
+  it("opens the chat composer compact and lets the user expand and shrink it", async () => {
+    const user = await login(api({ chatStream: vi.fn().mockResolvedValue({
+      conversationId: "compact-chat", answer: "Ready", requestId: "r-compact", sources: [],
+    }) }));
+    await user.type(screen.getByLabelText("给 Agent 的消息"), "hello");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    expect(await screen.findByText("Ready")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "放大聊天输入框" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "放大聊天输入框" }));
+    expect(screen.getByRole("button", { name: "缩小聊天输入框" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "缩小聊天输入框" }));
+    expect(screen.getByRole("button", { name: "放大聊天输入框" })).toBeInTheDocument();
+  });
+
+  it("keeps each answer's cited articles collapsed until opened", async () => {
+    const chatStream = vi.fn()
+      .mockResolvedValueOnce({ conversationId: "cited-chat", answer: "First answer", requestId: "r1",
+        sources: [{ sourceType: "WIKI", sourceId: "wiki-a", title: "Architecture", excerpt: "Core owns writes" }] })
+      .mockResolvedValueOnce({ conversationId: "cited-chat", answer: "Second answer", requestId: "r2",
+        sources: [{ sourceType: "WIKI", sourceId: "wiki-b", title: "Runbook", excerpt: "Review steps" }] });
+    const user = await login(api({ chatStream }));
+    await user.type(screen.getByLabelText("给 Agent 的消息"), "first");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    expect(await screen.findByText("First answer")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("给 Agent 的消息"), "second");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    expect(await screen.findByText("Second answer")).toBeInTheDocument();
+    expect(screen.queryByText("Architecture")).not.toBeInTheDocument();
+    expect(screen.queryByText("Runbook")).not.toBeInTheDocument();
+    const sourceButtons = screen.getAllByRole("button", { name: /引用来源/ });
+    expect(sourceButtons).toHaveLength(2);
+    await user.click(sourceButtons[0]);
+    expect(screen.getByText("Architecture")).toBeInTheDocument();
+    expect(screen.queryByText("Runbook")).not.toBeInTheDocument();
+    await user.click(sourceButtons[0]);
+    expect(screen.queryByText("Architecture")).not.toBeInTheDocument();
+  });
+
+  it("shows pending action above chat content and can reopen it after Escape without deciding", async () => {
+    const pending: AgentAction = { id: "action-overlay", projectId: project.id, conversationId: "overlay-chat",
+      actionType: "CREATE_TASK", status: "PENDING", title: "Review access", description: "Check rollout",
+      priority: "HIGH", taskStatus: "TODO", createdAt: "2026-09-05T00:00:00Z" };
+    const mockApi = api({ chatStream: vi.fn().mockResolvedValue({ conversationId: "overlay-chat", answer: "Please review",
+      requestId: "r-overlay", sources: [{ sourceType: "WIKI", sourceId: "wiki-1", title: "Plan", excerpt: "Scope" }],
+      pendingAction: pending }) });
+    const user = await login(mockApi);
+    await user.type(screen.getByLabelText("给 Agent 的消息"), "create task");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    const dialog = await screen.findByRole("dialog", { name: /待确认操作/ });
+    expect(dialog.parentElement?.parentElement).toBe(document.body);
+    expect(within(dialog).getByText("Review access")).toBeInTheDocument();
+    expect(within(dialog).getByText("Check rollout")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "稍后处理" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: /待确认操作/ })).not.toBeInTheDocument();
+    expect(mockApi.confirmAction).not.toHaveBeenCalled();
+    expect(mockApi.rejectAction).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "继续处理待确认操作" }));
+    expect(screen.getByRole("dialog", { name: /待确认操作/ })).toBeInTheDocument();
   });
 
   it("confirms a pending action through Java before refreshing tasks", async () => {

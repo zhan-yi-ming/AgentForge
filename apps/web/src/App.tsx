@@ -91,7 +91,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const [onboardingOpen, setOnboardingOpen] = useState(() => !hasCompletedOnboarding());
   const [activePanel, setActivePanel] = useState<WorkspacePanel | null>(null);
   const [chatMode, setChatMode] = useState(false);
-  const [chatExpanded, setChatExpanded] = useState(true);
+  const [chatExpanded, setChatExpanded] = useState(() => parseRoute(window.location.pathname).page !== "chat");
   const [unreadChat, setUnreadChat] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
@@ -114,6 +114,29 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const conversationIdRef = useRef<string | undefined>(undefined);
   const previousRoutePath = useRef(window.location.pathname);
   const decisionKeys = useRef(new Map<string, string>());
+  const deleteCancelRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!conversationToDelete || deleteBusy) return;
+    deleteCancelRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setConversationToDelete(undefined);
+      } else if (event.key === "Tab") {
+        const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>(".delete-dialog-actions button:not(:disabled)"));
+        if (event.shiftKey && document.activeElement === buttons[0]) {
+          event.preventDefault();
+          buttons[buttons.length - 1]?.focus();
+        } else if (!event.shiftKey && document.activeElement === buttons[buttons.length - 1]) {
+          event.preventDefault();
+          buttons[0]?.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [conversationToDelete, deleteBusy]);
 
   useEffect(() => { conversationIdRef.current = conversationId; }, [conversationId]);
 
@@ -265,6 +288,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
       setHistoryOpen(false);
       setChatMode(true);
       chatModeRef.current = true;
+      setChatExpanded(false);
       navigate(`/chat/${encodeURIComponent(detail.conversationId)}`);
     } catch (cause) {
       if (activeProjectId.current === requestedProjectId && activeConversationLoad.current === load) report(cause);
@@ -292,6 +316,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setConversationToDelete(undefined);
     setChatMode(true);
     chatModeRef.current = true;
+    setChatExpanded(false);
     navigate("/chat");
   }
 
@@ -338,6 +363,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     if (route.page === "chat") {
       setChatMode(true);
       chatModeRef.current = true;
+      if (routeChanged) setChatExpanded(false);
       if (route.conversationId && route.conversationId !== conversationId &&
         loadingConversationId.current !== route.conversationId) {
         void openConversation(route.conversationId);
@@ -431,7 +457,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setChatMode(true);
     navigate(conversationId ? `/chat/${encodeURIComponent(conversationId)}` : "/chat");
     setActivePanel(null);
-    setChatExpanded(true);
+    setChatExpanded(false);
     setUnreadChat(false);
   }
 
@@ -606,7 +632,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   }
 
   function renderChatComposer() {
-    return <form className="chat-composer" onSubmit={(event) => { event.stopPropagation(); void sendChat(event); }}><textarea aria-label="给 Agent 的消息" value={chatMessage} onChange={(event) => setChatMessage(event.target.value)} placeholder="向 Agent 提问，探索项目上下文…" /><div className="composer-footer"><span>Agent 会基于当前项目 Wiki 与任务回答</span>{activePanel && <button type="button" className="expand-chat-button" aria-label={chatExpanded ? "缩小聊天输入框" : "放大聊天输入框"} onClick={() => setChatExpanded((expanded) => !expanded)}><Icon name={chatExpanded ? "shrink" : "expand"} /></button>}<button aria-label="发送" disabled={busy || streaming || !chatMessage.trim()}>{streaming ? "生成中…" : "发送"}<span>↗</span></button></div></form>;
+    return <form className="chat-composer" onSubmit={(event) => { event.stopPropagation(); void sendChat(event); }}><textarea aria-label="给 Agent 的消息" value={chatMessage} onChange={(event) => setChatMessage(event.target.value)} placeholder="向 Agent 提问，探索项目上下文…" /><div className="composer-footer"><span>Agent 会基于当前项目 Wiki 与任务回答</span>{(chatMode || activePanel) && <button type="button" className="expand-chat-button" aria-label={chatExpanded ? "缩小聊天输入框" : "放大聊天输入框"} onClick={() => setChatExpanded((expanded) => !expanded)}><Icon name={chatExpanded ? "shrink" : "expand"} /></button>}<button aria-label="发送" disabled={busy || streaming || !chatMessage.trim()}>{streaming ? "生成中…" : "发送"}<span>↗</span></button></div></form>;
   }
 
   if (!authenticated) {
@@ -698,7 +724,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         /></Suspense>}
       </section>
     </main>
-    {conversationToDelete && <div className="onboarding-backdrop"><section className="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-conversation-title"><span className="eyebrow">HISTORY</span><h2 id="delete-conversation-title">删除聊天记录</h2><p>确定删除“{conversationToDelete.preview}”的聊天记录？删除后无法恢复；若还有待确认操作，请先完成或拒绝。</p><div className="delete-dialog-actions"><button type="button" className="ghost" onClick={() => setConversationToDelete(undefined)} disabled={deleteBusy}>取消</button><button type="button" className="danger" onClick={() => void deleteSelectedConversation()} disabled={deleteBusy}>{deleteBusy ? "删除中…" : "确认删除"}</button></div></section></div>}
+    {conversationToDelete && <div className="onboarding-backdrop"><section className="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-conversation-title"><span className="eyebrow">HISTORY</span><h2 id="delete-conversation-title">删除聊天记录</h2><p>确定删除“{conversationToDelete.preview}”的聊天记录？删除后无法恢复；若还有待确认操作，请先完成或拒绝。</p><div className="delete-dialog-actions"><button type="button" className="ghost" ref={deleteCancelRef} onClick={() => setConversationToDelete(undefined)} disabled={deleteBusy}>取消</button><button type="button" className="danger" onClick={() => void deleteSelectedConversation()} disabled={deleteBusy}>{deleteBusy ? "删除中…" : "确认删除"}</button></div></section></div>}
     {onboardingOpen && <div className="onboarding-backdrop"><section className="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title"><span className="eyebrow">WHY AGENTFORGE</span><h2 id="onboarding-title">让项目知识真正参与执行</h2><p>AgentForge 把分散在 Wiki、任务和对话里的上下文放到同一个工作台，让团队更快理解问题、形成决策，并在确认后安全落地。</p><div className="onboarding-value"><span>问题</span><strong>信息散落，判断依赖个人记忆，执行容易失真。</strong><span>方法</span><strong>从项目上下文出发，让 AI 先解释、再提议，最后由人确认。</strong></div><div className="onboarding-modules"><details open><summary>项目空间</summary><p>切换项目时，Wiki、任务与对话上下文会严格隔离，避免跨项目混淆。</p></details><details><summary>项目对话</summary><p>直接询问架构、需求和风险；回答会带来源，涉及业务写入时会等待你的确认。</p></details><details><summary>Wiki 工作台</summary><p>把稳定知识沉淀为可编辑页面，并用底部预览窗即时检查 Markdown 结构。</p></details><details><summary>AI 文本整理</summary><p>把会议记录或技术笔记整理为可审阅的 Wiki 草稿，不会自动写回。</p></details></div><button onClick={completeOnboarding}>开始体验</button></section></div>}
   </div>;
 }
