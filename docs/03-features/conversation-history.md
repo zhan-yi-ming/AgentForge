@@ -10,7 +10,7 @@
 
 ## 范围与非目标
 
-Core API/PostgreSQL 保存完成的 user/assistant exchange，提供项目内会话列表和详情。历史读取严格绑定认证用户、projectId 与 conversationId。它不提供删除、搜索、标题编辑、跨用户共享，也不等同于 V2-07 Agent checkpoint/recovery。
+Core API/PostgreSQL 保存完成的 user/assistant exchange，提供项目内会话列表和详情。历史读取严格绑定认证用户、projectId 与 conversationId。V2-05 首版不提供删除；P3-02 增加单会话删除。搜索、标题编辑、跨用户共享仍不在范围内，展示历史也不等同于 V2-07 Agent checkpoint/recovery。
 
 ## 关键流程
 
@@ -38,6 +38,12 @@ Core API/PostgreSQL 保存完成的 user/assistant exchange，提供项目内会
 ## 测试与验收
 
 通过公共 HTTP seam 验证列表、详情、选择恢复、跨 Project/User/Thread 负向矩阵、同步成功、流完成、流失败不提交和稳定排序；通过真实 PostgreSQL 验证迁移、约束和 JPA validate。
+
+## P3-02 单会话删除
+
+认证用户可从当前项目历史抽屉删除自己的一条会话，Core 再次校验项目和 user 作用域。存在 `PENDING` 或 `APPROVED` Action 时返回 409，要求先由用户完成决策；终态 Action 与审计事实保留。成功删除后消息正文、来源与预览从展示历史清除，列表和详情不可见。带旧 conversationId 的 Chat 在转发 Agent 前拒绝，append 和待审批 Action 创建也拒绝 tombstone。Web 在单次确认后调用 DELETE，并在删除当前会话时进入空白 `/chat`。已有 AI 回复在后续发送期间保持展开可见；未完成的新回答只影响自身轮次。
+
+删除与另一设备已经在途的 Chat 交错时，该轮请求可能已经消耗配额，最终持久化会被 tombstone 拒绝；已完成与未决审批的一致性仍由 Core 锁和状态检查保护。跨设备流中止与配额补偿需单独设计，不在 P3-02 隐式更改计费语义。
 
 ## 已知限制与后续计划
 

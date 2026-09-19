@@ -267,6 +267,12 @@ reject 先提交 `REJECTED` 再恢复 Agent wait。相同 key 可重试恢复；
 
 返回同一 project/user/conversation 作用域内的会话详情，包含摘要字段和按 sequence 排序的 `messages`。消息字段为 `role`（`USER` / `ASSISTANT`）、`content`、`sources`、`createdAt`。不返回 Prompt、Summary、Tool Context、内部 token 或其他用户信息。跨 Project/User/Thread 不能读取正文。
 
+### `DELETE /api/v1/projects/{projectId}/agent/conversations/{conversationId}`（P3-02）
+
+认证用户只能删除当前项目中自己的会话展示历史；成功返回 204。项目无权限为 403，会话不存在、不属当前用户或已删除为 404。存在 `PENDING`/`APPROVED` Action 时返回 409，需先手动完成审批决策。删除保留不可复用的会话 tombstone 与终态 Action/审计，清除历史消息正文和来源；旧 conversationId 不能继续 append。
+
+同步或流式 Chat 携带已删除的 conversationId 时，Core 在调用 Agent Service 和消耗日配额之前返回 409；携带属于其他 project/user 的会话 ID 返回 404，不泄露其存在性。
+
 `/internal/v1/rag/sources` 是 Agent Service 专用只读接口，不属于浏览器公共 API。它使用独立 Core 内部 token，并在读取 Wiki/Task 前再次执行用户存在和项目权限校验。
 
 ## 兼容性

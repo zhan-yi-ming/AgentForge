@@ -544,6 +544,11 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 .drawer-close { width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 1.25rem; }
 .drawer-close:hover:not(:disabled) { background: var(--hover); color: var(--ink); }
 .floating-drawer .project { margin-bottom: .3rem; }
+.history-record { display: flex; align-items: center; gap: .25rem; }
+.history-record .project { min-width: 0; flex: 1; }
+.history-delete { flex: none; border: 0; background: transparent; color: var(--muted); font-size: .75rem; padding: .5rem; border-radius: 8px; }
+.history-delete:hover:not(:disabled) { color: var(--danger); background: var(--hover); }
+.delete-dialog-actions { display: flex; justify-content: flex-end; gap: .65rem; }
 .floating-drawer .task-list { max-height: none; }
 
 .workspace { grid-row: 2; width: min(100%, 920px); padding: .8rem 1.25rem 7rem; gap: 1rem; }

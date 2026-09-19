@@ -27,6 +27,8 @@ public class AgentConversation {
     private Instant createdAt;
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 
     protected AgentConversation() {
     }
@@ -49,6 +51,14 @@ public class AgentConversation {
 
     public long nextSequence() { return messageCount; }
     public void appendedExchange(Instant now) { messageCount += 2; updatedAt = now; }
+    public boolean isDeleted() { return deletedAt != null; }
+    public void deleteHistory(Instant now) {
+        if (isDeleted()) throw new IllegalStateException("Conversation history was already deleted.");
+        preview = "";
+        messageCount = 0;
+        deletedAt = now;
+        updatedAt = now;
+    }
     public boolean belongsTo(UUID projectId, UUID userId) {
         return this.projectId.equals(projectId) && this.userId.equals(userId);
     }

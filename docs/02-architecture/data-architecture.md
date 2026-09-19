@@ -141,9 +141,12 @@ checkpoint state 只保存 schema version、完整 Memory Namespace、proposal �
 | `user_id` | UUID | 外键、非空 | 发起用户作用域 |
 | `preview` | VARCHAR(240) | 非空 | 首条用户消息的受限摘要 |
 | `message_count` | INTEGER | 非空、非负 | 已完成消息数 |
+| `deleted_at` | TIMESTAMPTZ | 可空 | 删除展示历史的 tombstone 时间；存在时禁止列表、详情和继续写入 |
 | `created_at` / `updated_at` | TIMESTAMPTZ | 非空 | 生命周期 |
 
 列表索引为 `(project_id, user_id, updated_at DESC)`。conversation ID 一旦绑定 project/user 后不能重绑。
+
+P3-02 删除历史时先检查同一 project/user/conversation 下没有 `PENDING`/`APPROVED` Action，然后在事务内锁定会话、清除 `agent_message`、清空 preview/message_count 并写入 `deleted_at`。终态 Action 和追加式审计事实不删除，Python checkpoint 属独立运行态，不由展示历史 HTTP 操作清理。
 
 ### `agent_message`
 

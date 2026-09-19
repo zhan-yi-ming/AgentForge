@@ -19,8 +19,64 @@ import org.mockito.InOrder;
 import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.conversation.application.ConversationHistoryService;
+import com.agentforge.core.shared.error.ConflictException;
 
 class AgentChatServiceTest {
+
+    @Test
+    void conversationHistoryDependencyCannotBeOmitted() {
+        ProjectAccess projects = org.mockito.Mockito.mock(ProjectAccess.class);
+        AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
+        AgentActionService actions = org.mockito.Mockito.mock(AgentActionService.class);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                new AgentChatService(projects, client, actions, quota, null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void deletedConversationIsRejectedBeforeForwardingToAgent() {
+        ProjectAccess projects = org.mockito.Mockito.mock(ProjectAccess.class);
+        AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
+        AgentActionService actions = org.mockito.Mockito.mock(AgentActionService.class);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+        ConversationHistoryService history = org.mockito.Mockito.mock(ConversationHistoryService.class);
+        AgentChatService service = new AgentChatService(projects, client, actions, quota, history);
+        UUID projectId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        org.mockito.Mockito.doThrow(new ConflictException("The conversation history was deleted."))
+                .when(history).requireWritable(projectId, conversationId, actor);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.chat(projectId, actor,
+                "question", conversationId, "request-deleted"))
+                .isInstanceOf(ConflictException.class);
+        verify(client, never()).chat(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(),
+                any(), any(), any());
+        verify(quota, never()).consume(any());
+    }
+
+    @Test
+    void deletedConversationIsRejectedBeforeOpeningStreamOrChargingQuota() {
+        ProjectAccess projects = org.mockito.Mockito.mock(ProjectAccess.class);
+        AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
+        AgentActionService actions = org.mockito.Mockito.mock(AgentActionService.class);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+        ConversationHistoryService history = org.mockito.Mockito.mock(ConversationHistoryService.class);
+        AgentChatService service = new AgentChatService(projects, client, actions, quota, history);
+        UUID projectId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        org.mockito.Mockito.doThrow(new ConflictException("The conversation history was deleted."))
+                .when(history).requireWritable(projectId, conversationId, actor);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.prepareStream(projectId, actor,
+                "question", conversationId, "request-deleted-stream"))
+                .isInstanceOf(ConflictException.class);
+        verify(quota, never()).consume(any());
+        org.mockito.Mockito.verifyNoInteractions(client);
+    }
 
     @Test
     void chatPersistsOnlyTheCompletedServerResult() {
@@ -141,7 +197,7 @@ class AgentChatServiceTest {
         AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
         AgentActionService actionService = org.mockito.Mockito.mock(AgentActionService.class);
         AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
-        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota);
+        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota, org.mockito.Mockito.mock(ConversationHistoryService.class));
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
@@ -175,7 +231,7 @@ class AgentChatServiceTest {
         AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
         AgentActionService actionService = org.mockito.Mockito.mock(AgentActionService.class);
         AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
-        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota);
+        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota, org.mockito.Mockito.mock(ConversationHistoryService.class));
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
@@ -198,7 +254,7 @@ class AgentChatServiceTest {
         AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
         AgentActionService actionService = org.mockito.Mockito.mock(AgentActionService.class);
         AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
-        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota);
+        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota, org.mockito.Mockito.mock(ConversationHistoryService.class));
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
@@ -222,7 +278,7 @@ class AgentChatServiceTest {
         AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
         AgentActionService actionService = org.mockito.Mockito.mock(AgentActionService.class);
         AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
-        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota);
+        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota, org.mockito.Mockito.mock(ConversationHistoryService.class));
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
@@ -246,7 +302,7 @@ class AgentChatServiceTest {
         AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
         AgentActionService actionService = org.mockito.Mockito.mock(AgentActionService.class);
         AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
-        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota);
+        AgentChatService service = new AgentChatService(projectAccess, client, actionService, quota, org.mockito.Mockito.mock(ConversationHistoryService.class));
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         AuthenticatedActor actor = new AuthenticatedActor(userId, false);

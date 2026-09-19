@@ -3,8 +3,11 @@ package com.agentforge.core.conversation.api;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -23,6 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.agentforge.core.conversation.application.ConversationHistoryService;
 import com.agentforge.core.conversation.application.ConversationSummaryView;
 import com.agentforge.core.security.SecurityConfiguration;
+import com.agentforge.core.shared.error.ConflictException;
 import com.agentforge.core.security.SecurityProblemWriter;
 import com.agentforge.core.shared.web.RequestIdFilter;
 
@@ -56,6 +60,39 @@ class ConversationHistoryApiTest {
     @Test
     void anonymousHistoryRequestIsRejected() throws Exception {
         mockMvc.perform(get("/api/v1/projects/{projectId}/agent/conversations", UUID.randomUUID()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void authenticatedUserCanDeleteOneConversationInProjectScope() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        mockMvc.perform(delete("/api/v1/projects/{projectId}/agent/conversations/{conversationId}",
+                        projectId, conversationId)
+                        .with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString())
+                                .claim("roles", List.of("USER")))))
+                .andExpect(status().isNoContent());
+        verify(service).delete(eq(projectId), eq(conversationId), any());
+    }
+
+    @Test
+    void deletingHistoryWithUnresolvedApprovalReturnsConflict() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        doThrow(new ConflictException("Resolve pending actions before deleting the conversation."))
+                .when(service).delete(eq(projectId), eq(conversationId), any());
+
+        mockMvc.perform(delete("/api/v1/projects/{projectId}/agent/conversations/{conversationId}",
+                        projectId, conversationId)
+                        .with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString())
+                                .claim("roles", List.of("USER")))))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void anonymousDeleteIsRejected() throws Exception {
+        mockMvc.perform(delete("/api/v1/projects/{projectId}/agent/conversations/{conversationId}",
+                        UUID.randomUUID(), UUID.randomUUID()))
                 .andExpect(status().isUnauthorized());
     }
 }

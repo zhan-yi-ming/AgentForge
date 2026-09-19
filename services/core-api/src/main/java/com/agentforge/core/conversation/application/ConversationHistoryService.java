@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.agentforge.core.agent.application.AgentSource;
+import com.agentforge.core.agent.domain.AgentActionStatus;
+import com.agentforge.core.agent.domain.AgentTaskActionRepository;
 import com.agentforge.core.conversation.domain.AgentConversation;
 import com.agentforge.core.conversation.domain.AgentConversationRepository;
 import com.agentforge.core.conversation.domain.AgentMessage;
@@ -17,6 +19,7 @@ import com.agentforge.core.conversation.domain.AgentMessageRole;
 import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.shared.error.ForbiddenException;
+import com.agentforge.core.shared.error.ConflictException;
 import com.agentforge.core.shared.error.ResourceNotFoundException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -26,14 +29,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class ConversationHistoryService {
     private final AgentConversationRepository conversations;
     private final AgentMessageRepository messages;
+    private final AgentTaskActionRepository actions;
     private final ProjectAccess projectAccess;
     private final ObjectMapper objectMapper;
     private final Clock clock;
 
     public ConversationHistoryService(AgentConversationRepository conversations, AgentMessageRepository messages,
+            AgentTaskActionRepository actions,
             ProjectAccess projectAccess, ObjectMapper objectMapper, Clock clock) {
         this.conversations = conversations;
         this.messages = messages;
+        this.actions = actions;
         this.projectAccess = projectAccess;
         this.objectMapper = objectMapper;
         this.clock = clock;
@@ -52,12 +58,28 @@ public class ConversationHistoryService {
         if (!conversation.belongsTo(projectId, actor.userId())) {
             throw new ForbiddenException("The conversation belongs to another scope.");
         }
+        if (conversation.isDeleted()) {
+            throw new ConflictException("The conversation history was deleted.");
+        }
         long sequence = conversation.nextSequence();
         messages.saveAll(List.of(
                 new AgentMessage(conversationId, sequence, AgentMessageRole.USER, question, "[]", now),
                 new AgentMessage(conversationId, sequence + 1, AgentMessageRole.ASSISTANT, answer,
                         writeSources(sources), now)));
         conversation.appendedExchange(now);
+    }
+
+    @Transactional
+    public void requireWritable(UUID projectId, UUID conversationId, AuthenticatedActor actor) {
+        projectAccess.requireAccess(projectId, actor);
+        conversations.findByIdForUpdate(conversationId).ifPresent(conversation -> {
+            if (!conversation.belongsTo(projectId, actor.userId())) {
+                throw new ResourceNotFoundException("Conversation not found: " + conversationId);
+            }
+            if (conversation.isDeleted()) {
+                throw new ConflictException("The conversation history was deleted.");
+            }
+        });
     }
 
     @Transactional(readOnly = true)
@@ -72,12 +94,31 @@ public class ConversationHistoryService {
         projectAccess.requireAccess(projectId, actor);
         AgentConversation conversation = conversations.findByScope(conversationId, projectId, actor.userId())
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation not found: " + conversationId));
+        if (conversation.isDeleted()) {
+            throw new ResourceNotFoundException("Conversation not found: " + conversationId);
+        }
         List<ConversationMessageView> messageViews = messages.findAllByConversationId(conversationId).stream()
                 .map(message -> new ConversationMessageView(message.getRole(), message.getContent(),
                         readSources(message.getSourcesJson()), message.getCreatedAt()))
                 .toList();
         return new ConversationDetailView(conversation.getId(), conversation.getPreview(),
                 conversation.getMessageCount(), conversation.getCreatedAt(), conversation.getUpdatedAt(), messageViews);
+    }
+
+    @Transactional
+    public void delete(UUID projectId, UUID conversationId, AuthenticatedActor actor) {
+        projectAccess.requireAccess(projectId, actor);
+        AgentConversation conversation = conversations.findByIdForUpdate(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Conversation not found: " + conversationId));
+        if (!conversation.belongsTo(projectId, actor.userId()) || conversation.isDeleted()) {
+            throw new ResourceNotFoundException("Conversation not found: " + conversationId);
+        }
+        if (actions.existsByConversationAndStatusIn(projectId, actor.userId(), conversationId,
+                List.of(AgentActionStatus.PENDING, AgentActionStatus.APPROVED))) {
+            throw new ConflictException("Resolve pending actions before deleting the conversation.");
+        }
+        messages.deleteAllByConversationId(conversationId);
+        conversation.deleteHistory(Instant.now(clock));
     }
 
     private String writeSources(List<AgentSource> sources) {

@@ -23,6 +23,8 @@ import com.agentforge.core.agent.domain.AgentAuditEventRepository;
 import com.agentforge.core.agent.domain.AgentAuditEventType;
 import com.agentforge.core.agent.domain.AgentTaskAction;
 import com.agentforge.core.agent.domain.AgentTaskActionRepository;
+import com.agentforge.core.conversation.domain.AgentConversation;
+import com.agentforge.core.conversation.domain.AgentConversationRepository;
 import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.security.ToolOperation;
@@ -42,12 +44,13 @@ class AgentActionServiceTest {
     private final AgentAuditEventRepository auditEvents = org.mockito.Mockito.mock(AgentAuditEventRepository.class);
     private final TaskService taskService = org.mockito.Mockito.mock(TaskService.class);
     private final ToolRiskEngine riskEngine = org.mockito.Mockito.mock(ToolRiskEngine.class);
+    private final AgentConversationRepository conversations = org.mockito.Mockito.mock(AgentConversationRepository.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-09-05T10:00:00Z"), ZoneOffset.UTC);
     private AgentActionService service;
 
     @BeforeEach
     void setUp() {
-        service = new AgentActionService(actions, auditEvents, projectAccess, riskEngine, taskService, clock);
+        service = new AgentActionService(actions, auditEvents, projectAccess, riskEngine, taskService, clock, conversations);
         when(actions.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(auditEvents.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -63,6 +66,25 @@ class AgentActionServiceTest {
 
         assertThat(pending.status()).isEqualTo(AgentActionStatus.PENDING);
         verify(taskService, never()).create(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void deletedConversationCannotGainANewPendingAction() {
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        var actor = new AuthenticatedActor(userId, false);
+        var conversation = AgentConversation.start(conversationId, projectId, userId, "Old", Instant.EPOCH);
+        conversation.deleteHistory(Instant.now(clock));
+        AgentConversationRepository conversations = org.mockito.Mockito.mock(AgentConversationRepository.class);
+        when(conversations.findByIdForUpdate(conversationId)).thenReturn(Optional.of(conversation));
+        var guardedService = new AgentActionService(actions, auditEvents, projectAccess, riskEngine,
+                taskService, clock, conversations);
+
+        assertThatThrownBy(() -> guardedService.createPending(projectId, actor, conversationId,
+                new ToolProposal("CREATE_TASK", null, null, "Orphan", null, "TODO", "HIGH")))
+                .isInstanceOf(ConflictException.class);
+        verify(actions, never()).save(any());
     }
 
     @Test

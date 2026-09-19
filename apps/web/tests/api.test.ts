@@ -44,6 +44,17 @@ describe("API client", () => {
     const headers = fetchMock.mock.calls[0][1].headers as Headers;
     expect(headers.get("Authorization")).toBe("Bearer token-123");
   });
+  it("deletes only the selected conversation through the scoped Core API", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createApiClient(() => "token-123").deleteConversation("project-1", "conversation-1");
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/projects/project-1/agent/conversations/conversation-1");
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.method).toBe("DELETE");
+    expect((init.headers as Headers).get("Authorization")).toBe("Bearer token-123");
+  });
   it("adds the bearer token and parses JSON", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([]), {
       status: 200, headers: { "Content-Type": "application/json", "X-Request-Id": "request-1" },

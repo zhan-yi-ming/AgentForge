@@ -24,7 +24,7 @@ function api(overrides: Partial<ApiClient> = {}): ApiClient {
     listWikiPages: vi.fn().mockResolvedValue([] as WikiPage[]),
     createWikiPage: vi.fn(), updateWikiPage: vi.fn(),
     listTasks: vi.fn().mockResolvedValue([task]),
-    listConversations: vi.fn().mockResolvedValue([]), getConversation: vi.fn(),
+    listConversations: vi.fn().mockResolvedValue([]), getConversation: vi.fn(), deleteConversation: vi.fn().mockResolvedValue(undefined),
     chat: vi.fn(), chatStream: vi.fn(), confirmAction: vi.fn(), rejectAction: vi.fn(),
     ...overrides,
   };
@@ -56,13 +56,94 @@ describe("App", () => {
     });
     const user = await login(mockApi);
     await user.click(screen.getByRole("button", { name: /历史/ }));
-    await user.click(await screen.findByRole("button", { name: /Earlier question/ }));
+    await user.click(await screen.findByRole("button", { name: /^Earlier question/ }));
     expect(window.location.pathname).toBe("/chat/conversation-old");
     expect(await screen.findByText("Earlier answer")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "新建会话" }));
     expect(window.location.pathname).toBe("/chat");
     expect(screen.queryByText("Earlier answer")).not.toBeInTheDocument();
+  });
+
+  it("deletes one selected history entry only after manual confirmation", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    const summary = { conversationId: "conversation-old", preview: "Earlier question", messageCount: 2,
+      createdAt: "2026-09-08T00:00:00Z", updatedAt: "2026-09-08T00:01:00Z" };
+    const mockApi = api({
+      listConversations: vi.fn().mockResolvedValue([summary]),
+      getConversation: vi.fn().mockResolvedValue({ ...summary, messages: [
+        { role: "USER", content: "Earlier question", sources: [], createdAt: summary.createdAt },
+        { role: "ASSISTANT", content: "Earlier answer", sources: [], createdAt: summary.updatedAt },
+      ] }),
+    });
+    const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: /历史/ }));
+    await user.click(await screen.findByRole("button", { name: /^Earlier question/ }));
+    expect(await screen.findByText("Earlier answer")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /历史/ }));
+    await user.click(screen.getByRole("button", { name: "删除会话 Earlier question" }));
+    expect(mockApi.deleteConversation).not.toHaveBeenCalled();
+    await user.click(within(screen.getByRole("dialog", { name: "删除聊天记录" }))
+      .getByRole("button", { name: "确认删除" }));
+    await waitFor(() => expect(mockApi.deleteConversation).toHaveBeenCalledWith(project.id, "conversation-old"));
+    expect(window.location.pathname).toBe("/chat");
+    expect(screen.queryByText("Earlier answer")).not.toBeInTheDocument();
+  });
+
+  it("keeps the newly opened chat when an older conversation deletion finishes", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    const summary = (id: string) => ({ conversationId: id, preview: `Question ${id}`, messageCount: 2,
+      createdAt: "2026-09-08T00:00:00Z", updatedAt: "2026-09-08T00:01:00Z" });
+    let resolveDelete!: () => void;
+    const mockApi = api({
+      listConversations: vi.fn().mockResolvedValue([summary("A"), summary("B")]),
+      getConversation: vi.fn().mockImplementation(async (_projectId, id: string) => ({ ...summary(id), messages: [
+        { role: "USER", content: `Question ${id}`, sources: [], createdAt: "2026-09-08T00:00:00Z" },
+        { role: "ASSISTANT", content: `Answer ${id}`, sources: [], createdAt: "2026-09-08T00:01:00Z" },
+      ] })),
+      deleteConversation: vi.fn().mockReturnValue(new Promise<void>((resolve) => { resolveDelete = resolve; })),
+    });
+    const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: /历史/ }));
+    await user.click(await screen.findByRole("button", { name: /^Question A/ }));
+    expect(await screen.findByText("Answer A")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /历史/ }));
+    await user.click(screen.getByRole("button", { name: "删除会话 Question A" }));
+    await user.click(within(screen.getByRole("dialog", { name: "删除聊天记录" }))
+      .getByRole("button", { name: "确认删除" }));
+    act(() => {
+      window.history.pushState({}, "", "/chat/B");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(await screen.findByText("Answer B")).toBeInTheDocument();
+    await act(async () => resolveDelete());
+    expect(window.location.pathname).toBe("/chat/B");
+    expect(screen.getByText("Answer B")).toBeInTheDocument();
+  });
+
+  it("stays on the home route when deleting the last background conversation", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    const summary = { conversationId: "conversation-old", preview: "Old question", messageCount: 2,
+      createdAt: "2026-09-08T00:00:00Z", updatedAt: "2026-09-08T00:01:00Z" };
+    const mockApi = api({
+      listConversations: vi.fn().mockResolvedValue([summary]),
+      getConversation: vi.fn().mockResolvedValue({ ...summary, messages: [
+        { role: "USER", content: "Old question", sources: [], createdAt: summary.createdAt },
+        { role: "ASSISTANT", content: "Old answer", sources: [], createdAt: summary.updatedAt },
+      ] }),
+    });
+    const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: /历史/ }));
+    await user.click(await screen.findByRole("button", { name: /^Old question/ }));
+    expect(await screen.findByText("Old answer")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "返回首页工作台" }));
+    expect(window.location.pathname).toBe("/");
+    await user.click(screen.getByRole("button", { name: /历史/ }));
+    await user.click(screen.getByRole("button", { name: "删除会话 Old question" }));
+    await user.click(within(screen.getByRole("dialog", { name: "删除聊天记录" }))
+      .getByRole("button", { name: "确认删除" }));
+    await waitFor(() => expect(mockApi.deleteConversation).toHaveBeenCalledWith(project.id, "conversation-old"));
+    expect(window.location.pathname).toBe("/");
   });
 
   it("loads only the routed conversation after a direct page visit", async () => {
@@ -121,10 +202,10 @@ describe("App", () => {
     });
     const user = await login(mockApi);
     await user.click(screen.getByRole("button", { name: /历史/ }));
-    await user.click(await screen.findByRole("button", { name: /Question A/ }));
+    await user.click(await screen.findByRole("button", { name: /^Question A/ }));
     expect(await screen.findByText("Answer A")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /历史/ }));
-    await user.click(await screen.findByRole("button", { name: /Question B/ }));
+    await user.click(await screen.findByRole("button", { name: /^Question B/ }));
     expect(await screen.findByText("Answer B")).toBeInTheDocument();
     expect(window.location.pathname).toBe("/chat/B");
     expect(screen.queryByText("Answer A")).not.toBeInTheDocument();
@@ -189,7 +270,7 @@ describe("App", () => {
     await user.click(within(await screen.findByRole("dialog"))
       .getByRole("button", { name: "开始体验" }));
     await user.click(await screen.findByRole("button", { name: /历史/ }));
-    await user.click(await screen.findByRole("button", { name: /Earlier question/ }));
+    await user.click(await screen.findByRole("button", { name: /^Earlier question/ }));
 
     expect(await screen.findByText("Earlier answer")).toBeInTheDocument();
     expect(mockApi.getConversation).toHaveBeenCalledWith(project.id, "conversation-old");
@@ -212,7 +293,7 @@ describe("App", () => {
     const user = await login(mockApi);
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "开始体验" }));
     await user.click(await screen.findByRole("button", { name: /历史/ }));
-    await user.click(await screen.findByRole("button", { name: /First question/ }));
+    await user.click(await screen.findByRole("button", { name: /^First question/ }));
 
     expect(await screen.findByText("Completed answer")).toBeInTheDocument();
     expect(screen.getByText("Additional assistant detail")).toBeInTheDocument();
@@ -238,7 +319,7 @@ describe("App", () => {
     });
     const user = await login(mockApi);
     await user.click(screen.getByRole("button", { name: /历史/ }));
-    await user.click(await screen.findByRole("button", { name: /Old project question/ }));
+    await user.click(await screen.findByRole("button", { name: /^Old project question/ }));
     await user.click(screen.getByRole("button", { name: /项目/ }));
     await user.click(await screen.findByRole("button", { name: /Second Project/ }));
 
@@ -273,7 +354,7 @@ describe("App", () => {
     });
     const user = await login(mockApi);
     await user.click(screen.getByRole("button", { name: /历史/ }));
-    await user.click(await screen.findByRole("button", { name: /User A summary/ }));
+    await user.click(await screen.findByRole("button", { name: /^User A summary/ }));
     expect(await screen.findByText("User A secret")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "退出" }));
@@ -383,12 +464,12 @@ describe("App", () => {
     await user.type(screen.getByLabelText("给 Agent 的消息"), "Second question");
     await user.click(screen.getByRole("button", { name: "发送" }));
     expect(await screen.findByText("Second answer")).toBeInTheDocument();
-    expect(screen.queryByText("First answer")).not.toBeInTheDocument();
+    expect(screen.getByText("First answer")).toBeInTheDocument();
 
     const olderToggle = screen.getByRole("button", { name: /First question/ });
-    expect(olderToggle).toHaveAttribute("aria-expanded", "false");
+    expect(olderToggle).toHaveAttribute("aria-expanded", "true");
     await user.click(olderToggle);
-    expect(screen.getByText("First answer")).toBeInTheDocument();
+    expect(screen.queryByText("First answer")).not.toBeInTheDocument();
   });
 
   it("confirms a pending action through Java before refreshing tasks", async () => {

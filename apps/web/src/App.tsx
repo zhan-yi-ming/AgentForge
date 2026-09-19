@@ -96,6 +96,8 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<ConversationSummary>();
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [wikiCreateOpen, setWikiCreateOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
@@ -109,8 +111,11 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const chatModeRef = useRef(false);
   const activeConversationLoad = useRef(0);
   const loadingConversationId = useRef<string | undefined>(undefined);
+  const conversationIdRef = useRef<string | undefined>(undefined);
   const previousRoutePath = useRef(window.location.pathname);
   const decisionKeys = useRef(new Map<string, string>());
+
+  useEffect(() => { conversationIdRef.current = conversationId; }, [conversationId]);
 
   const resetWorkspaceState = useCallback(() => {
     streamAbort.current?.abort();
@@ -149,6 +154,8 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setTasksOpen(false);
     setHistoryOpen(false);
     setWikiCreateOpen(false);
+    setConversationToDelete(undefined);
+    setDeleteBusy(false);
     setPreviewOpen(false);
   }, []);
 
@@ -203,6 +210,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setPendingAction(undefined);
     setConversationSummaries([]);
     setHistoryOpen(false);
+    setConversationToDelete(undefined);
     setFormatInput("");
     setFormattedText("");
     setFormatComplete(false);
@@ -281,9 +289,40 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setStreaming(false);
     setError("");
     setHistoryOpen(false);
+    setConversationToDelete(undefined);
     setChatMode(true);
     chatModeRef.current = true;
     navigate("/chat");
+  }
+
+  async function deleteSelectedConversation() {
+    if (!projectId || !conversationToDelete || deleteBusy) return;
+    const selectedId = conversationToDelete.conversationId;
+    const requestedProjectId = projectId;
+    const requestedToken = sessionStorage.getItem(TOKEN_KEY);
+    setDeleteBusy(true);
+    setError("");
+    try {
+      await api.deleteConversation(requestedProjectId, selectedId);
+      if (activeProjectId.current !== requestedProjectId || sessionStorage.getItem(TOKEN_KEY) !== requestedToken) return;
+      setConversationSummaries((current) => current.filter((item) => item.conversationId !== selectedId));
+      setConversationToDelete(undefined);
+      const currentRoute = parseRoute(window.location.pathname);
+      if (currentRoute.page === "chat" && currentRoute.conversationId === selectedId) {
+        newChat();
+      } else if (currentRoute.page !== "chat" && conversationIdRef.current === selectedId) {
+        activeConversationLoad.current += 1;
+        streamAbort.current?.abort();
+        setConversationId(undefined);
+        setChatHistory([]);
+        setPendingAction(undefined);
+        setStreaming(false);
+      }
+    } catch (cause) {
+      if (activeProjectId.current === requestedProjectId && sessionStorage.getItem(TOKEN_KEY) === requestedToken) report(cause);
+    } finally {
+      setDeleteBusy(false);
+    }
   }
 
   useEffect(() => {
@@ -462,7 +501,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     streamAbort.current = controller;
     setStreaming(true); setError(""); setPendingAction(undefined);
     setChatHistory((current) => [...current, { id: historyId, question, answer: "", sources: [] }]);
-    setExpandedChatIds(new Set([historyId]));
+    setExpandedChatIds((current) => new Set(current).add(historyId));
     try {
       const result = await api.chatStream(projectId, question, conversationId, {
         onMetadata: (metadata) => {
@@ -612,7 +651,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
       {(chatHistory.length > 0 || streaming) && <button className="rail-button conversation-button" onClick={enterChatMode}><span>◌</span><small>对话</small>{unreadChat && <i className="unread-badge" aria-label="有新的 AI 回答" />}</button>}
     </div>}
     {projectsOpen && <aside className="floating-drawer projects-drawer"><div className="drawer-heading"><div><span className="section-label">WORKSPACES</span><strong>项目空间</strong></div><button className="drawer-close" aria-label="关闭项目空间" onClick={() => setProjectsOpen(false)}>×</button></div>{projects.map((project) => <button key={project.id} className={project.id === projectId ? "project active" : "project"} onClick={() => { setProjectId(project.id); if (route.page === "chat") navigate("/chat"); setProjectsOpen(false); }}><strong>{project.name}</strong><span>{project.description || "暂无描述"}</span></button>)}{!projects.length && <p className="empty-state">还没有项目</p>}</aside>}
-    {historyOpen && <aside className="floating-drawer history-drawer"><div className="drawer-heading"><div><span className="section-label">HISTORY</span><strong>历史会话</strong></div><button className="drawer-close" aria-label="关闭历史会话" onClick={() => setHistoryOpen(false)}>×</button></div><button className="ghost" onClick={newChat}>新建会话</button>{conversationSummaries.map((conversation) => <button key={conversation.conversationId} className="project" onClick={() => void openConversation(conversation.conversationId)} disabled={busy}><strong>{conversation.preview}</strong><span>{conversation.messageCount} 条消息</span></button>)}{!conversationSummaries.length && <p className="empty-state">暂无历史会话</p>}</aside>}
+    {historyOpen && <aside className="floating-drawer history-drawer"><div className="drawer-heading"><div><span className="section-label">HISTORY</span><strong>历史会话</strong></div><button className="drawer-close" aria-label="关闭历史会话" onClick={() => setHistoryOpen(false)}>×</button></div><button className="ghost" onClick={newChat}>新建会话</button>{conversationSummaries.map((conversation) => <div className="history-record" key={conversation.conversationId}><button className="project" onClick={() => void openConversation(conversation.conversationId)} disabled={busy || deleteBusy}><strong>{conversation.preview}</strong><span>{conversation.messageCount} 条消息</span></button><button type="button" className="history-delete" aria-label={`删除会话 ${conversation.preview}`} onClick={() => setConversationToDelete(conversation)} disabled={deleteBusy}>删除</button></div>)}{!conversationSummaries.length && <p className="empty-state">暂无历史会话</p>}</aside>}
     {tasksOpen && <aside className="floating-drawer tasks-drawer"><div className="drawer-heading"><div><span className="section-label">EXECUTION</span><strong>执行任务</strong></div><button className="drawer-close" aria-label="关闭执行任务" onClick={() => setTasksOpen(false)}>×</button></div><div className="task-list">{tasks.map((task) => <article key={task.id}><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><h3>{task.title}</h3><p>{task.description || "暂无描述"}</p><footer><span>{task.status.replace("_", " ")}</span><span>v{task.version}</span></footer></article>)}{!tasks.length && <p className="empty-state">暂无任务，可让 Agent 提出一个。</p>}</div></aside>}
     <main className="workspace centered-workspace">
       {error && <p role="alert" className="error banner">{error}</p>}
@@ -659,6 +698,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         /></Suspense>}
       </section>
     </main>
+    {conversationToDelete && <div className="onboarding-backdrop"><section className="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-conversation-title"><span className="eyebrow">HISTORY</span><h2 id="delete-conversation-title">删除聊天记录</h2><p>确定删除“{conversationToDelete.preview}”的聊天记录？删除后无法恢复；若还有待确认操作，请先完成或拒绝。</p><div className="delete-dialog-actions"><button type="button" className="ghost" onClick={() => setConversationToDelete(undefined)} disabled={deleteBusy}>取消</button><button type="button" className="danger" onClick={() => void deleteSelectedConversation()} disabled={deleteBusy}>{deleteBusy ? "删除中…" : "确认删除"}</button></div></section></div>}
     {onboardingOpen && <div className="onboarding-backdrop"><section className="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title"><span className="eyebrow">WHY AGENTFORGE</span><h2 id="onboarding-title">让项目知识真正参与执行</h2><p>AgentForge 把分散在 Wiki、任务和对话里的上下文放到同一个工作台，让团队更快理解问题、形成决策，并在确认后安全落地。</p><div className="onboarding-value"><span>问题</span><strong>信息散落，判断依赖个人记忆，执行容易失真。</strong><span>方法</span><strong>从项目上下文出发，让 AI 先解释、再提议，最后由人确认。</strong></div><div className="onboarding-modules"><details open><summary>项目空间</summary><p>切换项目时，Wiki、任务与对话上下文会严格隔离，避免跨项目混淆。</p></details><details><summary>项目对话</summary><p>直接询问架构、需求和风险；回答会带来源，涉及业务写入时会等待你的确认。</p></details><details><summary>Wiki 工作台</summary><p>把稳定知识沉淀为可编辑页面，并用底部预览窗即时检查 Markdown 结构。</p></details><details><summary>AI 文本整理</summary><p>把会议记录或技术笔记整理为可审阅的 Wiki 草稿，不会自动写回。</p></details></div><button onClick={completeOnboarding}>开始体验</button></section></div>}
   </div>;
 }

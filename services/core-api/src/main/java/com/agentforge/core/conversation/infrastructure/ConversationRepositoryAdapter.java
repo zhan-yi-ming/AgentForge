@@ -7,6 +7,7 @@ import java.util.UUID;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -21,8 +22,8 @@ class ConversationRepositoryAdapter implements AgentConversationRepository {
     private final SpringConversationRepository repository;
     ConversationRepositoryAdapter(SpringConversationRepository repository) { this.repository = repository; }
     public Optional<AgentConversation> findByIdForUpdate(UUID id) { return repository.findByIdForUpdate(id); }
-    public Optional<AgentConversation> findByScope(UUID id, UUID projectId, UUID userId) { return repository.findByIdAndProjectIdAndUserId(id, projectId, userId); }
-    public List<AgentConversation> findAllByScope(UUID projectId, UUID userId) { return repository.findAllByProjectIdAndUserIdOrderByUpdatedAtDescIdAsc(projectId, userId); }
+    public Optional<AgentConversation> findByScope(UUID id, UUID projectId, UUID userId) { return repository.findByIdAndProjectIdAndUserIdAndDeletedAtIsNull(id, projectId, userId); }
+    public List<AgentConversation> findAllByScope(UUID projectId, UUID userId) { return repository.findAllByProjectIdAndUserIdAndDeletedAtIsNullOrderByUpdatedAtDescIdAsc(projectId, userId); }
     public AgentConversation save(AgentConversation conversation) { return repository.save(conversation); }
 }
 
@@ -30,8 +31,8 @@ interface SpringConversationRepository extends JpaRepository<AgentConversation, 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from AgentConversation c where c.id = :id")
     Optional<AgentConversation> findByIdForUpdate(@Param("id") UUID id);
-    Optional<AgentConversation> findByIdAndProjectIdAndUserId(UUID id, UUID projectId, UUID userId);
-    List<AgentConversation> findAllByProjectIdAndUserIdOrderByUpdatedAtDescIdAsc(UUID projectId, UUID userId);
+    Optional<AgentConversation> findByIdAndProjectIdAndUserIdAndDeletedAtIsNull(UUID id, UUID projectId, UUID userId);
+    List<AgentConversation> findAllByProjectIdAndUserIdAndDeletedAtIsNullOrderByUpdatedAtDescIdAsc(UUID projectId, UUID userId);
 }
 
 @Repository
@@ -40,8 +41,12 @@ class MessageRepositoryAdapter implements AgentMessageRepository {
     MessageRepositoryAdapter(SpringMessageRepository repository) { this.repository = repository; }
     public List<AgentMessage> saveAll(Iterable<AgentMessage> messages) { return repository.saveAll(messages); }
     public List<AgentMessage> findAllByConversationId(UUID conversationId) { return repository.findAllByConversationIdOrderBySequenceAsc(conversationId); }
+    public void deleteAllByConversationId(UUID conversationId) { repository.deleteAllByConversationId(conversationId); }
 }
 
 interface SpringMessageRepository extends JpaRepository<AgentMessage, UUID> {
     List<AgentMessage> findAllByConversationIdOrderBySequenceAsc(UUID conversationId);
+    @Modifying
+    @Query("delete from AgentMessage m where m.conversationId = :conversationId")
+    void deleteAllByConversationId(@Param("conversationId") UUID conversationId);
 }

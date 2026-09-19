@@ -40,6 +40,7 @@ export interface ApiClient {
   listTasks(projectId: string): Promise<Task[]>;
   listConversations(projectId: string): Promise<ConversationSummary[]>;
   getConversation(projectId: string, conversationId: string): Promise<ConversationDetail>;
+  deleteConversation(projectId: string, conversationId: string): Promise<void>;
   chat(projectId: string, message: string, conversationId?: string): Promise<AgentChat>;
   chatStream(projectId: string, message: string, conversationId: string | undefined, callbacks: AgentStreamCallbacks, signal?: AbortSignal): Promise<AgentChat>;
   confirmAction(projectId: string, actionId: string, idempotencyKey: string): Promise<AgentAction>;
@@ -158,6 +159,7 @@ export function createApiClient(getToken: () => string | null): ApiClient {
     listTasks: (projectId) => request(`/api/v1/projects/${projectId}/tasks`),
     listConversations: (projectId) => request(`/api/v1/projects/${projectId}/agent/conversations`),
     getConversation: (projectId, conversationId) => request(`/api/v1/projects/${projectId}/agent/conversations/${conversationId}`),
+    deleteConversation: (projectId, conversationId) => request(`/api/v1/projects/${projectId}/agent/conversations/${conversationId}`, { method: "DELETE" }),
     chat: (projectId, message, conversationId) => request(`/api/v1/projects/${projectId}/agent/chat`, { method: "POST", body: JSON.stringify({ message, conversationId }) }),
     chatStream,
     confirmAction: (projectId, actionId, idempotencyKey) => request(`/api/v1/projects/${projectId}/agent/actions/${actionId}/confirm`, {

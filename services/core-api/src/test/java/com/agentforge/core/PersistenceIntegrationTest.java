@@ -102,6 +102,35 @@ class PersistenceIntegrationTest {
     }
 
     @Test
+    void deletedConversationKeepsItsIdButErasesCompletedMessages() {
+        var authentication = authenticationService.register(
+                "history-delete-integration@example.com", "History Delete", "integration-password");
+        var actor = new AuthenticatedActor(authentication.user().id(), false);
+        var project = projectService.createProject(actor, "History Delete Project", null);
+        var conversationId = java.util.UUID.randomUUID();
+        conversationHistoryService.appendCompletedExchange(project.id(), actor, conversationId,
+                "Private question", "Private answer", java.util.List.of());
+
+        conversationHistoryService.delete(project.id(), conversationId, actor);
+
+        assertThat(conversationHistoryService.list(project.id(), actor)).isEmpty();
+        assertThatThrownBy(() -> conversationHistoryService.get(project.id(), conversationId, actor))
+                .isInstanceOf(com.agentforge.core.shared.error.ResourceNotFoundException.class);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from agent_message where conversation_id = ?", Integer.class, conversationId))
+                .isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "select preview from agent_conversation where id = ?", String.class, conversationId))
+                .isEmpty();
+        assertThat(jdbcTemplate.queryForObject(
+                "select deleted_at from agent_conversation where id = ?", java.time.OffsetDateTime.class, conversationId))
+                .isNotNull();
+        assertThatThrownBy(() -> conversationHistoryService.appendCompletedExchange(project.id(), actor,
+                conversationId, "Again", "Answer", java.util.List.of()))
+                .isInstanceOf(com.agentforge.core.shared.error.ConflictException.class);
+    }
+
+    @Test
     void flywayCreatesSchemaAndJpaPersistsAuthenticatedProjectResources() {
         var authentication = authenticationService.register(
                 "integration@example.com",

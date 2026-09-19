@@ -1,5 +1,7 @@
 # 变更记录
 
+- `2026-09-18-p3-02-conversation-lifecycle.md`：单会话删除、审批冲突与旧回复可见性修复。
+
 - `2026-09-09-pre-v3-grafana-logs.md`：在 V3 前以 Grafana、Loki 与 Alloy 提供受认证的单机容器日志查询界面。
 - `2026-09-09-v2-stable-production-deployment.md`：将已验证的 V2 stable 版本发布到 `zhanyiming.cloud`，并保留备份、回滚与公网验收证据。
 - `2026-09-09-v2-09-regression-release.md`：V2 完整 Release Regression、公开证据收口与 README Agent 工作流叙事。

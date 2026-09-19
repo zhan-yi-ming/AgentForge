@@ -14,7 +14,7 @@
 
 1. 用户根据登录卡片提示填写受限 Demo 凭据；短期 access token 只保存到当前标签页的 `sessionStorage`，密码不进入页面源码、URL 或浏览器持久化。
 2. Web 加载用户自己的项目，选择项目后并行加载 Wiki 和 Task；首次登录显示可关闭的新手引导，完成标记保存在 `localStorage`，顶栏可重新打开。
-3. 用户在主内容中央发送 Chat；Web 复用项目内 conversationId，并在当前项目的浏览器内存会话中保留问答。最新一条默认展开，旧记录默认收起且可逐条展开；切换项目或刷新页面后清空。
+3. 用户在主内容中央发送 Chat；Web 复用项目内 conversationId，并在当前项目的浏览器内存会话中保留问答。P3-02 后新消息不自动收起旧 AI 回复，用户可逐条手动收起；切换项目后清空内存内容，刷新指定会话路由时从 Core 恢复。
 4. 用户向下选择或新建 Wiki，在编辑区修改 Markdown；预览区安全渲染，保存时发送当前 version。
 5. 响应包含 pending action 时，Web 展示 action 类型、Task、字段和预期 version。确认/拒绝只调用 Java action API，并为该 action 生成稳定 Idempotency Key；网络失败重试复用该 key。只有 `EXECUTED` 成功才刷新 Task，`FAILED` 显示稳定失败信息。
 6. “AI 文本整理”保留原始输入，通过独立、无 conversationId 的 SSE 请求在 complete 前真实展示已到达的 delta。未闭合的全文 Markdown 围栏以流式安全文本展示，避免整个文档变成深色代码块；complete 后再交给共用 Markdown 渲染器。整理与项目 Chat 互斥，结果不改变 Chat 状态或接受 tool proposal。
@@ -39,7 +39,7 @@
 
 ## 已知限制
 
-当前没有 refresh token、多标签引导同步、复杂路由、分页、自动保存或历史会话删除/搜索。当前页面内存中的对话视图在切换项目或刷新时清空，但已完成问答已持久化到 Core API/PostgreSQL，可在左侧“历史”抽屉中按当前 Project/User 作用域恢复并继续使用原 conversationId；恢复逻辑按角色顺序识别 USER 与 ASSISTANT，不因遗留的不完整消息序列漏掉后续完整回答。引导完成标记只属于当前浏览器 profile；清除站点数据后会再次显示。AI 整理复用现有流式 Agent Chat，仍消费一次用户日配额；文本质量与首段延迟取决于服务器配置的真实模型。
+当前没有 refresh token、多标签引导同步、分页、自动保存或历史会话搜索。已完成问答持久化到 Core API/PostgreSQL，可在左侧“历史”抽屉中按当前 Project/User 作用域恢复并继续使用原 conversationId；P3-02 增加单会话删除。恢复逻辑按角色顺序识别 USER 与 ASSISTANT，不因遗留的不完整消息序列漏掉后续完整回答。引导完成标记只属于当前浏览器 profile；清除站点数据后会再次显示。AI 整理复用现有流式 Agent Chat，仍消费一次用户日配额；文本质量与首段延迟取决于服务器配置的真实模型。
 
 公网 V2 Demo 使用固定顶栏和独立返回按钮安全区，主工作区必须占用顶栏下方的独立布局行，悬浮导航与工具窗按剩余视口居中，不能被固定顶栏覆盖。品牌图标不使用字母缩写，浏览器 favicon 与页面品牌位保持一致。版本状态显示 `V2 Live Demo`。生产种子脚本会为每个 Demo 用户分别创建或补齐同名体验项目中的 Wiki 与 Task；这些数据是用户隔离的副本，A 用户删除自己的条目不会删除 B 用户的对应条目。
 

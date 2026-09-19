@@ -17,6 +17,7 @@ import com.agentforge.core.agent.domain.AgentAuditEventRepository;
 import com.agentforge.core.agent.domain.AgentAuditEventType;
 import com.agentforge.core.agent.domain.AgentTaskAction;
 import com.agentforge.core.agent.domain.AgentTaskActionRepository;
+import com.agentforge.core.conversation.domain.AgentConversationRepository;
 import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.security.ToolOperation;
@@ -37,24 +38,8 @@ public class AgentActionService {
     private final ProjectAccess projectAccess;
     private final ToolRiskEngine riskEngine;
     private final TaskService taskService;
+    private final AgentConversationRepository conversations;
     private final Clock clock;
-
-    public AgentActionService(
-            AgentTaskActionRepository actions,
-            ProjectAccess projectAccess,
-            TaskService taskService,
-            Clock clock) {
-        this(actions, event -> event, projectAccess, taskService, clock);
-    }
-
-    public AgentActionService(
-            AgentTaskActionRepository actions,
-            AgentAuditEventRepository auditEvents,
-            ProjectAccess projectAccess,
-            TaskService taskService,
-            Clock clock) {
-        this(actions, auditEvents, projectAccess, new ToolRiskEngine(projectAccess), taskService, clock);
-    }
 
     @Autowired
     public AgentActionService(
@@ -63,13 +48,15 @@ public class AgentActionService {
             ProjectAccess projectAccess,
             ToolRiskEngine riskEngine,
             TaskService taskService,
-            Clock clock) {
+            Clock clock,
+            AgentConversationRepository conversations) {
         this.actions = actions;
         this.auditEvents = auditEvents;
         this.projectAccess = projectAccess;
         this.riskEngine = riskEngine;
         this.taskService = taskService;
         this.clock = clock;
+        this.conversations = conversations;
     }
 
     @Transactional
@@ -89,6 +76,14 @@ public class AgentActionService {
             ToolProposal proposal,
             String requestId) {
         projectAccess.requireAccess(projectId, actor);
+        conversations.findByIdForUpdate(conversationId).ifPresent(conversation -> {
+            if (!conversation.belongsTo(projectId, actor.userId())) {
+                throw new ForbiddenException("The conversation belongs to another scope.");
+            }
+            if (conversation.isDeleted()) {
+                throw new ConflictException("The conversation history was deleted.");
+            }
+        });
         NormalizedProposal normalized;
         try {
             normalized = normalize(proposal);

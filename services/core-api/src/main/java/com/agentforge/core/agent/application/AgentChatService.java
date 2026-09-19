@@ -4,6 +4,7 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.List;
+import java.util.Objects;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -24,14 +25,6 @@ public class AgentChatService {
     private final AiUsageQuota aiUsageQuota;
     private final ConversationHistoryService conversationHistory;
 
-    public AgentChatService(
-            ProjectAccess projectAccess,
-            AgentServiceClient agentServiceClient,
-            AgentActionService agentActionService,
-            AiUsageQuota aiUsageQuota) {
-        this(projectAccess, agentServiceClient, agentActionService, aiUsageQuota, null);
-    }
-
     @Autowired
     public AgentChatService(
             ProjectAccess projectAccess,
@@ -43,7 +36,7 @@ public class AgentChatService {
         this.agentServiceClient = agentServiceClient;
         this.agentActionService = agentActionService;
         this.aiUsageQuota = aiUsageQuota;
-        this.conversationHistory = conversationHistory;
+        this.conversationHistory = Objects.requireNonNull(conversationHistory);
     }
 
     public AgentChatResult chat(
@@ -53,6 +46,9 @@ public class AgentChatService {
             UUID conversationId,
             String requestId) {
         projectAccess.requireAccess(projectId, actor);
+        if (conversationId != null) {
+            conversationHistory.requireWritable(projectId, conversationId, actor);
+        }
         aiUsageQuota.consume(actor.userId());
         AgentChatResult result = agentServiceClient.chat(
                 projectId,
@@ -80,6 +76,9 @@ public class AgentChatService {
             UUID conversationId,
             String requestId) {
         projectAccess.requireAccess(projectId, actor);
+        if (conversationId != null) {
+            conversationHistory.requireWritable(projectId, conversationId, actor);
+        }
         aiUsageQuota.consume(actor.userId());
         return new AgentChatCommand(projectId, actor, message.trim(), conversationId, requestId);
     }
@@ -124,10 +123,8 @@ public class AgentChatService {
     }
 
     private void persist(AgentChatCommand command, AgentChatResult result) {
-        if (conversationHistory != null) {
-            conversationHistory.appendCompletedExchange(command.projectId(), command.actor(),
-                    result.conversationId(), command.message(), result.answer(), result.sources());
-        }
+        conversationHistory.appendCompletedExchange(command.projectId(), command.actor(),
+                result.conversationId(), command.message(), result.answer(), result.sources());
     }
 
     private AgentStreamEvent finalizeEvent(
