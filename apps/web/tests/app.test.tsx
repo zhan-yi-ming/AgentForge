@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -43,6 +43,50 @@ async function login(mockApi: ApiClient) {
 
 describe("App", () => {
   beforeEach(() => window.history.replaceState({}, "", "/"));
+  it("renders the Wiki graph outside the workspace card", async () => {
+    window.history.replaceState({}, "", "/wiki/graph");
+    sessionStorage.setItem("agentforge.accessToken", "token");
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    render(<App api={api()} />);
+    const graph = await screen.findByRole("region", { name: "Wiki 知识图谱" });
+    expect(graph.closest(".workspace-panel")).toBeNull();
+    expect(graph.closest(".centered-workspace")).toBeNull();
+  });
+
+  it("shows Wiki loading failures on the dedicated graph page", async () => {
+    window.history.replaceState({}, "", "/wiki/graph");
+    sessionStorage.setItem("agentforge.accessToken", "token");
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    render(<App api={api({ listWikiPages: vi.fn().mockRejectedValue(new Error("Wiki pages unavailable")) })} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Wiki pages unavailable");
+  });
+
+  it("keeps new chat and voice buttons inside the composer next to expand", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    const user = await login(api({ chatStream: vi.fn().mockResolvedValue({
+      conversationId: "icon-chat", answer: "Ready", requestId: "r-icon", sources: [],
+    }) }));
+    await user.type(screen.getByLabelText("给 Agent 的消息"), "hello");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    expect(await screen.findByText("Ready")).toBeInTheDocument();
+    const composer = screen.getByLabelText("给 Agent 的消息").closest("form");
+    expect(composer).not.toBeNull();
+    expect(within(composer!).getByRole("button", { name: "新建会话" })).toBeInTheDocument();
+    expect(within(composer!).getByRole("button", { name: "语音输入" })).toBeInTheDocument();
+    expect(within(composer!).getByRole("button", { name: "放大聊天输入框" })).toBeInTheDocument();
+  });
+
+  it("explains when formatting input exceeds the supported message length", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    const mockApi = api();
+    const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: "AI 文本整理" }));
+    fireEvent.change(await screen.findByLabelText("待整理原文"), { target: { value: "文".repeat(16_000) } });
+    expect(screen.getByText(/超过单次整理上限/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "AI 整理并预览" })).toBeDisabled();
+    expect(mockApi.chatStream).not.toHaveBeenCalled();
+  });
+
   it("loads current-project Wiki pages when the graph route is opened directly", async () => {
     window.history.replaceState({}, "", "/wiki/graph");
     sessionStorage.setItem("agentforge.accessToken", "token");

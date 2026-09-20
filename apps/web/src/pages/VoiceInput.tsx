@@ -161,13 +161,15 @@ export default function VoiceInput({ api, projectId, onTranscript }: Props) {
     setPreview("");
   }, [api, projectId]);
 
+  const label = phase === "recording" ? "停止录音" : phase === "starting" ? "连接语音中" : phase === "finishing" ? "转写中" : "语音输入";
   return <div className="voice-input" aria-live="polite">
-    <button type="button" className="ghost" onClick={() => void (phase === "recording" ? stop() : start())}
+    <button type="button" className="composer-utility-button" aria-label={label} title={label}
+      onClick={() => void (phase === "recording" ? stop() : start())}
       disabled={phase === "starting" || phase === "finishing" || !navigator.mediaDevices?.getUserMedia}>
-      {phase === "recording" ? "停止录音" : phase === "starting" ? "连接语音…" : phase === "finishing" ? "转写中…" : "🎙 语音输入"}
+      {phase === "recording" ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" /></svg> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3" /><path d="M6 11a6 6 0 0 0 12 0M12 17v4m-4 0h8" /></svg>}
     </button>
-    {phase === "recording" && <button type="button" className="ghost" onClick={() => void cancel()}>取消</button>}
-    {phase !== "idle" && <span>{preview || "正在听…"}</span>}
-    {error && <span role="alert">{error}</span>}
+    {phase === "recording" && <button type="button" className="composer-utility-button" aria-label="取消录音" title="取消录音" onClick={() => void cancel()}>×</button>}
+    {phase !== "idle" && <span className="voice-preview">{preview || "正在听…"}</span>}
+    {error && <span role="alert" className="voice-error">{error}</span>}
   </div>;
 }

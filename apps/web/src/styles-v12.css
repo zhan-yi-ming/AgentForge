@@ -729,8 +729,9 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 .chat-session { min-height: calc(100vh - 90px); padding-bottom: 170px; }
 .chat-session .conversation-history { flex: none; min-height: auto; max-height: none; overflow: visible; padding-bottom: 1rem; }
 .chat-session .chat-composer { position: fixed; z-index: 9; left: 50%; right: auto; bottom: 1rem; transform: translateX(-50%); margin: 0; }
-.chat-session .voice-input { position: fixed; z-index: 9; bottom: 7.4rem; left: 50%; transform: translateX(-50%); width: min(100%, 820px); display: flex; align-items: center; gap: .5rem; padding: .35rem .6rem; border-radius: 12px; background: var(--surface); box-shadow: 0 4px 16px rgba(28,28,26,.08); }
-.chat-session .voice-input span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .78rem; color: var(--muted); }
+.chat-session .voice-input { position: relative; display: inline-flex; align-items: center; gap: .25rem; min-width: 0; }
+.chat-session .voice-preview { max-width: min(23vw, 180px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .75rem; color: var(--muted); }
+.chat-session .voice-error { position: absolute; bottom: calc(100% + .55rem); left: 0; width: max-content; max-width: min(320px, 80vw); padding: .45rem .65rem; border: 1px solid #d7aba6; border-radius: 8px; background: #fff8f7; color: #a22c23; box-shadow: 0 4px 15px #0001; font-size: .75rem; }
 .pending-action-reopen { position: fixed; z-index: 10; bottom: 8.3rem; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 3rem); box-shadow: 0 8px 28px rgba(28,28,26,.12); }
 .approval-backdrop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 1rem; background: rgba(19, 21, 24, .5); backdrop-filter: blur(4px); }
 .approval-dialog { width: min(100%, 520px); max-height: min(780px, calc(100dvh - 2rem)); overflow: auto; padding: clamp(1.2rem, 3vw, 2rem); border: 1px solid var(--line-strong); border-radius: 18px; background: var(--surface); box-shadow: 0 24px 80px rgba(19,21,24,.22); }
@@ -966,4 +967,55 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
   .auth-layout .login-heading .brand-mark { width: 48px; height: 48px; }
   .auth-layout .login-card h2 { font-size: 1.3rem; }
   .auth-watermark { opacity: .55; }
+}
+
+/* Composer quick actions stay in one compact control row. */
+.agent-panel .composer-utility-button, .agent-panel .voice-input > .composer-utility-button { width: 34px; height: 34px; min-width: 34px; padding: 0; display: inline-grid; place-items: center; border: 1px solid transparent; border-radius: 10px; background: var(--active-bg); color: var(--ink); cursor: pointer; }
+.agent-panel .composer-utility-button:hover:not(:disabled) { background: var(--ink); color: #fff; }
+.agent-panel .composer-utility-button:disabled { opacity: .48; cursor: not-allowed; }
+.agent-panel .composer-utility-button svg { display: block; width: 17px; height: 17px; }
+.format-input-count { justify-self: end; color: var(--muted); font-size: .75rem; }
+.format-limit-error { margin: 0; color: #a22c23; font-size: .8rem; }
+@media (max-width: 720px) { .chat-session .composer-footer > span { display: none; } .chat-session .voice-preview { max-width: 65px; } }
+
+/* Keep the entrance within a normal viewport without clipping the form. */
+.auth-shell { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100dvh; min-height: 0; padding: clamp(.8rem, 2vw, 1.6rem) clamp(1rem, 5vw, 6rem) clamp(.7rem, 2vw, 1.5rem); overflow: hidden; }
+.auth-layout { min-height: 0; height: 100%; gap: clamp(2rem, 5vw, 5rem); }
+.auth-layout .auth-copy h1 { margin: .75rem 0 .95rem; font-size: clamp(2.2rem, 3.55vw, 3.75rem); line-height: 1.12; }
+.auth-layout .auth-copy p { font-size: clamp(.92rem, 1.25vw, 1.12rem); line-height: 1.5; }
+.auth-layout .auth-copy .auth-lead { font-size: clamp(1.05rem, 1.5vw, 1.3rem); }
+.auth-benefits { margin-top: 1.35rem; gap: 1rem; }
+.auth-benefits span { width: 38px; height: 38px; font-size: 1rem; margin-bottom: 0; }
+.auth-layout .login-card { gap: .85rem; padding: clamp(1.35rem, 2.4vw, 2.25rem); }
+.auth-layout .login-heading .brand-mark { width: 48px; height: 48px; }
+.auth-layout .login-card h2 { font-size: 1.35rem; }
+.auth-layout .login-note { margin: 0; }
+.auth-layout .login-form { gap: .8rem; }
+.auth-layout .login-form label { gap: .4rem; }
+.auth-layout .login-form input { min-height: 46px; padding: .65rem .85rem; }
+.auth-layout .login-form button { min-height: 46px; margin-top: .15rem; }
+.auth-footer { bottom: .7rem; }
+@media (max-width: 900px) {
+  .auth-shell { padding: 1rem 1.5rem; }
+  .auth-layout { grid-template-columns: minmax(0, 1fr) minmax(300px, 390px); gap: 1.4rem; padding: 0; }
+  .auth-layout .auth-copy h1 { font-size: clamp(2rem, 4.5vw, 2.7rem); }
+  .auth-layout .login-card { justify-self: end; }
+}
+@media (max-width: 700px) {
+  .auth-shell { padding: .8rem 1rem; }
+  .auth-layout { grid-template-columns: 1fr; grid-template-rows: auto auto; align-content: center; gap: .8rem; }
+  .auth-layout .auth-copy h1 { font-size: clamp(1.75rem, 7vw, 2.35rem); margin: .35rem 0 .45rem; }
+  .auth-layout .auth-copy p { font-size: .9rem; margin: .25rem 0; line-height: 1.35; }
+  .auth-layout .auth-copy .auth-lead { font-size: 1rem; }
+  .auth-benefits { display: none; }
+  .auth-layout .login-card { justify-self: stretch; width: 100%; max-width: none; gap: .45rem; padding: 1rem; }
+  .auth-layout .login-heading .brand-mark { width: 38px; height: 38px; }
+  .auth-layout .login-card h2 { font-size: 1.16rem; }
+  .auth-layout .login-form { gap: .6rem; }
+  .auth-layout .login-form input, .auth-layout .login-form button { min-height: 41px; }
+  .auth-footer { display: none; }
+}
+@media (max-height: 590px) {
+  .auth-shell { height: auto; min-height: 100dvh; overflow-y: auto; }
+  .auth-layout { height: auto; min-height: 0; padding: 1rem 0; }
 }

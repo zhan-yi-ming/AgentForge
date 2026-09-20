@@ -213,6 +213,30 @@ def test_chat_stream_emits_metadata_deltas_and_complete_in_order() -> None:
     assert events[-1]["toolProposal"] is None
 
 
+def test_chat_stream_accepts_ten_thousand_character_formatting_message() -> None:
+    app.dependency_overrides[get_responder] = lambda: FakeStreamingResponder()
+    try:
+        response = client.post(
+            "/internal/v1/chat/stream",
+            headers={"X-AgentForge-Internal-Token": TOKEN},
+            json=chat_request(message="文" * 10_000),
+        )
+    finally:
+        app.dependency_overrides.pop(get_responder, None)
+
+    assert response.status_code == 200
+    assert '"type":"complete"' in response.text
+
+
+def test_chat_stream_rejects_messages_above_sixteen_thousand_characters() -> None:
+    response = client.post(
+        "/internal/v1/chat/stream",
+        headers={"X-AgentForge-Internal-Token": TOKEN},
+        json=chat_request(message="文" * 16_001),
+    )
+    assert response.status_code == 422
+
+
 def test_chat_stream_sends_only_cited_sources_at_completion() -> None:
     class CitingResponder:
         def __call__(self, state):

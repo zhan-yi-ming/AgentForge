@@ -91,6 +91,41 @@ class AgentChatApiTest {
     }
 
     @Test
+    void chatStreamAcceptsAWholeTenThousandCharacterFormattingInput() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        String message = "文".repeat(10_000);
+        AgentChatCommand command = new AgentChatCommand(projectId,
+                new com.agentforge.core.security.AuthenticatedActor(UUID.randomUUID(), false),
+                message, null, "request-long-format");
+        when(agentChatService.prepareStream(eq(projectId), any(), eq(message), eq(null), any()))
+                .thenReturn(command);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            java.util.function.Consumer<AgentStreamEvent> sink = invocation.getArgument(1);
+            sink.accept(new AgentStreamEvent("complete", null, null, List.of(), null, null, null, null));
+            return null;
+        }).when(agentChatService).stream(eq(command), any());
+
+        mockMvc.perform(post("/api/v1/projects/{projectId}/agent/chat/stream", projectId)
+                        .with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString()).claim("roles", List.of("USER"))))
+                        .header("X-Request-Id", "request-long-format")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"" + message + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+    }
+
+    @Test
+    void chatStreamRejectsMessagesAboveSixteenThousandCharacters() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        mockMvc.perform(post("/api/v1/projects/{projectId}/agent/chat/stream", projectId)
+                        .with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString()).claim("roles", List.of("USER"))))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"" + "文".repeat(16_001) + "\"}"))
+                .andExpect(status().isBadRequest());
+        org.mockito.Mockito.verifyNoInteractions(agentChatService);
+    }
+
+    @Test
     void chatReturnsAgentContractAndRequestId() throws Exception {
         UUID projectId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();

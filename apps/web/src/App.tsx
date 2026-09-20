@@ -1,4 +1,4 @@
-import { FormEvent, PointerEvent as ReactPointerEvent, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, PointerEvent as ReactPointerEvent, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ApiProblem, createApiClient, type AgentAction, type ApiClient, type ConversationSummary, type Project, type Task, type WikiPage } from "./api";
 import { normalizeMarkdownContent } from "./markdown";
 import { parseRoute, useAppRoute } from "./route";
@@ -14,6 +14,8 @@ const TOKEN_KEY = "agentforge.accessToken";
 const ONBOARDING_KEY = "agentforge.onboardingComplete";
 const LOGIN_FAILURE_MESSAGE = "请联系我 向我索要体验账号";
 const DEFAULT_FORMATTED_WIKI_TITLE = "AI 整理文档";
+const FORMAT_PROMPT_PREFIX = "请将以下内容整理为 Markdown，保留事实，使用一个明确的一级标题，不执行写入：\n\n";
+const MAX_FORMAT_INPUT_LENGTH = 16_000 - FORMAT_PROMPT_PREFIX.length;
 
 type WorkspacePanel = "wiki" | "tasks" | "format";
 
@@ -594,7 +596,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   }
 
   async function formatText() {
-    if (!projectId || !formatInput.trim()) return;
+    if (!projectId || !formatInput.trim() || formatInput.trim().length > MAX_FORMAT_INPUT_LENGTH) return;
     const requestedProjectId = projectId;
     const controller = new AbortController();
     formatAbort.current?.abort();
@@ -606,7 +608,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     try {
       const result = await api.chatStream(
         projectId,
-        `请将以下内容整理为 Markdown，保留事实，使用一个明确的一级标题，不执行写入：\n\n${formatInput.trim()}`,
+        `${FORMAT_PROMPT_PREFIX}${formatInput.trim()}`,
         undefined,
         {
           onDelta: (text) => {
@@ -634,8 +636,8 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     }
   }
 
-  function renderChatComposer() {
-    return <form className="chat-composer" onSubmit={(event) => { event.stopPropagation(); void sendChat(event); }}><textarea aria-label="给 Agent 的消息" value={chatMessage} onChange={(event) => setChatMessage(event.target.value)} placeholder="向 Agent 提问，探索项目上下文…" /><div className="composer-footer"><span>Agent 会基于当前项目 Wiki 与任务回答</span>{(chatMode || activePanel) && <button type="button" className="expand-chat-button" aria-label={chatExpanded ? "缩小聊天输入框" : "放大聊天输入框"} onClick={() => setChatExpanded((expanded) => !expanded)}><Icon name={chatExpanded ? "shrink" : "expand"} /></button>}<button aria-label="发送" disabled={busy || streaming || !chatMessage.trim()}>{streaming ? "生成中…" : "发送"}<span>↗</span></button></div></form>;
+  function renderChatComposer(controls?: ReactNode) {
+    return <form className="chat-composer" onSubmit={(event) => { event.stopPropagation(); void sendChat(event); }}><textarea aria-label="给 Agent 的消息" value={chatMessage} onChange={(event) => setChatMessage(event.target.value)} placeholder="向 Agent 提问，探索项目上下文…" /><div className="composer-footer"><span>Agent 会基于当前项目 Wiki 与任务回答</span>{controls}{(chatMode || activePanel) && <button type="button" className="expand-chat-button" aria-label={chatExpanded ? "缩小聊天输入框" : "放大聊天输入框"} onClick={() => setChatExpanded((expanded) => !expanded)}><Icon name={chatExpanded ? "shrink" : "expand"} /></button>}<button aria-label="发送" disabled={busy || streaming || !chatMessage.trim()}>{streaming ? "生成中…" : "发送"}<span>↗</span></button></div></form>;
   }
 
   if (!authenticated) {
@@ -669,6 +671,10 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     </main>;
   }
 
+  if (route.page === "wiki-graph") {
+    return <Suspense fallback={<p role="status">正在打开知识图谱…</p>}><WikiGraphPage projectId={projectId} pages={wikiPages} error={error} onBack={() => navigate("/wiki")} onOpenPage={(page) => { selectWiki(page); navigate("/wiki"); }} /></Suspense>;
+  }
+
   return <div className="app-shell">
     <header className={chatMode ? "topbar chat-mode" : "topbar"}><div className="topbar-logo"><img className="brand-mark small" src="/brand-mark.svg" alt="AgentForge" /><span className="brand"><strong>AgentForge</strong><small>Project intelligence workspace</small></span></div><div className="topbar-right"><button className="guide-button icon-button" onClick={() => setOnboardingOpen(true)}><Icon name="info" />产品说明</button><span className="status"><i /> V2 Live Demo</span><button className="logout-button icon-button" onClick={logout}><Icon name="logout" />退出</button></div></header>
     {chatMode && <button className="chat-back-button" aria-label="返回首页工作台" onClick={leaveChatMode}><Icon name="back" /></button>}
@@ -687,7 +693,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
       {chatMode ? <Suspense fallback={<p role="status">正在打开聊天…</p>}><ChatPage
         conversationId={conversationId} history={chatHistory} expandedIds={expandedChatIds}
         streaming={streaming} pendingAction={pendingAction} busy={busy} expandedComposer={chatExpanded}
-        composer={renderChatComposer()} onNewChat={newChat}
+        composer={(controls) => renderChatComposer(controls)} onNewChat={newChat}
         projectId={projectId ?? ""} api={api} onVoiceTranscript={(text) => setChatMessage((current) => current.trim() ? `${current.trim()} ${text}` : text)}
         onToggle={(id) => setExpandedChatIds((current) => {
           const next = new Set(current);
@@ -704,13 +710,12 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
 
       <section className={chatMode ? activePanel ? "workspace-panel chat-tool-window" : "workspace-panel workspace-hidden" : "workspace-panel"} ref={wikiPanel}>
         {chatMode && activePanel && <button className="drawer-close chat-tool-close" aria-label="关闭悬浮工作台" onClick={() => setActivePanel(null)}>×</button>}
-        {!chatMode && route.page !== "wiki-graph" && <nav className="workspace-tabs" aria-label="工作台导航">
+        {!chatMode && <nav className="workspace-tabs" aria-label="工作台导航">
           <button className={activePanel === "wiki" ? "active" : ""} onClick={() => openPanel("wiki")}>Wiki 工作台</button>
           <button className={activePanel === "tasks" ? "active" : ""} onClick={() => openPanel("tasks")}>执行任务 <span>{tasks.length}</span></button>
           <button className={activePanel === "format" ? "active" : ""} onClick={() => openPanel("format")}>AI 文本整理</button>
         </nav>}
-        {route.page === "wiki-graph" && <Suspense fallback={<p role="status">正在打开知识图谱…</p>}><WikiGraphPage projectId={projectId} pages={wikiPages} onBack={() => navigate("/wiki")} onOpenPage={(page) => { selectWiki(page); navigate("/wiki"); }} /></Suspense>}
-        {activePanel === "wiki" && route.page !== "wiki-graph" && <Suspense fallback={<p role="status">正在打开 Wiki…</p>}><WikiPage
+        {activePanel === "wiki" && <Suspense fallback={<p role="status">正在打开 Wiki…</p>}><WikiPage
           pages={wikiPages} selectedId={wikiId} title={wikiTitle} content={wikiContent} feedback={wikiFeedback}
           busy={busy} createOpen={wikiCreateOpen} previewOpen={previewOpen}
           previewPosition={previewPosition} previewSize={previewSize} onSelect={selectWiki}
@@ -726,6 +731,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         {activePanel === "tasks" && <Suspense fallback={<p role="status">正在打开任务…</p>}><TaskView tasks={tasks} /></Suspense>}
         {activePanel === "format" && <Suspense fallback={<p role="status">正在打开整理…</p>}><FormatView
           input={formatInput} text={formattedText} complete={formatComplete} applied={formatApplied}
+          maxInputLength={MAX_FORMAT_INPUT_LENGTH}
           busy={busy} streaming={streaming} onInput={setFormatInput}
           onFormat={() => void formatText()} onApply={applyFormattedText}
         /></Suspense>}

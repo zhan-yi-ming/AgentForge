@@ -278,3 +278,5 @@ reject 先提交 `REJECTED` 再恢复 Agent wait。相同 key 可重试恢复；
 ## 兼容性
 
 Day 2 在首个可用版本形成前有意替换了 Day 1 匿名 User / Project 契约，迁移理由记录在 ADR-0005 和当前变更记录。后续新增可选响应字段视为兼容；删除或重命名字段、改变含义或状态码属于破坏性变化，必须先更新功能/API 文档并写 ADR 或迁移说明。
+
+Chat 同步与 SSE 请求的 `message` 均要求非空且最多 16,000 字符（包含 AI 整理前置指令）；超限返回 400 Problem Details，不进入 Agent、配额或写入链路。

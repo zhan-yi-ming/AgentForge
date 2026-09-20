@@ -13,7 +13,7 @@ class ChatRequest(ApiModel):
     project_id: UUID
     user_id: UUID
     actor_admin: bool = False
-    message: str = Field(min_length=1, max_length=8000)
+    message: str = Field(min_length=1, max_length=16000)
     conversation_id: UUID | None = None
     request_id: str = Field(min_length=1, max_length=128)
 

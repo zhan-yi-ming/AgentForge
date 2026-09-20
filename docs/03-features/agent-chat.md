@@ -5,7 +5,7 @@
 
 认证用户在项目内提交 message 与可选 conversationId。Core API 校验 owner/admin 权限并调用 Agent Service；LangGraph 规范化请求、检索当前项目 Wiki/Task 后生成回答，Java 返回 answer、conversationId、requestId 和 sources。
 
-Day 4 Graph 为 `START -> prepare -> retrieve -> respond -> END`。State 在 Day 3 字段上增加 actor_admin、retrieved_context 与 sources。message 去空白后 1–8000 字符；conversationId 缺失时 Python 生成 UUID。`retrieve` 先通过 Core API 获取已授权来源，再执行 Chunk 同步、Embedding、BM25、pgvector 与 RRF。
+Day 4 Graph 为 `START -> prepare -> retrieve -> respond -> END`。State 在 Day 3 字段上增加 actor_admin、retrieved_context 与 sources。message 去空白后 1–16000 字符；conversationId 缺失时 Python 生成 UUID。`retrieve` 先通过 Core API 获取已授权来源，再执行 Chunk 同步、Embedding、BM25、pgvector 与 RRF。
 
 未认证 401；无项目权限 403；无效输入 400；Agent Service、Core 回调、索引数据库或 Embedding provider 不可用时公共入口返回 503。不保存聊天记录，不产生 Tool 意图。
 

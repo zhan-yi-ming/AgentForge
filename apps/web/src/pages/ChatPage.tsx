@@ -19,7 +19,7 @@ type Props = {
   pendingAction?: AgentAction;
   busy: boolean;
   expandedComposer: boolean;
-  composer: ReactNode;
+  composer: (controls: ReactNode) => ReactNode;
   projectId: string;
   api: ApiClient;
   onVoiceTranscript: (text: string) => void;
@@ -41,7 +41,6 @@ export default function ChatPage({ conversationId, history, expandedIds, streami
   }, [dismissedActionId, pendingAction]);
   return <section className={`panel agent-panel chat-session${expandedComposer ? " composer-expanded" : ""}`}>
     <div className="panel-heading"><div><span className="eyebrow">AI COPILOT</span><h2>项目对话</h2></div>{conversationId && <span className="conversation">会话 {conversationId.slice(0, 8)}</span>}</div>
-    <button type="button" className="ghost" onClick={onNewChat}>新建会话</button>
     {history.length > 0 && <div className="conversation-history">{history.map((item, index) => {
       const expanded = expandedIds.has(item.id);
       const isLatest = index === history.length - 1;
@@ -52,7 +51,6 @@ export default function ChatPage({ conversationId, history, expandedIds, streami
     })}</div>}
     {pendingAction && dismissedActionId === pendingAction.id && <button type="button" className="pending-action-reopen" ref={reopenRef} onClick={() => setDismissedActionId(undefined)}>继续处理待确认操作</button>}
     {pendingAction && dismissedActionId !== pendingAction.id && <ActionApprovalDialog key={pendingAction.id} action={pendingAction} busy={busy} onClose={dismissAction} onDecision={onDecision} onAutoDecision={onAutoDecision} />}
-    <VoiceInput api={api} projectId={projectId} onTranscript={onVoiceTranscript} />
-    {composer}
+    {composer(<><button type="button" className="composer-utility-button" aria-label="新建会话" title="新建会话" onClick={onNewChat}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6" /><path d="M12 12 20 4m-5 0h5v5" /></svg></button><VoiceInput api={api} projectId={projectId} onTranscript={onVoiceTranscript} /></>)}
   </section>;
 }
