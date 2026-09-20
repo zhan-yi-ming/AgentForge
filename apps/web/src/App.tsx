@@ -565,7 +565,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     }
   }
 
-  async function decideAction(decision: "confirm" | "reject") {
+  async function decideAction(decision: "confirm" | "reject", automatic = false) {
     if (!projectId || !pendingAction) return;
     const actionId = pendingAction.id;
     let idempotencyKey = decisionKeys.current.get(actionId);
@@ -576,7 +576,9 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setBusy(true); setError("");
     try {
       if (decision === "confirm") {
-        const result = await api.confirmAction(projectId, actionId, idempotencyKey);
+        const result = automatic
+          ? await api.autoConfirmAction(projectId, actionId, idempotencyKey)
+          : await api.confirmAction(projectId, actionId, idempotencyKey);
         if (result.status === "FAILED") {
           decisionKeys.current.delete(actionId);
           setPendingAction(undefined);
@@ -692,6 +694,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
           return next;
         })}
         onDecision={(decision) => void decideAction(decision)}
+        onAutoDecision={() => void decideAction("confirm", true)}
       /></Suspense> : <section className={activePanel ? `panel agent-panel chat-collapsed${chatExpanded ? " composer-expanded" : ""}` : "panel agent-panel home-chat composer-expanded"}>
         <div className="panel-heading"><div><span className="eyebrow">AI COPILOT</span><h2>项目对话</h2></div>{conversationId && <span className="conversation">会话 {conversationId.slice(0, 8)}</span>}</div>
         {!activePanel && <div className="agent-welcome"><span className="agent-orb">✦</span><div><strong>你好，我是 AgentForge</strong><p>我会结合当前项目的 Wiki 与任务回答，并在写入前征求你的确认。</p></div></div>}

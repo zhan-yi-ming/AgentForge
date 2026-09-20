@@ -26,10 +26,11 @@ type Props = {
   onNewChat: () => void;
   onToggle: (id: string) => void;
   onDecision: (decision: "confirm" | "reject") => void;
+  onAutoDecision: () => void;
 };
 
 export default function ChatPage({ conversationId, history, expandedIds, streaming, pendingAction,
-  busy, expandedComposer, composer, projectId, api, onVoiceTranscript, onNewChat, onToggle, onDecision }: Props) {
+  busy, expandedComposer, composer, projectId, api, onVoiceTranscript, onNewChat, onToggle, onDecision, onAutoDecision }: Props) {
   const [openSources, setOpenSources] = useState<Set<string>>(() => new Set());
   const [dismissedActionId, setDismissedActionId] = useState<string>();
   const reopenRef = useRef<HTMLButtonElement>(null);
@@ -50,7 +51,7 @@ export default function ChatPage({ conversationId, history, expandedIds, streami
       </article>;
     })}</div>}
     {pendingAction && dismissedActionId === pendingAction.id && <button type="button" className="pending-action-reopen" ref={reopenRef} onClick={() => setDismissedActionId(undefined)}>继续处理待确认操作</button>}
-    {pendingAction && dismissedActionId !== pendingAction.id && <ActionApprovalDialog action={pendingAction} busy={busy} onClose={dismissAction} onDecision={onDecision} />}
+    {pendingAction && dismissedActionId !== pendingAction.id && <ActionApprovalDialog key={pendingAction.id} action={pendingAction} busy={busy} onClose={dismissAction} onDecision={onDecision} onAutoDecision={onAutoDecision} />}
     <VoiceInput api={api} projectId={projectId} onTranscript={onVoiceTranscript} />
     {composer}
   </section>;

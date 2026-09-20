@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.agentforge.core.agent.domain.AgentActionStatus;
+import com.agentforge.core.agent.domain.AgentActionType;
 import com.agentforge.core.agent.domain.AgentAuditEvent;
 import com.agentforge.core.agent.domain.AgentAuditEventRepository;
 import com.agentforge.core.agent.domain.AgentAuditEventType;
@@ -28,6 +29,9 @@ import com.agentforge.core.conversation.domain.AgentConversationRepository;
 import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.security.ToolOperation;
+import com.agentforge.core.security.ToolMetadata;
+import com.agentforge.core.security.RiskLevel;
+import com.agentforge.core.user.UserRole;
 import com.agentforge.core.security.ToolRiskEngine;
 import com.agentforge.core.shared.error.ConflictException;
 import com.agentforge.core.shared.error.ForbiddenException;
@@ -53,6 +57,67 @@ class AgentActionServiceTest {
         service = new AgentActionService(actions, auditEvents, projectAccess, riskEngine, taskService, clock, conversations);
         when(actions.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(auditEvents.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    @Test
+    void automaticApprovalRejectsAnEarlyCreateWithoutWriting() {
+        UUID projectId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        AgentTaskAction action = AgentTaskAction.pending(projectId, actor.userId(), UUID.randomUUID(),
+                AgentActionType.CREATE_TASK, null, "Timed create", null, TaskStatus.TODO,
+                TaskPriority.LOW, null, Instant.now(clock).minusSeconds(59));
+        when(actions.findByProjectIdAndIdForUpdate(projectId, action.getId())).thenReturn(Optional.of(action));
+        when(riskEngine.authorize(ToolOperation.CREATE_TASK, projectId, actor))
+                .thenReturn(new ToolMetadata(UserRole.USER, RiskLevel.LOW, true));
+
+        assertThatThrownBy(() -> service.approveAutomatically(projectId, action.getId(), actor,
+                "auto-key", "request-auto"))
+                .isInstanceOf(ConflictException.class);
+        verify(actions, never()).save(any());
+        verify(auditEvents, never()).save(any());
+    }
+
+    @Test
+    void automaticApprovalAfterDeadlineRecordsItsSource() {
+        UUID projectId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        AgentTaskAction action = AgentTaskAction.pending(projectId, actor.userId(), UUID.randomUUID(),
+                AgentActionType.CREATE_TASK, null, "Timed create", null, TaskStatus.TODO,
+                TaskPriority.LOW, null, Instant.now(clock).minusSeconds(61));
+        when(actions.findByProjectIdAndIdForUpdate(projectId, action.getId())).thenReturn(Optional.of(action));
+        when(riskEngine.authorize(ToolOperation.CREATE_TASK, projectId, actor))
+                .thenReturn(new ToolMetadata(UserRole.USER, RiskLevel.LOW, true));
+
+        AgentActionView first = service.approveAutomatically(projectId, action.getId(), actor,
+                "auto-key", "request-auto");
+        AgentActionView repeated = service.approveAutomatically(projectId, action.getId(), actor,
+                "auto-key", "request-retry");
+        assertThat(first.status()).isEqualTo(AgentActionStatus.APPROVED);
+        assertThat(repeated.status()).isEqualTo(AgentActionStatus.APPROVED);
+        verify(auditEvents).save(org.mockito.ArgumentMatchers.argThat(event ->
+                event.getEventType() == AgentAuditEventType.AUTO_APPROVED
+                        && event.getIdempotencyKey().equals("auto-key")));
+        assertThatThrownBy(() -> service.approveAutomatically(projectId, action.getId(), actor,
+                "different-key", "request-different"))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void automaticApprovalRejectsNonLowRiskEvenAfterDeadline() {
+        UUID projectId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        AgentTaskAction action = AgentTaskAction.pending(projectId, actor.userId(), UUID.randomUUID(),
+                AgentActionType.UPDATE_TASK, UUID.randomUUID(), "Timed update", null, TaskStatus.DONE,
+                TaskPriority.HIGH, 0L, Instant.now(clock).minusSeconds(61));
+        when(actions.findByProjectIdAndIdForUpdate(projectId, action.getId())).thenReturn(Optional.of(action));
+        when(riskEngine.authorize(ToolOperation.UPDATE_TASK, projectId, actor))
+                .thenReturn(new ToolMetadata(UserRole.USER, RiskLevel.MEDIUM, true));
+
+        assertThatThrownBy(() -> service.approveAutomatically(projectId, action.getId(), actor,
+                "auto-key", "request-auto"))
+                .isInstanceOf(ForbiddenException.class);
+        verify(actions, never()).save(any());
+        verify(auditEvents, never()).save(any());
     }
 
     @Test

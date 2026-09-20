@@ -75,6 +75,28 @@ class AgentActionApiTest {
     }
 
     @Test
+    void timedAutoConfirmationHasADedicatedAuthenticatedRoute() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID actionId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-09-20T00:00:00Z");
+        when(workflowService.confirmAutomatically(
+                org.mockito.ArgumentMatchers.eq(projectId), org.mockito.ArgumentMatchers.eq(actionId), any(),
+                org.mockito.ArgumentMatchers.eq("auto-timeout-key"), any()))
+                .thenReturn(new AgentActionView(actionId, projectId, UUID.randomUUID(), AgentActionType.CREATE_TASK,
+                        AgentActionStatus.EXECUTED, null, null, "Timed create", null,
+                        "TODO", "LOW", null, now.minusSeconds(60), now));
+        mockMvc.perform(post("/api/v1/projects/{projectId}/agent/actions/{actionId}/auto-confirm",
+                        projectId, actionId)
+                        .header("Idempotency-Key", "auto-timeout-key")
+                        .with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString()).claim("roles", List.of("USER")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("EXECUTED"));
+        verify(workflowService).confirmAutomatically(
+                org.mockito.ArgumentMatchers.eq(projectId), org.mockito.ArgumentMatchers.eq(actionId), any(),
+                org.mockito.ArgumentMatchers.eq("auto-timeout-key"), any());
+    }
+
+    @Test
     void rejectReturnsRejectedWithoutTask() throws Exception {
         UUID projectId = UUID.randomUUID();
         UUID actionId = UUID.randomUUID();

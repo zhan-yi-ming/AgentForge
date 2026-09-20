@@ -1,5 +1,7 @@
 # 变更记录
 
+- `2026-09-20-p3-06-approval-timeout.md`：60 秒悬浮审批、仅低风险超时自动确认、Java 幂等复核与审计。
+
 - `2026-09-19-p3-05-voice-input.md`：聊天实时语音转写、服务端 ASR 密钥边界与编辑后发送。
 - `2026-09-19-p3-04-natural-tool-and-citations.md`：自然语言 Action 意图、引用与回答绑定、DeepSeek 默认 API 名称。
 - `2026-09-19-p3-03-chat-interface.md`：聊天输入框、引用折叠与悬浮确认界面。

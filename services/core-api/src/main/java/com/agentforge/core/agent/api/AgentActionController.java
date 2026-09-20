@@ -47,6 +47,19 @@ public class AgentActionController {
                 requestId(servletRequest)));
     }
 
+    @PostMapping("/{actionId}/auto-confirm")
+    AgentActionResponse confirmAutomatically(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @PathVariable UUID actionId,
+            @RequestHeader("Idempotency-Key")
+            @Size(min = 1, max = 100)
+            @Pattern(regexp = "[A-Za-z0-9._:-]+") String idempotencyKey,
+            HttpServletRequest servletRequest) {
+        return AgentActionResponse.from(actionWorkflow.confirmAutomatically(
+                projectId, actionId, AuthenticatedActor.from(jwt), idempotencyKey, requestId(servletRequest)));
+    }
+
     @PostMapping("/{actionId}/reject")
     AgentActionResponse reject(
             @AuthenticationPrincipal Jwt jwt,

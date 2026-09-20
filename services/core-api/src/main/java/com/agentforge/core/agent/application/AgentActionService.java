@@ -21,6 +21,8 @@ import com.agentforge.core.conversation.domain.AgentConversationRepository;
 import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.security.ToolOperation;
+import com.agentforge.core.security.ToolMetadata;
+import com.agentforge.core.security.RiskLevel;
 import com.agentforge.core.security.ToolRiskEngine;
 import com.agentforge.core.shared.error.ConflictException;
 import com.agentforge.core.shared.error.ForbiddenException;
@@ -128,10 +130,39 @@ public class AgentActionService {
             AuthenticatedActor actor,
             String idempotencyKey,
             String requestId) {
+        return approveInternal(projectId, actionId, actor, idempotencyKey, requestId, false);
+    }
+
+    @Transactional
+    public AgentActionView approveAutomatically(
+            UUID projectId,
+            UUID actionId,
+            AuthenticatedActor actor,
+            String idempotencyKey,
+            String requestId) {
+        return approveInternal(projectId, actionId, actor, idempotencyKey, requestId, true);
+    }
+
+    private AgentActionView approveInternal(
+            UUID projectId,
+            UUID actionId,
+            AuthenticatedActor actor,
+            String idempotencyKey,
+            String requestId,
+            boolean automatic) {
         projectAccess.requireAccess(projectId, actor);
         AgentTaskAction action = findForDecision(projectId, actionId, actor);
         ToolOperation operation = operationFor(action);
-        riskEngine.authorize(operation, projectId, actor);
+        ToolMetadata metadata = riskEngine.authorize(operation, projectId, actor);
+        if (automatic && action.getStatus() == AgentActionStatus.PENDING) {
+            if (operation != ToolOperation.CREATE_TASK || metadata == null
+                    || metadata.riskLevel() != RiskLevel.LOW || !metadata.needApproval()) {
+                throw new ForbiddenException("This action requires manual confirmation.");
+            }
+            if (Instant.now(clock).isBefore(action.getCreatedAt().plusSeconds(60))) {
+                throw new ConflictException("The automatic confirmation deadline has not passed.");
+            }
+        }
         if (action.getStatus() == AgentActionStatus.REJECTED) {
             throw new ConflictException("The Agent action was rejected.");
         }
@@ -147,7 +178,7 @@ public class AgentActionService {
             action.approve(idempotencyKey, Instant.now(clock));
             actions.save(action);
             auditEvents.save(AgentAuditEvent.record(
-                    action, actor.userId(), AgentAuditEventType.APPROVED,
+                    action, actor.userId(), automatic ? AgentAuditEventType.AUTO_APPROVED : AgentAuditEventType.APPROVED,
                     requestId, idempotencyKey, Instant.now(clock)));
         }
         else {

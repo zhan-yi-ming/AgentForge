@@ -33,3 +33,9 @@ Audit Event 由 Java 追加写入，至少包含 actor、project、approval、ac
 首版复用 Task Action 作为 Approval payload，仅覆盖现有 `CREATE_TASK`、`UPDATE_TASK`。多级审批、审批委派、过期策略、通用查询 UI 与 V2-07 可恢复 Agent 执行不在本节点。
 
 当前产品没有用户硬删除流程。审计表对 Project/Approval 删除沿用现有级联关系，对 actor 用户引用保持限制删除；未来若引入用户删除，必须先通过独立数据保留决策选择软删除、actor 快照或可空引用，不能在本节点推测处理。
+
+## P3-06 审批时限
+
+聊天悬浮确认表单从弹窗打开起对当前提案显示 60 秒倒计时。服务端 Tool Policy 把 `CREATE_TASK` 视为 LOW；只有该显式允许的动作在弹窗持续打开、倒计时结束后可调用自动确认。`UPDATE_TASK` 是 MEDIUM，未来 HIGH 操作均不自动批准，必须由用户手动点击。关闭弹窗、离开路由或断网时不在后台自动执行。
+
+浏览器时间不可信。Core API 为自动确认提供独立入口，在行锁与权限复核后以持久化提案 `created_at + 60s` 为最低时限，复核风险策略，仅允许 PENDING、LOW 且显式列入白名单的动作。确认仍携带幂等键，复用 V2-06 的最多一次执行与 replay 语义；审计区分人工 `APPROVED` 与超时自动 `AUTO_APPROVED`。Java 独占业务写入，Python 只获得获批决定后的 resume。

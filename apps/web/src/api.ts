@@ -50,6 +50,7 @@ export interface ApiClient {
   finishVoice(projectId: string, sessionId: string): Promise<VoiceSnapshot>;
   cancelVoice(projectId: string, sessionId: string): Promise<void>;
   confirmAction(projectId: string, actionId: string, idempotencyKey: string): Promise<AgentAction>;
+  autoConfirmAction(projectId: string, actionId: string, idempotencyKey: string): Promise<AgentAction>;
   rejectAction(projectId: string, actionId: string, idempotencyKey: string): Promise<AgentAction>;
 }
 
@@ -183,6 +184,9 @@ export function createApiClient(getToken: () => string | null): ApiClient {
     finishVoice: (projectId, sessionId) => request(`/api/v1/projects/${projectId}/agent/asr/sessions/${sessionId}/finish`, { method: "POST" }),
     cancelVoice: (projectId, sessionId) => request(`/api/v1/projects/${projectId}/agent/asr/sessions/${sessionId}`, { method: "DELETE" }),
     confirmAction: (projectId, actionId, idempotencyKey) => request(`/api/v1/projects/${projectId}/agent/actions/${actionId}/confirm`, {
+      method: "POST", headers: { "Idempotency-Key": idempotencyKey },
+    }),
+    autoConfirmAction: (projectId, actionId, idempotencyKey) => request(`/api/v1/projects/${projectId}/agent/actions/${actionId}/auto-confirm`, {
       method: "POST", headers: { "Idempotency-Key": idempotencyKey },
     }),
     rejectAction: (projectId, actionId, idempotencyKey) => request(`/api/v1/projects/${projectId}/agent/actions/${actionId}/reject`, {

@@ -25,7 +25,7 @@ function api(overrides: Partial<ApiClient> = {}): ApiClient {
     createWikiPage: vi.fn(), updateWikiPage: vi.fn(),
     listTasks: vi.fn().mockResolvedValue([task]),
     listConversations: vi.fn().mockResolvedValue([]), getConversation: vi.fn(), deleteConversation: vi.fn().mockResolvedValue(undefined),
-    chat: vi.fn(), chatStream: vi.fn(), confirmAction: vi.fn(), rejectAction: vi.fn(),
+    chat: vi.fn(), chatStream: vi.fn(), confirmAction: vi.fn(), autoConfirmAction: vi.fn(), rejectAction: vi.fn(),
     startVoice: vi.fn(), appendVoiceAudio: vi.fn(), getVoice: vi.fn(), finishVoice: vi.fn(), cancelVoice: vi.fn(),
     ...overrides,
   };
@@ -540,6 +540,31 @@ describe("App", () => {
     expect(mockApi.rejectAction).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "继续处理待确认操作" }));
     expect(screen.getByRole("dialog", { name: /待确认操作/ })).toBeInTheDocument();
+  });
+
+  it("routes an elapsed low-risk dialog through Java auto-confirm", async () => {
+    const pending: AgentAction = { id: "action-auto", projectId: project.id,
+      conversationId: "conversation-auto", actionType: "CREATE_TASK", status: "PENDING",
+      title: "Auto task", createdAt: "2026-09-20T00:00:00Z" };
+    const autoConfirmAction = vi.fn().mockResolvedValue({ ...pending, status: "EXECUTED", resultTask: task });
+    const mockApi = api({ chatStream: vi.fn().mockResolvedValue({
+      conversationId: "conversation-auto", answer: "Review", requestId: "r-auto",
+      sources: [], pendingAction: pending,
+    }), autoConfirmAction });
+    const user = await login(mockApi);
+    await user.type(screen.getByLabelText("给 Agent 的消息"), "create task");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    await screen.findByRole("dialog", { name: /待确认操作/ });
+    const future = Date.now() + 61_000;
+    const clock = vi.spyOn(Date, "now").mockReturnValue(future);
+    try {
+      await waitFor(() => expect(autoConfirmAction).toHaveBeenCalledWith(
+        project.id, pending.id, expect.any(String),
+      ));
+      expect(mockApi.confirmAction).not.toHaveBeenCalled();
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it("confirms a pending action through Java before refreshing tasks", async () => {

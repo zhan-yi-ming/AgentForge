@@ -735,7 +735,8 @@ body { background: var(--bg); scrollbar-color: #c9c9c2 transparent; scrollbar-wi
 .approval-backdrop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 1rem; background: rgba(19, 21, 24, .5); backdrop-filter: blur(4px); }
 .approval-dialog { width: min(100%, 520px); max-height: min(780px, calc(100dvh - 2rem)); overflow: auto; padding: clamp(1.2rem, 3vw, 2rem); border: 1px solid var(--line-strong); border-radius: 18px; background: var(--surface); box-shadow: 0 24px 80px rgba(19,21,24,.22); }
 .approval-dialog h2 { margin: .35rem 0 .4rem; font-size: 1.45rem; }
-.approval-intro { margin: 0 0 1.1rem; color: var(--muted); font-size: .88rem; line-height: 1.55; }
+.approval-intro { margin: 0 0 .6rem; color: var(--muted); font-size: .88rem; line-height: 1.55; }
+.approval-countdown { margin: 0 0 1.1rem; font-size: .88rem; font-weight: 700; }
 .approval-fields { display: grid; gap: .65rem; margin: 0 0 1.35rem; }
 .approval-fields > div { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); gap: .6rem; border-bottom: 1px solid var(--line); padding: .4rem 0 .65rem; }
 .approval-fields dt { color: var(--muted); font-size: .8rem; }

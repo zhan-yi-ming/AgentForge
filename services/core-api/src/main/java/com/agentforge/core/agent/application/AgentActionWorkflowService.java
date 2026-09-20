@@ -27,8 +27,28 @@ public class AgentActionWorkflowService {
             AuthenticatedActor actor,
             String idempotencyKey,
             String requestId) {
-        AgentActionView approved = actions.approve(
-                projectId, actionId, actor, idempotencyKey, requestId);
+        return confirmInternal(projectId, actionId, actor, idempotencyKey, requestId, false);
+    }
+
+    public AgentActionView confirmAutomatically(
+            UUID projectId,
+            UUID actionId,
+            AuthenticatedActor actor,
+            String idempotencyKey,
+            String requestId) {
+        return confirmInternal(projectId, actionId, actor, idempotencyKey, requestId, true);
+    }
+
+    private AgentActionView confirmInternal(
+            UUID projectId,
+            UUID actionId,
+            AuthenticatedActor actor,
+            String idempotencyKey,
+            String requestId,
+            boolean automatic) {
+        AgentActionView approved = automatic
+                ? actions.approveAutomatically(projectId, actionId, actor, idempotencyKey, requestId)
+                : actions.approve(projectId, actionId, actor, idempotencyKey, requestId);
         if (approved.status() != AgentActionStatus.APPROVED) {
             return approved;
         }

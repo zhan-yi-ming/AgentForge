@@ -26,6 +26,21 @@ describe("API client", () => {
     expect((init.headers as Headers).get("Idempotency-Key")).toBe("decision-key-1");
   });
 
+  it("sends automatic confirmation only through its dedicated scoped endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: "EXECUTED" }), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createApiClient(() => "token-123").autoConfirmAction("project-1", "action-1", "auto-key-1");
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/v1/projects/project-1/agent/actions/action-1/auto-confirm");
+    expect(init.method).toBe("POST");
+    expect((init.headers as Headers).get("Idempotency-Key")).toBe("auto-key-1");
+    expect((init.headers as Headers).get("Authorization")).toBe("Bearer token-123");
+  });
+
   it("loads conversation history from the current project scope", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify([]), {
       status: 200, headers: { "Content-Type": "application/json" },

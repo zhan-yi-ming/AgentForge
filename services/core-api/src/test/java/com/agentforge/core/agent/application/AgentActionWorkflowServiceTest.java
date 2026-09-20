@@ -22,6 +22,39 @@ import com.agentforge.core.shared.error.ServiceUnavailableException;
 class AgentActionWorkflowServiceTest {
 
     @Test
+    void automaticConfirmationResumesTheInterruptedThreadAndExecutesOnce() {
+        AgentActionService actions = mock(AgentActionService.class);
+        AgentServiceClient agentService = mock(AgentServiceClient.class);
+        AgentActionWorkflowService workflow = new AgentActionWorkflowService(actions, agentService);
+        UUID projectId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        UUID actionId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        Instant now = Instant.parse("2026-09-20T00:00:00Z");
+        AgentActionView approved = new AgentActionView(actionId, projectId, conversationId,
+                AgentActionType.CREATE_TASK, AgentActionStatus.APPROVED, null, null,
+                "Timed create", null, "TODO", "LOW", null, now.minusSeconds(61), null, 1);
+        AgentActionView executed = new AgentActionView(actionId, projectId, conversationId,
+                AgentActionType.CREATE_TASK, AgentActionStatus.EXECUTED, null, null,
+                "Timed create", null, "TODO", "LOW", null, now.minusSeconds(61), now, 1);
+        when(actions.approveAutomatically(projectId, actionId, actor, "auto-key", "auto-request"))
+                .thenReturn(approved);
+        when(agentService.resume(projectId, actor.userId(), false, conversationId, actionId,
+                "APPROVE", "auto-key", "auto-request"))
+                .thenReturn(new AgentResumeResult(conversationId, actionId, "APPROVE", "RESUMED", "auto-request"));
+        when(actions.executeApproved(projectId, actionId, actor, "auto-key", "auto-request"))
+                .thenReturn(executed);
+
+        assertThat(workflow.confirmAutomatically(projectId, actionId, actor, "auto-key", "auto-request").status())
+                .isEqualTo(AgentActionStatus.EXECUTED);
+        InOrder order = inOrder(actions, agentService);
+        order.verify(actions).approveAutomatically(projectId, actionId, actor, "auto-key", "auto-request");
+        order.verify(agentService).resume(projectId, actor.userId(), false, conversationId, actionId,
+                "APPROVE", "auto-key", "auto-request");
+        order.verify(actions).executeApproved(projectId, actionId, actor, "auto-key", "auto-request");
+    }
+
+    @Test
     void confirmResumesTheInterruptedThreadBeforeExecutingTheApprovedAction() {
         AgentActionService actions = mock(AgentActionService.class);
         AgentServiceClient agentService = mock(AgentServiceClient.class);

@@ -102,3 +102,7 @@ V2-07 新增 `POST /internal/v1/agent/resume`，仅供 Core API 使用并继续�
 ```
 
 Wiki `content` 原样返回；Task `content` 是由 Java 从 title/status/priority/description 形成的稳定文本。缺失或错误内部 token 返回 401，用户不存在返回 401，无项目权限返回 403，项目不存在返回 404。授权必须先于 Wiki/Task Repository 读取。
+
+## P3-06 自动确认入口
+
+`POST /api/v1/projects/{projectId}/agent/actions/{actionId}/auto-confirm` 需认证及 `Idempotency-Key`，响应沿用 `AgentActionResponse`。仅持久化创建已满 60 秒、当前 Java Tool Policy 为 LOW 且显式允许的 PENDING `CREATE_TASK` 可自动确认；未到期或中高风险返回 409/403，不执行业务写入。Java 重验项目/actor/状态并持久化 `AUTO_APPROVED` 审计，后续 resume 与执行复用手动确认流程。浏览器倒计时不是安全边界。
