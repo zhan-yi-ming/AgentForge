@@ -6,6 +6,7 @@ import type { ChatHistoryItem } from "./pages/ChatPage";
 
 const ChatPage = lazy(() => import("./pages/ChatPage"));
 const WikiPage = lazy(() => import("./pages/WikiPage"));
+const WikiGraphPage = lazy(() => import("./pages/WikiGraphPage"));
 const TaskView = lazy(() => import("./pages/TaskView"));
 const FormatView = lazy(() => import("./pages/FormatView"));
 
@@ -375,7 +376,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         setChatHistory([]);
         setPendingAction(undefined);
       }
-    } else if (route.page === "wiki") {
+    } else if (route.page === "wiki" || route.page === "wiki-graph") {
       setChatMode(false);
       chatModeRef.current = false;
       setActivePanel("wiki");
@@ -703,15 +704,17 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
 
       <section className={chatMode ? activePanel ? "workspace-panel chat-tool-window" : "workspace-panel workspace-hidden" : "workspace-panel"} ref={wikiPanel}>
         {chatMode && activePanel && <button className="drawer-close chat-tool-close" aria-label="关闭悬浮工作台" onClick={() => setActivePanel(null)}>×</button>}
-        {!chatMode && <nav className="workspace-tabs" aria-label="工作台导航">
+        {!chatMode && route.page !== "wiki-graph" && <nav className="workspace-tabs" aria-label="工作台导航">
           <button className={activePanel === "wiki" ? "active" : ""} onClick={() => openPanel("wiki")}>Wiki 工作台</button>
           <button className={activePanel === "tasks" ? "active" : ""} onClick={() => openPanel("tasks")}>执行任务 <span>{tasks.length}</span></button>
           <button className={activePanel === "format" ? "active" : ""} onClick={() => openPanel("format")}>AI 文本整理</button>
         </nav>}
-        {activePanel === "wiki" && <Suspense fallback={<p role="status">正在打开 Wiki…</p>}><WikiPage
+        {route.page === "wiki-graph" && <Suspense fallback={<p role="status">正在打开知识图谱…</p>}><WikiGraphPage projectId={projectId} pages={wikiPages} onBack={() => navigate("/wiki")} onOpenPage={(page) => { selectWiki(page); navigate("/wiki"); }} /></Suspense>}
+        {activePanel === "wiki" && route.page !== "wiki-graph" && <Suspense fallback={<p role="status">正在打开 Wiki…</p>}><WikiPage
           pages={wikiPages} selectedId={wikiId} title={wikiTitle} content={wikiContent} feedback={wikiFeedback}
           busy={busy} createOpen={wikiCreateOpen} previewOpen={previewOpen}
           previewPosition={previewPosition} previewSize={previewSize} onSelect={selectWiki}
+          onOpenGraph={() => { setPreviewOpen(false); navigate("/wiki/graph"); }}
           onTitleChange={(value) => { setWikiTitle(value); setWikiFeedback(""); }}
           onContentChange={(value) => { setWikiContent(value); setWikiFeedback(""); }}
           onSave={() => void saveWiki()} onToggleCreate={() => setWikiCreateOpen((open) => !open)}

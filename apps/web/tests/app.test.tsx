@@ -43,6 +43,35 @@ async function login(mockApi: ApiClient) {
 
 describe("App", () => {
   beforeEach(() => window.history.replaceState({}, "", "/"));
+  it("loads current-project Wiki pages when the graph route is opened directly", async () => {
+    window.history.replaceState({}, "", "/wiki/graph");
+    sessionStorage.setItem("agentforge.accessToken", "token");
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    const wiki = { id: "wiki-1", projectId: project.id, title: "系统架构", content: "页面内容", version: 1,
+      createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
+    const mockApi = api({ listWikiPages: vi.fn().mockResolvedValue([wiki]) });
+    render(<App api={mockApi} />);
+    expect(await screen.findByRole("region", { name: "Wiki 知识图谱" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "查看 系统架构" })).toBeInTheDocument();
+    expect(mockApi.listWikiPages).toHaveBeenCalledWith(project.id);
+    expect(window.location.pathname).toBe("/wiki/graph");
+  });
+
+  it("navigates between Wiki editor and a separately routed graph without changing the selected page", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    const wiki = { id: "wiki-1", projectId: project.id, title: "系统架构", content: "页面内容", version: 1,
+      createdAt: "2026-09-20T00:00:00Z", updatedAt: "2026-09-20T00:00:00Z" };
+    const user = await login(api({ listWikiPages: vi.fn().mockResolvedValue([wiki]) }));
+    await user.click(screen.getByRole("button", { name: "Wiki 工作台" }));
+    await user.click(await screen.findByRole("button", { name: /知识图谱/ }));
+    expect(window.location.pathname).toBe("/wiki/graph");
+    expect(await screen.findByRole("region", { name: "Wiki 知识图谱" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "查看 系统架构" }));
+    await user.click(screen.getByRole("button", { name: /打开 Wiki 页面/ }));
+    expect(window.location.pathname).toBe("/wiki");
+    expect(screen.getByLabelText("Wiki 标题")).toHaveValue("系统架构");
+  });
+
   it("opens a selected conversation at its own route and starts a separate blank chat", async () => {
     localStorage.setItem("agentforge.onboardingComplete", "true");
     const mockApi = api({

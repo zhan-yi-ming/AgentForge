@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-export type AppRoute = { page: "home" | "chat" | "wiki"; conversationId?: string };
+export type AppRoute = { page: "home" | "chat" | "wiki" | "wiki-graph"; conversationId?: string };
 
 export function parseRoute(pathname: string): AppRoute {
   if (pathname === "/chat") return { page: "chat" };
@@ -9,6 +9,7 @@ export function parseRoute(pathname: string): AppRoute {
     try { return { page: "chat", conversationId: decodeURIComponent(match[1]) }; }
     catch { return { page: "home" }; }
   }
+  if (pathname === "/wiki/graph") return { page: "wiki-graph" };
   if (pathname === "/wiki") return { page: "wiki" };
   return { page: "home" };
 }

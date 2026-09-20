@@ -1,0 +1,50 @@
+.wiki-graph-page { color: #e9edf9; background: radial-gradient(circle at 35% 22%, #19234a 0, transparent 34%), radial-gradient(circle at 83% 72%, #231742 0, transparent 36%), #080d1d; border: 1px solid #27304f; border-radius: 24px; box-shadow: 0 30px 80px #11182724; overflow: hidden; min-height: 750px; font-family: Inter, "Segoe UI", sans-serif; }
+.wiki-graph-page * { box-sizing: border-box; }
+.wiki-graph-header { display: flex; justify-content: space-between; gap: 20px; align-items: end; padding: 30px 36px 26px; border-bottom: 1px solid #ffffff17; }
+.wiki-graph-back { border: 0; background: transparent; color: #9ee8e3; font-size: 13px; cursor: pointer; padding: 0 0 28px; }
+.wiki-graph-kicker { color: #88a1c6; font-size: 11px; letter-spacing: .2em; font-weight: 700; }
+.wiki-graph-header h1 { color: #fff; font-size: clamp(28px, 3vw, 42px); margin: 10px 0 8px; letter-spacing: -.04em; }
+.wiki-graph-header h1 span { color: #85e6de; font-size: 22px; margin-left: 12px; vertical-align: top; }
+.wiki-graph-header p:last-child { color: #a9b6d0; margin: 0; font-size: 14px; }
+.wiki-graph-stats { display: flex; gap: 10px; }
+.wiki-graph-stats div { min-width: 115px; background: #ffffff0b; border: 1px solid #ffffff1a; border-radius: 14px; padding: 12px 16px; }
+.wiki-graph-stats strong { display: block; color: #fff; font-size: 22px; line-height: 1; }
+.wiki-graph-stats span { display: block; margin-top: 8px; color: #9fb0cc; font-size: 11px; }
+.wiki-graph-toolbar { display: flex; justify-content: space-between; gap: 14px; padding: 14px 22px; border-bottom: 1px solid #ffffff17; }
+.wiki-graph-toolbar label { display: flex; align-items: center; gap: 8px; border: 1px solid #ffffff26; border-radius: 10px; background: #ffffff0b; padding: 0 12px; color: #8de2dd; min-width: 260px; }
+.wiki-graph-toolbar input { color: white; width: 100%; background: none; border: 0; outline: none; height: 36px; font: inherit; font-size: 13px; }
+.wiki-graph-toolbar input::placeholder { color: #8492ad; }
+.wiki-graph-toolbar > div { display: flex; align-items: center; gap: 8px; }
+.wiki-graph-toolbar button { border: 1px solid #ffffff26; background: #ffffff0c; color: #dce7f9; padding: 7px 11px; border-radius: 8px; cursor: pointer; }
+.wiki-graph-toolbar button:hover, .wiki-graph-back:hover { color: #82f5e9; border-color: #72dcd866; }
+.wiki-graph-toolbar span { color: #98a9c5; min-width: 42px; text-align: center; font-size: 12px; }
+.wiki-graph-body { display: grid; grid-template-columns: minmax(0, 1fr) 265px; min-height: 600px; }
+.wiki-graph-viewport { position: relative; min-width: 0; min-height: 600px; overflow: hidden; touch-action: none; background-image: radial-gradient(#b4c2ec35 1px, transparent 1px); background-size: 25px 25px; cursor: grab; }
+.wiki-graph-viewport:active { cursor: grabbing; }
+.wiki-graph-viewport::before { content: ""; position: absolute; width: 520px; height: 520px; border: 1px solid #9cbbef16; border-radius: 50%; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 0 0 125px #899ce807, 0 0 0 250px #899ce806; }
+.wiki-graph-stage { position: absolute; inset: 0; transform-origin: center; }
+.wiki-graph-stage svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.wiki-graph-stage line { stroke: url(#wiki-graph-edge); stroke-width: 1.6; opacity: .72; stroke-dasharray: 6 5; }
+.wiki-graph-stage line.muted { opacity: .18; }
+.wiki-graph-node { position: absolute; transform: translate(-50%, -50%); border: 1px solid #81e2dd88; border-radius: 16px; background: linear-gradient(140deg, #182b48ed, #131b35f0); color: #fff; min-width: 105px; max-width: 155px; padding: 12px 10px 10px; text-align: center; cursor: pointer; box-shadow: 0 0 0 5px #7ce4e00b, 0 9px 28px #0008; }
+.wiki-graph-node::before { content: ""; position: absolute; inset: -13px; border: 1px solid #91dcd726; border-radius: 25px; pointer-events: none; }
+.wiki-graph-node:hover, .wiki-graph-node.selected { border-color: #9df8ee; box-shadow: 0 0 0 6px #7ce4e01f, 0 0 35px #69e7dc55; z-index: 2; }
+.wiki-graph-node-core { display: grid; place-items: center; background: #77e9df22; color: #9df8ee; border-radius: 9px; width: 26px; height: 26px; margin: 0 auto 8px; }
+.wiki-graph-node strong { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wiki-graph-node small { display: block; margin-top: 5px; color: #94a8c5; font-size: 10px; }
+.wiki-graph-hint { position: absolute; left: 22px; bottom: 20px; color: #97a9c5; font-size: 11px; pointer-events: none; }
+.wiki-graph-empty { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #c5d5ed; background: #141d36d9; border: 1px solid #ffffff25; border-radius: 12px; padding: 16px 20px; text-align: center; }
+.wiki-graph-inspector { border-left: 1px solid #ffffff1c; background: #0d1428ca; padding: 27px 21px; }
+.wiki-graph-inspector-icon { display: grid; place-items: center; width: 48px; height: 48px; color: #9bf4e9; background: #74e8dc1c; border: 1px solid #74e8dc50; border-radius: 13px; margin: 35px 0 15px; font-size: 23px; }
+.wiki-graph-inspector h2 { color: white; font-size: 20px; margin: 0 0 9px; overflow-wrap: anywhere; }
+.wiki-graph-inspector p { color: #9aabc8; font-size: 12px; line-height: 1.7; }
+.wiki-graph-inspector h3 { color: #cddbf0; font-size: 12px; margin: 32px 0 12px; }
+.wiki-graph-inspector-note { color: #91a4c2; border-top: 1px solid #ffffff20; margin-top: 30px; padding-top: 17px; font-size: 11px; line-height: 1.6; }
+.wiki-graph-open { width: 100%; border: 0; border-radius: 9px; background: #84eee2; color: #0c2732; font-size: 12px; font-weight: 700; padding: 11px; cursor: pointer; margin-top: 16px; }
+.wiki-graph-relations { display: grid; gap: 8px; }
+.wiki-graph-relations button { display: grid; text-align: left; gap: 3px; color: #e9f1ff; background: #ffffff0a; border: 1px solid #ffffff1b; border-radius: 9px; padding: 10px; cursor: pointer; }
+.wiki-graph-relations button:hover { border-color: #8feee4; }
+.wiki-graph-relations small { color: #77ded6; font-size: 10px; }
+.wiki-graph-relations strong { font-size: 12px; }
+.wiki-graph-relations span { color: #96a8c3; font-size: 11px; overflow-wrap: anywhere; }
+@media (max-width: 800px) { .wiki-graph-header { padding: 22px; align-items: start; flex-direction: column; } .wiki-graph-toolbar { flex-wrap: wrap; } .wiki-graph-toolbar label { width: 100%; } .wiki-graph-body { display: block; } .wiki-graph-viewport { min-height: 480px; } .wiki-graph-inspector { border-left: 0; border-top: 1px solid #ffffff22; } }
