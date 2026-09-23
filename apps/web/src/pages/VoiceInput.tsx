@@ -132,11 +132,16 @@ export default function VoiceInput({ api, projectId, onTranscript }: Props) {
     if (!current || phase !== "recording") return;
     setPhase("finishing");
     closeLocal(current);
+    let finished = false;
     try {
       flush(current);
       await current.queue;
       const final = await api.finishVoice(projectId, current.sessionId);
-      if (capture.current === current && final.text.trim()) onTranscript(final.text.trim());
+      finished = true;
+      if (capture.current === current) {
+        if (final.text.trim()) onTranscript(final.text.trim());
+        else setError("未识别到语音，请靠近麦克风后重试。");
+      }
     } catch {
       if (capture.current === current) setError("语音识别失败，请重试。");
     } finally {
@@ -145,7 +150,7 @@ export default function VoiceInput({ api, projectId, onTranscript }: Props) {
         setPhase("idle");
         setPreview("");
       }
-      void api.cancelVoice(projectId, current.sessionId).catch(() => undefined);
+      if (!finished) void api.cancelVoice(projectId, current.sessionId).catch(() => undefined);
     }
   }
 
