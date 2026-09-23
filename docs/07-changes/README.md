@@ -1,5 +1,7 @@
 # 变更记录
 
+- `2026-09-23-pre-v3-production-release.md`：P3 功能发布到 `zhanyiming.cloud` 的 Release Gate、备份与验收记录。
+
 - `2026-09-23-asr-finish-feedback.md`：停止录音后的空转写提示与多余 DELETE 404 修复。
 
 - `2026-09-20-format-and-layout-fixes.md`：本地验收的长文整理 400、聊天按钮、图谱全屏与登录首屏修复。
