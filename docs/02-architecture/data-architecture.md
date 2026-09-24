@@ -99,7 +99,8 @@ Flyway V3 迁移启用 `vector` 扩展并创建 `rag_chunk`。该表可从 Wiki/
 | `id` | UUID | 主键 | action 标识 |
 | `project_id` | UUID | 外键、非空、索引 | 项目隔离键 |
 | `requested_by_user_id` | UUID | 外键、非空 | 发起者 |
-| `conversation_id` | UUID | 非空 | 产生 proposal 的会话 |
+| `source` | VARCHAR(16) | `CHAT` / `MCP`、非空 | 可信调用来源，由 Java 设置 |
+| `conversation_id` | UUID | 条件可空 | CHAT 必填；MCP 必须为空，不伪造会话 |
 | `action_type` | VARCHAR(24) | `CREATE_TASK` / `UPDATE_TASK` | 白名单 Tool |
 | `task_id` | UUID | update 必填 | 更新目标 |
 | `title` / `description` | VARCHAR/TEXT | 可空、应用层长度校验 | 创建参数或更新补丁 |
@@ -108,7 +109,8 @@ Flyway V3 迁移启用 `vector` 扩展并创建 `rag_chunk`。该表可从 Wiki/
 | `status` | VARCHAR(16) | `PENDING` / `APPROVED` / `REJECTED` / `EXECUTED` / `FAILED` | 审批与执行状态 |
 | `result_task_id` | UUID | executed 后填写 | 已创建/更新 Task |
 | `idempotency_key` | VARCHAR(100) | requester 范围内部分唯一 | 首次决策绑定的幂等键 |
-| `action_workflow_version` | INTEGER | 可空、当前仅允许 1 | 空值表示升级前无 checkpoint 的 V2-06 Action；1 表示必须恢复 V2-07 workflow；不进入公共 API |
+| `proposal_idempotency_key` | VARCHAR(100) | MCP 必填、CHAT 为空；project/user/source 范围唯一 | MCP Tool Call 重试复用同一 Approval 的提案幂等键 |
+| `action_workflow_version` | INTEGER | 可空、当前仅允许 1 | CHAT 新 Action 为 1 并恢复 V2-07 workflow；MCP 必须为空并走既有 Java 决策执行链；升级前 V2-06 Action 兼容为空；不进入公共 API |
 | `version` | BIGINT | 非空 | action 乐观锁 |
 | `created_at` / `approved_at` / `decided_at` | TIMESTAMPTZ | created 非空 | 生命周期时间 |
 

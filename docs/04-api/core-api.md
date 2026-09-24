@@ -280,3 +280,20 @@ reject 先提交 `REJECTED` 再恢复 Agent wait。相同 key 可重试恢复；
 Day 2 在首个可用版本形成前有意替换了 Day 1 匿名 User / Project 契约，迁移理由记录在 ADR-0005 和当前变更记录。后续新增可选响应字段视为兼容；删除或重命名字段、改变含义或状态码属于破坏性变化，必须先更新功能/API 文档并写 ADR 或迁移说明。
 
 Chat 同步与 SSE 请求的 `message` 均要求非空且最多 16,000 字符（包含 AI 整理前置指令）；超限返回 400 Problem Details，不进入 Agent、配额或写入链路。
+
+## V3-01 MCP Streamable HTTP
+
+`/mcp` 使用官方 Java SDK 2.0.1 支持的 MCP `2025-11-25` Streamable HTTP。它不在 `/api/v1` 下。除初始化协商所需的协议头外，每个请求必须携带有效的 `Authorization: Bearer <accessToken>`；首版客户端预配置 AgentForge JWT，不提供 OAuth Authorization Server 或自动发现。
+
+首批 `tools/list` 暴露固定 Tool：`search_wiki`、`get_task`、`create_task`、`update_task`。客户端不得提供或覆盖 actor、role、risk、approval 状态、result、audit 字段。`projectId` 必填并由 Java 重新执行项目权限校验。
+
+- `search_wiki`：输入 `projectId`、`query`，对当前项目已授权 Wiki 的标题和正文做不区分大小写的子串匹配，返回页面摘要列表；首版不保证相关性排序，也不分页或限制结果数，与内部 Agent 的混合检索语义不同。
+- `get_task`：输入 `projectId`、`taskId`，返回已授权 Task DTO。
+- `create_task`：输入 `projectId`、`idempotencyKey` 与 Task 创建字段，首次调用返回 `PENDING` Approval；同键重试返回原 Approval 的当前状态。
+- `update_task`：输入 `projectId`、`idempotencyKey`、`taskId`、`expectedTaskVersion` 和更新补丁，首次调用返回 `PENDING` Approval；同键重试返回原 Approval 的当前状态。
+
+写 Tool 的 `idempotencyKey` 为 1–100 字符且只允许字母、数字、点、下划线、冒号和连字符；相同 project/user/key 的相同提案返回既有 Approval，不同提案返回冲突。MCP Action 不允许调用 `auto-confirm`。
+
+写 Tool 可选的 `description` 若提供，必须为 1–10,000 字符的非空文本。写 Tool 的结果至少包含 `approvalId`、`status`、`actionType`、`riskLevel` 和安全预览；首次调用时 `status=PENDING` 且 Task 不变。同键重试即使原 Approval 已执行或拒绝，也只返回其当前状态，不重复写 Task。人工决定继续使用 `POST /api/v1/projects/{projectId}/agent/actions/{actionId}/confirm|reject`，confirm 仍要求 `Idempotency-Key`，执行前重新检查 actor、project、Tool Policy 和 Task version。MCP Action 不绑定 Chat conversation/checkpoint，也不会调用 Python resume。
+
+参数或可修正领域错误返回 MCP Tool Result `isError=true`；认证失败保持 HTTP 401；未授权项目、跨项目资源和内部异常不得泄漏资源正文、凭据、数据库细节或堆栈。首版只实现 Tools，不实现 Resources、Prompts、Sampling 或 MCP Client。

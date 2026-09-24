@@ -2,6 +2,7 @@ package com.agentforge.core.agent.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -10,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.agentforge.core.agent.domain.AgentActionSource;
 import com.agentforge.core.agent.domain.AgentActionStatus;
 import com.agentforge.core.agent.domain.AgentActionType;
 import com.agentforge.core.agent.domain.AgentAuditEvent;
@@ -124,6 +126,63 @@ public class AgentActionService {
     }
 
     @Transactional
+    public Optional<AgentActionView> createPendingMcp(
+            UUID projectId,
+            AuthenticatedActor actor,
+            ToolProposal proposal,
+            String proposalIdempotencyKey,
+            String requestId) {
+        projectAccess.requireAccess(projectId, actor);
+        NormalizedProposal normalized;
+        String normalizedIdempotencyKey;
+        try {
+            normalized = normalize(proposal);
+            normalizedIdempotencyKey = normalizeProposalIdempotencyKey(proposalIdempotencyKey);
+        }
+        catch (IllegalArgumentException exception) {
+            return Optional.empty();
+        }
+        ToolOperation operation = switch (normalized.type()) {
+            case CREATE_TASK -> ToolOperation.CREATE_TASK;
+            case UPDATE_TASK -> ToolOperation.UPDATE_TASK;
+        };
+        riskEngine.authorize(operation, projectId, actor);
+        actions.lockMcpProposal(projectId, actor.userId(), normalizedIdempotencyKey);
+        Optional<AgentTaskAction> existing = actions.findMcpProposal(
+                projectId, actor.userId(), normalizedIdempotencyKey);
+        if (existing.isPresent()) {
+            if (!matchesMcpProposal(existing.get(), normalized)) {
+                throw new ConflictException(
+                        "The MCP proposal idempotency key is already used for another intent.");
+            }
+            return Optional.of(AgentActionView.from(existing.get(), null));
+        }
+        if (normalized.type() == AgentActionType.UPDATE_TASK) {
+            TaskView current = taskService.get(projectId, normalized.taskId(), actor);
+            if (current.version() != normalized.expectedVersion()) {
+                throw new ConflictException("The Task version is stale.");
+            }
+        }
+        AgentTaskAction action = AgentTaskAction.pendingMcp(
+                projectId,
+                actor.userId(),
+                normalizedIdempotencyKey,
+                normalized.type(),
+                normalized.taskId(),
+                normalized.title(),
+                normalized.description(),
+                normalized.status(),
+                normalized.priority(),
+                normalized.expectedVersion(),
+                Instant.now(clock));
+        AgentTaskAction saved = actions.save(action);
+        auditEvents.save(AgentAuditEvent.record(
+                saved, actor.userId(), AgentAuditEventType.REQUESTED,
+                requestId, null, Instant.now(clock)));
+        return Optional.of(AgentActionView.from(saved, null));
+    }
+
+    @Transactional
     public AgentActionView approve(
             UUID projectId,
             UUID actionId,
@@ -154,6 +213,9 @@ public class AgentActionService {
         AgentTaskAction action = findForDecision(projectId, actionId, actor);
         ToolOperation operation = operationFor(action);
         ToolMetadata metadata = riskEngine.authorize(operation, projectId, actor);
+        if (automatic && action.getSource() != AgentActionSource.CHAT) {
+            throw new ForbiddenException("MCP actions require manual confirmation.");
+        }
         if (automatic && action.getStatus() == AgentActionStatus.PENDING) {
             if (operation != ToolOperation.CREATE_TASK || metadata == null
                     || metadata.riskLevel() != RiskLevel.LOW || !metadata.needApproval()) {
@@ -347,6 +409,27 @@ public class AgentActionService {
         catch (IllegalArgumentException exception) {
             throw invalidProposal();
         }
+    }
+
+    private String normalizeProposalIdempotencyKey(String value) {
+        if (!StringUtils.hasText(value)) {
+            throw invalidProposal();
+        }
+        String normalized = value.trim();
+        if (normalized.length() > 100 || !normalized.matches("[A-Za-z0-9._:-]+")) {
+            throw invalidProposal();
+        }
+        return normalized;
+    }
+
+    private boolean matchesMcpProposal(AgentTaskAction action, NormalizedProposal proposal) {
+        return action.getActionType() == proposal.type()
+                && Objects.equals(action.getTaskId(), proposal.taskId())
+                && Objects.equals(action.getExpectedTaskVersion(), proposal.expectedVersion())
+                && Objects.equals(action.getTitle(), proposal.title())
+                && Objects.equals(action.getDescription(), proposal.description())
+                && action.getTaskStatus() == proposal.status()
+                && action.getPriority() == proposal.priority();
     }
 
     private String normalizeText(String value, int maximumLength) {

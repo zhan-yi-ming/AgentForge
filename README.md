@@ -96,7 +96,8 @@ flowchart TB
 - ✅ V2-05～V2-07：集中式 RBAC/Risk、持久化历史、五态 Approval、幂等/Audit、PostgreSQL checkpoint 与跨重启 resume。
 - ✅ V2-08：可重复离线 Evaluation Pipeline。当前固定小数据集的真实基线为 Recall@K/MRR/Hit Rate `0.75`、确定性词项支持率 `0.833`、Tool Selection/Task Success `1.0`。这些数字只用于回归，不代表线上质量、统计显著性或完整语义正确性。
 - ✅ V2-09：完整 Release Regression 已通过 11/11 个失败关闭阶段，覆盖普通问答、RAG、Tool/HITL、权限隔离、重复请求、restart/resume、Trace 和 Evaluation；`v2-stable` 只从已验证并推送的节点提交创建。
-- 🧭 V3：MCP、Model Gateway、Multi-model Routing 与 GraphRAG 仍是规划项，未伪装成已实现能力。
+- ✅ V3-01：MCP Streamable HTTP Adapter 已实现并通过 Milestone Review；四个 Wiki/Task Tool 复用 Java RBAC、Risk、Approval 与幂等执行链路。
+- 🧭 V3-02 及后续：Model Gateway、Multi-model Routing 与 GraphRAG 仍是规划项。
 
 每个节点的实现、失败测试、最终验证和独立 Review 都记录在[变更记录](docs/07-changes/README.md)与[审核记录](docs/08-reviews/README.md)。
 

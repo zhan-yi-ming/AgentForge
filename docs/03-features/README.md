@@ -5,6 +5,8 @@
 
 ## 当前功能
 
+- `mcp-adapter.md`：V3-01 MCP Tools、Streamable HTTP、JWT 与 Approval 边界（已实现并通过 Milestone Review）。
+
 - `user-and-project.md`：Day 1 用户与项目基础及 Day 2 安全迁移，已实现并通过真实 PostgreSQL 集成测试。
 - `authentication-and-authorization.md`：Day 2 注册、登录、JWT 和基础 RBAC，已实现。
 - `wiki.md`：Day 2 项目 Wiki Page CRUD，已实现。
@@ -28,4 +30,4 @@
 以下文档尚未创建，表示功能也不应开始实现：
 
 - V2-09 Release Gate 已完成；V2-01 至 V2-09 全部收口。Memory Namespace 仅表示 Agent 记忆归属，不代表长期记忆或完整 SaaS 多租户。
-- V3-01 MCP 尚未授权，禁止提前实现。
+- V3-01 MCP 已实现并通过 Milestone Review；V3-02 及后续节点仍须分别获得 Start Gate 授权。

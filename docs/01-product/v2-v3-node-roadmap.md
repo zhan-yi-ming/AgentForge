@@ -2,7 +2,7 @@
 
 - 状态：Accepted（路线已确认；各功能在实现前均为 Planned）
 - 当前状态：V1 completed；V2-01 至 V2-09 completed；V2 Release Gate passed
-- Current Node：无（V2 已收口；先完成用户已授权的 V3 前体验修复阶段，再开始 V3-01）
+- Current Node：V3-01 MCP Adapter（Implemented）
 - 开发协议：`../00-governance/v2-v3-node-development-protocol.md`
 
 本文是 V2/V3 开发顺序与 Node Scope 的唯一来源，同时规定验收标准、DeepSeek Pi Review 重点和 GitHub 展示重点。每次只完成一个 Node，禁止跨节点开发；完成后必须停止并等待用户明确授权下一 Node。
@@ -98,6 +98,8 @@ V2 的总目标不是增加花哨功能，而是把“能运行的 Agent”升�
 固定顺序：`V3-01 → V3-02 → V3-03 → V3-04 → V3-05 → V3-06 → V3-07 → V3-08（Optional）→ V3-09`。GraphRAG 位于后半段，不得提前堆 Neo4j。
 
 ### V3-01 MCP Adapter
+
+- **状态**：Implemented（2026-09-24；Milestone Review PASS）。
 
 - **目标与 Scope**：把现有 Java Tool（如 `search_wiki`、`get_task`、`create_task`、`update_task`）标准化暴露为 MCP；调用必须为 `MCP → Java Application Service → RBAC → Risk Engine → Approval → DB`。
 - **边界与验收**：禁止 MCP 直连 DB 或绕过 V2 安全体系；Schema、Validation、错误契约、Retry/Idempotency 一致。

@@ -28,8 +28,15 @@ public class AgentTaskAction {
     @Column(name = "requested_by_user_id", nullable = false)
     private UUID requestedByUserId;
 
-    @Column(name = "conversation_id", nullable = false)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private AgentActionSource source;
+
+    @Column(name = "conversation_id")
     private UUID conversationId;
+
+    @Column(name = "proposal_idempotency_key", length = 100)
+    private String proposalIdempotencyKey;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "action_type", nullable = false, length = 24)
@@ -87,7 +94,9 @@ public class AgentTaskAction {
     private AgentTaskAction(
             UUID projectId,
             UUID requestedByUserId,
+            AgentActionSource source,
             UUID conversationId,
+            String proposalIdempotencyKey,
             AgentActionType actionType,
             UUID taskId,
             String title,
@@ -99,7 +108,17 @@ public class AgentTaskAction {
         this.id = UUID.randomUUID();
         this.projectId = Objects.requireNonNull(projectId);
         this.requestedByUserId = Objects.requireNonNull(requestedByUserId);
-        this.conversationId = Objects.requireNonNull(conversationId);
+        this.source = Objects.requireNonNull(source);
+        this.conversationId = conversationId;
+        this.proposalIdempotencyKey = proposalIdempotencyKey;
+        if (source == AgentActionSource.CHAT && (conversationId == null || proposalIdempotencyKey != null)) {
+            throw new IllegalArgumentException("Chat actions require a conversation.");
+        }
+        if (source == AgentActionSource.MCP
+                && (conversationId != null || proposalIdempotencyKey == null)) {
+            throw new IllegalArgumentException(
+                    "MCP actions require a proposal idempotency key and cannot bind a conversation.");
+        }
         this.actionType = Objects.requireNonNull(actionType);
         this.taskId = taskId;
         this.title = title;
@@ -108,7 +127,7 @@ public class AgentTaskAction {
         this.priority = priority;
         this.expectedTaskVersion = expectedTaskVersion;
         this.status = AgentActionStatus.PENDING;
-        this.actionWorkflowVersion = 1;
+        this.actionWorkflowVersion = source == AgentActionSource.CHAT ? 1 : null;
         this.createdAt = Objects.requireNonNull(createdAt);
     }
 
@@ -127,7 +146,37 @@ public class AgentTaskAction {
         return new AgentTaskAction(
                 projectId,
                 requestedByUserId,
+                AgentActionSource.CHAT,
                 conversationId,
+                null,
+                actionType,
+                taskId,
+                title,
+                description,
+                taskStatus,
+                priority,
+                expectedTaskVersion,
+                createdAt);
+    }
+
+    public static AgentTaskAction pendingMcp(
+            UUID projectId,
+            UUID requestedByUserId,
+            String proposalIdempotencyKey,
+            AgentActionType actionType,
+            UUID taskId,
+            String title,
+            String description,
+            TaskStatus taskStatus,
+            TaskPriority priority,
+            Long expectedTaskVersion,
+            Instant createdAt) {
+        return new AgentTaskAction(
+                projectId,
+                requestedByUserId,
+                AgentActionSource.MCP,
+                null,
+                Objects.requireNonNull(proposalIdempotencyKey),
                 actionType,
                 taskId,
                 title,
@@ -177,7 +226,9 @@ public class AgentTaskAction {
     public UUID getId() { return id; }
     public UUID getProjectId() { return projectId; }
     public UUID getRequestedByUserId() { return requestedByUserId; }
+    public AgentActionSource getSource() { return source; }
     public UUID getConversationId() { return conversationId; }
+    public String getProposalIdempotencyKey() { return proposalIdempotencyKey; }
     public AgentActionType getActionType() { return actionType; }
     public UUID getTaskId() { return taskId; }
     public String getTitle() { return title; }

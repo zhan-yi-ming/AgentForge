@@ -23,6 +23,8 @@ Python Agent Service (services/agent-service) -> Embedding / Retrieval
 Python Agent Service -> Langfuse (optional observability only)
   概率性决策、上下文、RAG、Tool 意图
 
+External MCP Client -- Streamable HTTP + Bearer JWT --> Java Core API (/mcp)
+
 Redis：仅作为后续阶段可选 profile 保留，V1 默认不启动，也不作为业务事实来源。
 ```
 
@@ -34,7 +36,7 @@ Redis：仅作为后续阶段可选 profile 保留，V1 默认不启动，也不
 
 ### Java Core API
 
-系统的业务与信任边界。它拥有用户、项目、Wiki、Task、权限、审批及最终写入。任何来自 Web 或 Agent 的修改请求都使用相同业务校验，不能因为调用方是内部服务而跳过。
+系统的业务与信任边界。它拥有用户、项目、Wiki、Task、权限、审批及最终写入。任何来自 Web 或 Agent 的修改请求都使用相同业务校验，不能因为调用方是内部服务而跳过。V3-01 在同一边界内提供 MCP Streamable HTTP Adapter：读 Tool 复用 Application Service，写 Tool 只创建 PENDING Approval。
 
 ### Python Agent Service
 
@@ -50,6 +52,7 @@ Redis：仅作为后续阶段可选 profile 保留，V1 默认不启动，也不
 
 ## 关键请求边界
 
+- MCP：外部客户端携带 AgentForge Bearer JWT 调用 `/mcp`；Adapter 不接受客户端提供的 actor/role/risk，读 Tool 进入既有 Wiki/Task 服务，写 Tool 创建 `source=MCP` 且无 Chat checkpoint 的 Approval，人工决定后再由 Java 确定性执行。
 - 查询：Web → Core API；需要 AI 时由 Core API 在完成身份与项目授权后调用 Agent Service。Day 4 的 `retrieve` 节点再用独立内部 token 回调 Core API 读取已授权 Wiki/Task DTO，按版本同步 `rag_chunk` 后执行向量 + BM25 + RRF，详见 ADR-0009 与 ADR-0010。
 - 流式查询：V1.2 中 Java 先同步完成身份、项目权限与日配额检查，再消费 Python 的内部 NDJSON token 流，并向浏览器输出同源 SSE。Java 仍负责 proposal 校验与 pending action 落库；浏览器和 Python 都不能绕过此边界，详见 ADR-0014。
 - 修改：Agent 只能返回 Tool 意图；Java 将白名单提案保存为 `agent_task_action`；Web/HTTP 客户端展示确认；Java 在 confirm 时重新鉴权、锁定 action、校验 Task version、复用 TaskService 执行并落库。详见 ADR-0011。
