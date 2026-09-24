@@ -40,7 +40,7 @@ docker compose --env-file .env -f infra/compose.yaml ps
 - `AGENTFORGE_AGENT_INTERNAL_TOKEN`：Java → Python 的内部 token，至少 16 字符。
 - `AGENTFORGE_CORE_INTERNAL_TOKEN`：Python → Java 的另一个内部 token，至少 16 字符，不能与上一项共用。
 - `POSTGRES_PASSWORD`：本机数据库密码，并同步进入两个数据库连接 URL。
-- `AGENTFORGE_AGENT_LLM_API_KEY`：只在启用 `deepseek`、`zhipu` 或 `qwen` 时填写所选厂商的 key；这是唯一需要你从模型厂商控制台取得的值。
+- `AGENTFORGE_AGENT_LLM_API_KEY`：启用 `deepseek`、`zhipu`、`qwen` 或 `openai` 时填写主模型的 key；配置 fallback 时还需独立填写 `AGENTFORGE_AGENT_LLM_FALLBACK_API_KEY`。
 
 推荐直接运行 `scripts/setup-local-env.ps1` 自动生成以上值，不要手工复制示例占位符。`.env` 已被 Git 忽略。
 
@@ -68,6 +68,7 @@ V2-07 使用 `AGENTFORGE_AGENT_CHECKPOINT_DB_DSN` 持久化待决 Action workflo
 | `deepseek` | `deepseek-flash` | `https://api.deepseek.com` |
 | `zhipu` | `glm-4-flash-250414` | `https://open.bigmodel.cn/api/paas/v4` |
 | `qwen` | `qwen-plus` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| `openai` | 必填 `AGENTFORGE_AGENT_LLM_MODEL` | 官方端点（无需 base URL） |
 
 百炼子业务空间或其他地域必须按控制台替换 base URL；模型名以账号当前可调用列表为准。`AGENTFORGE_AGENT_LLM_PROVIDER=disabled` 可随时恢复无 key 模式。不要把 `.env`、key、token 或含 token 的日志提交到仓库。
 
@@ -154,7 +155,7 @@ Day 4 需要以下新增环境值，它们由 `.env.example` 提供：
 - `AGENTFORGE_AGENT_RAG_DB_DSN`：Python 只用于 `rag_chunk` 派生索引的 PostgreSQL DSN。
 - `AGENTFORGE_AGENT_CHECKPOINT_DB_DSN`：Python 用于 `agent_checkpoint` schema 的 PostgreSQL DSN；本地可与 RAG DSN 相同。
 - `AGENTFORGE_AGENT_EMBEDDING_PROVIDER=hash`：V1 固定无密钥 Embedding 模式。
-- `AGENTFORGE_AGENT_LLM_PROVIDER`：`disabled` 或三家 provider；启用模型时必须在当前进程提供 `AGENTFORGE_AGENT_LLM_API_KEY`。
+- `AGENTFORGE_AGENT_LLM_PROVIDER`：`disabled` 或 `deepseek/zhipu/qwen/openai`；启用模型时必须在当前进程提供 `AGENTFORGE_AGENT_LLM_API_KEY`，`openai` 还需显式设置模型名且不能保留其它 provider 的 base URL。
 
 看到 uvicorn 正在监听后不要关闭窗口。若 PowerShell 禁止激活脚本，可以不激活，改用：
 
@@ -367,3 +368,7 @@ docker compose --env-file .env -f infra/compose.yaml down
 - 模型调用返回 503：确认 provider 拼写、所选厂商 key、账号模型权限、余额、地域 base URL 和模型名；排查时不得输出 key。需要无网络恢复时切回 `disabled`。
 - Bearer 请求返回 401：token 可能已超过默认 30 分钟，重新登录获取。
 - 请求返回错误时：记录响应头 `X-Request-Id`，到 Core API 日志中搜索相同值。
+
+## V3-02 Model Gateway 配置
+
+Agent Service 的生成模型由 LiteLLM SDK 调用。`AGENTFORGE_AGENT_LLM_PROVIDER` 可选 `disabled/deepseek/zhipu/qwen/openai`；启用时必须提供主 key。可选的 `AGENTFORGE_AGENT_LLM_FALLBACK_PROVIDER`、`AGENTFORGE_AGENT_LLM_FALLBACK_API_KEY`、`AGENTFORGE_AGENT_LLM_FALLBACK_MODEL`、`AGENTFORGE_AGENT_LLM_FALLBACK_BASE_URL` 仅提供一次静态故障回退，不能用相同 provider/model 形成循环。OpenAI 不默认启用，必须显式配置。模型名和地址以部署账号可用值为准。成本估算未知时不会当作零成本。不要提交任何真实 key。

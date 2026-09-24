@@ -97,7 +97,8 @@ flowchart TB
 - ✅ V2-08：可重复离线 Evaluation Pipeline。当前固定小数据集的真实基线为 Recall@K/MRR/Hit Rate `0.75`、确定性词项支持率 `0.833`、Tool Selection/Task Success `1.0`。这些数字只用于回归，不代表线上质量、统计显著性或完整语义正确性。
 - ✅ V2-09：完整 Release Regression 已通过 11/11 个失败关闭阶段，覆盖普通问答、RAG、Tool/HITL、权限隔离、重复请求、restart/resume、Trace 和 Evaluation；`v2-stable` 只从已验证并推送的节点提交创建。
 - ✅ V3-01：MCP Streamable HTTP Adapter 已实现并通过 Milestone Review；四个 Wiki/Task Tool 复用 Java RBAC、Risk、Approval 与幂等执行链路。
-- 🧭 V3-02 及后续：Model Gateway、Multi-model Routing 与 GraphRAG 仍是规划项。
+- ✅ V3-02：Python Agent 已接入进程内 LiteLLM Model Gateway，统一 provider 调用、有限故障回退、usage 与可用时的成本估算；[设计与限制](docs/03-features/model-routing.md)。
+- 🧭 V3-03 及后续：按任务类型多模型路由与 GraphRAG 仍是规划项。
 
 每个节点的实现、失败测试、最终验证和独立 Review 都记录在[变更记录](docs/07-changes/README.md)与[审核记录](docs/08-reviews/README.md)。
 
@@ -107,7 +108,7 @@ flowchart TB
 
 ```powershell
 .\scripts\setup-local-env.ps1
-# 可选：在 .env 中配置 deepseek / zhipu / qwen；默认 disabled 无需外部 key
+# 可选：在 .env 中配置 deepseek / zhipu / qwen / openai；默认 disabled 无需外部 key
 docker compose --env-file .env -f infra/compose.yaml up --build -d
 .\scripts\demo\seed-v1.ps1
 ```

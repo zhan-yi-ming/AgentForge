@@ -108,3 +108,5 @@ Wiki `content` 原样返回；Task `content` 是由 Java 从 title/status/priori
 `POST /api/v1/projects/{projectId}/agent/actions/{actionId}/auto-confirm` 需认证及 `Idempotency-Key`，响应沿用 `AgentActionResponse`。仅持久化创建已满 60 秒、当前 Java Tool Policy 为 LOW 且显式允许的 PENDING `CREATE_TASK` 可自动确认；未到期或中高风险返回 409/403，不执行业务写入。Java 重验项目/actor/状态并持久化 `AUTO_APPROVED` 审计，后续 resume 与执行复用手动确认流程。浏览器倒计时不是安全边界。
 
 Core 公共同步/SSE 与 Python 内部 Chat 请求的 `message` 长度上限统一为 16,000 字符；超限由入口验证拒绝。Web 的 AI 文本整理在发送前计算提示词与原文总长度，并对更长文档提示分段处理。
+
+V3-02 把生成式模型调用移至 Python 进程内的 LiteLLM Model Gateway。此节点不改变 `/internal/v1` 或公共 Chat HTTP 字段；主模型与静态 fallback 的暂时性失败在 Python 内部处理，输出开始后的流式失败继续使用现有通用 `error` 事件。详见 `../03-features/model-routing.md`。

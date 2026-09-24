@@ -4,12 +4,12 @@ from typing import Any
 from urllib.parse import urlparse
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 
 from .config import Settings
 from .context import ContextBundle, TokenCounter
 from .errors import LlmDependencyError
 from .graph import ChatState, Responder, deterministic_responder
+from .model_gateway import LiteLlmGateway
 from .natural_tool_planner import parse_tool_intent
 from .tool_planner import plan_tool
 
@@ -18,6 +18,7 @@ PROVIDER_DEFAULTS = {
     "deepseek": ("https://api.deepseek.com", "deepseek-flash"),
     "zhipu": ("https://open.bigmodel.cn/api/paas/v4", "glm-4-flash-250414"),
     "qwen": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-plus"),
+    "openai": (None, None),
 }
 
 SYSTEM_PROMPT = """你是 AgentForge 项目助手。请优先使用中文简洁回答用户。
@@ -143,7 +144,7 @@ class CompatibleLlmResponder:
         try:
             response = self.model.invoke(messages)
         except Exception as exception:
-            raise LlmDependencyError("Configured LLM provider is unavailable.") from exception
+            raise LlmDependencyError("Configured LLM provider is unavailable.") from None
 
         content = getattr(response, "content", None)
         if not isinstance(content, str) or not content.strip():
@@ -158,8 +159,19 @@ class CompatibleLlmResponder:
         self._update_model_metadata(observation)
         emitted = False
         latest_usage = None
+        latest_cost_metadata = None
+        observed_model = self.model_name
         try:
             for response in self.model.stream(self._messages(state)):
+                metadata = getattr(response, "response_metadata", None)
+                if isinstance(metadata, dict):
+                    model = metadata.get("model")
+                    provider = metadata.get("provider")
+                    if observation is not None and isinstance(model, str) and model != observed_model and isinstance(provider, str):
+                        observed_model = model
+                        observation.update(model=model, metadata={"provider": provider})
+                    if isinstance(provider, str) and isinstance(metadata.get("cost_usd"), (int, float)):
+                        latest_cost_metadata = {"provider": provider, "cost_usd": metadata["cost_usd"]}
                 usage = _usage_details(response)
                 if usage:
                     latest_usage = usage
@@ -168,11 +180,13 @@ class CompatibleLlmResponder:
                     emitted = True
                     yield content
         except Exception as exception:
-            raise LlmDependencyError("Configured LLM provider is unavailable.") from exception
+            raise LlmDependencyError("Configured LLM provider is unavailable.") from None
         if not emitted:
             raise LlmDependencyError("Configured LLM provider returned no valid text.")
         if observation is not None and latest_usage:
             observation.update(usage_details=latest_usage)
+        if observation is not None and latest_cost_metadata:
+            observation.update(metadata=latest_cost_metadata)
 
     def _update_model_metadata(self, observation) -> None:
         if observation is not None:
@@ -181,11 +195,22 @@ class CompatibleLlmResponder:
                 metadata={"provider": self.provider},
             )
 
-    @staticmethod
-    def _update_usage(observation, response) -> None:
+    def _update_usage(self, observation, response) -> None:
+        if observation is None:
+            return
         usage = _usage_details(response)
-        if observation is not None and usage:
+        if usage:
             observation.update(usage_details=usage)
+        metadata = getattr(response, "response_metadata", None)
+        if not isinstance(metadata, dict):
+            return
+        provider = metadata.get("provider")
+        model = metadata.get("model")
+        if isinstance(model, str) and model != self.model_name and isinstance(provider, str):
+            observation.update(model=model, metadata={"provider": provider})
+        cost = metadata.get("cost_usd")
+        if isinstance(cost, (int, float)) and isinstance(provider, str):
+            observation.update(metadata={"provider": provider, "cost_usd": cost})
 
     def _messages(self, state: ChatState):
         bundle = state["context_bundle"]
@@ -198,9 +223,14 @@ ModelFactory = Callable[..., Any]
 
 def build_responder(
     settings: Settings,
-    model_factory: ModelFactory = ChatOpenAI,
+    model_factory: ModelFactory | None = None,
+    completion_func: Callable[..., Any] | None = None,
+    cost_func: Callable[[Any], float] | None = None,
+    stream_cost_func: Callable[[str, dict[str, int]], float] | None = None,
 ) -> Responder:
     if settings.llm_provider == "disabled":
+        if settings.llm_fallback_provider:
+            raise LlmDependencyError("Configured fallback requires an enabled primary LLM.")
         return deterministic_responder
 
     api_key = settings.llm_api_key
@@ -208,20 +238,69 @@ def build_responder(
         raise LlmDependencyError("Configured LLM provider requires an API key.")
 
     default_url, default_model = PROVIDER_DEFAULTS[settings.llm_provider]
-    base_url = (settings.llm_base_url or default_url).rstrip("/")
+    base_url = (settings.llm_base_url or default_url or "").rstrip("/")
     hostname = (urlparse(base_url).hostname or "").lower()
-    if hostname == "openai.com" or hostname.endswith(".openai.com"):
+    if settings.llm_provider == "openai" and base_url:
+        raise LlmDependencyError("OpenAI provider does not accept a custom base URL.")
+    if settings.llm_provider != "openai" and (hostname == "openai.com" or hostname.endswith(".openai.com")):
         raise LlmDependencyError("OpenAI service endpoints are not allowed.")
     model_name = settings.llm_model or default_model
-    model = model_factory(
-        api_key=api_key,
-        base_url=base_url,
-        model=model_name,
-        timeout=settings.request_timeout_seconds,
-        max_retries=1,
-        max_tokens=settings.llm_max_tokens,
-        stream_usage=True,
-    )
+    if not model_name:
+        raise LlmDependencyError("Configured LLM provider requires a model name.")
+    if model_factory is not None:
+        model = model_factory(
+            api_key=api_key,
+            base_url=base_url,
+            model=model_name,
+            timeout=settings.request_timeout_seconds,
+            max_retries=1,
+            max_tokens=settings.llm_max_tokens,
+            stream_usage=True,
+        )
+    else:
+        if completion_func is None:
+            from litellm import completion as completion_func
+            if cost_func is None:
+                from litellm import completion_cost as cost_func
+            if stream_cost_func is None:
+                from litellm import cost_per_token
+                def stream_cost_func(model: str, usage: dict[str, int]) -> float:
+                    input_cost, output_cost = cost_per_token(
+                        model=model,
+                        prompt_tokens=usage["input_tokens"],
+                        completion_tokens=usage["output_tokens"],
+                    )
+                    return input_cost + output_cost
+        fallback = None
+        if settings.llm_fallback_provider:
+            fallback_key = settings.llm_fallback_api_key
+            if fallback_key is None or not fallback_key.get_secret_value().strip():
+                raise LlmDependencyError("Fallback LLM provider requires an API key.")
+            fallback_url, fallback_default_model = PROVIDER_DEFAULTS[settings.llm_fallback_provider]
+            fallback_model = settings.llm_fallback_model or fallback_default_model
+            if not fallback_model:
+                raise LlmDependencyError("Fallback LLM provider requires a model name.")
+            fallback_base = (settings.llm_fallback_base_url or fallback_url or "").rstrip("/")
+            fallback_hostname = (urlparse(fallback_base).hostname or "").lower()
+            if settings.llm_fallback_provider == "openai" and fallback_base:
+                raise LlmDependencyError("OpenAI fallback does not accept a custom base URL.")
+            if settings.llm_fallback_provider != "openai" and (fallback_hostname == "openai.com" or fallback_hostname.endswith(".openai.com")):
+                raise LlmDependencyError("OpenAI service endpoints are not allowed for this provider.")
+            if settings.llm_fallback_provider == settings.llm_provider and fallback_model == model_name:
+                raise LlmDependencyError("Fallback LLM must differ from primary.")
+            fallback = (settings.llm_fallback_provider, fallback_model, fallback_key.get_secret_value(), fallback_base)
+        model = LiteLlmGateway(
+            provider=settings.llm_provider,
+            model=model_name,
+            api_key=api_key.get_secret_value(),
+            api_base=base_url,
+            timeout=settings.request_timeout_seconds,
+            max_tokens=settings.llm_max_tokens,
+            completion_func=completion_func,
+            fallback=fallback,
+            cost_func=cost_func,
+            stream_cost_func=stream_cost_func,
+        )
     system_prompt = SYSTEM_PROMPT
     if settings.system_prompt_suffix.strip():
         system_prompt += "\n" + settings.system_prompt_suffix.strip()

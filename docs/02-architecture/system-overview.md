@@ -42,6 +42,8 @@ Redis：仅作为后续阶段可选 profile 保留，V1 默认不启动，也不
 
 负责 LLM、LangGraph、RAG、上下文构建和 Tool Calling。Day 4 可写入可重建的 `rag_chunk` 派生索引，但不读取或修改 Wiki、Task、用户等业务表；它生成答案或结构化操作意图，没有绕过 Java Core API 修改业务事实的权限。V2-01 在该服务内通过集中 adapter 建立 `request -> agent -> prepare / retrieval / tool / llm` Langfuse Trace；adapter 只发送白名单摘要并 fail-open，不能执行业务写入或改变 Chat 结果。
 
+V3-02 在 Python Agent Service 内建立 LiteLLM Model Gateway，集中处理模型调用、超时、有限故障回退、usage 与可用时的成本估算；部署选择 provider。Gateway 不持有业务写入权限，不改变 Java 的 RBAC、Risk 和 Approval 边界。详见 `decisions/ADR-0030-litellm-model-gateway.md` 与 `../03-features/model-routing.md`。
+
 ### PostgreSQL
 
 保存业务事实，并通过 `pgvector` 保存可重建的 RAG Chunk 向量。业务表只由 Java 访问；Python 只访问 `rag_chunk` 派生索引，避免过早增加独立向量数据库。

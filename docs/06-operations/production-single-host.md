@@ -131,3 +131,7 @@ scripts/deploy/health-check.sh
 - 浏览器 `ERR_INTERNET_DISCONNECTED`：先恢复客户端网络再重试；该错误描述浏览器连接状态，不能单独证明服务器、Nginx、Core API 或 Agent Service 故障。
 - 磁盘不足：检查 `docker system df` 和备份目录；只清理未使用镜像，不删除 named volume。
 - 更新失败：运行 `rollback.sh`，再执行健康检查。
+
+## V3-02 Model Gateway
+
+生产 Compose 将主模型与可选的 `AGENTFORGE_AGENT_LLM_FALLBACK_*` 变量转发给 Python Agent Service。fallback 默认关闭；启用时在服务器私有环境文件配置独立 key、provider，并按需配置 model/base URL。OpenAI 只在显式选为 provider 且提供模型名与 key 时调用。流式输出开始后失败不会切换模型，公共错误仍保持通用消息。V3-02 关闭同一 provider 的自动重试；未配置 fallback 时暂时性错误会直接返回通用依赖错误。不得把模型 key 写入仓库或排错日志。

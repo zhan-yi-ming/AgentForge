@@ -1,5 +1,7 @@
 # 变更记录
 
+- `2026-09-24-v3-02-litellm-model-gateway.md`：V3-02 LiteLLM Model Gateway。
+
 - `2026-09-24-v3-01-mcp-adapter.md`：V3-01 MCP Streamable HTTP Adapter、Java Tool Policy 与 Approval 复用。
 
 - `2026-09-23-pre-v3-production-release.md`：P3 功能发布到 `zhanyiming.cloud` 的 Release Gate、备份与验收记录。

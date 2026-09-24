@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     rag_enabled: bool = True
     embedding_provider: Literal["hash"] = "hash"
     embedding_dimensions: int = Field(default=384, ge=384, le=384)
-    llm_provider: Literal["disabled", "deepseek", "zhipu", "qwen"] = "disabled"
+    llm_provider: Literal["disabled", "deepseek", "zhipu", "qwen", "openai"] = "disabled"
     asr_api_key: SecretStr | None = None
     asr_workspace_id: str | None = None
     asr_region: Literal["cn-beijing", "ap-southeast-1"] = "cn-beijing"
@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr | None = None
     llm_base_url: str | None = None
     llm_model: str | None = None
+    llm_fallback_provider: Literal["deepseek", "zhipu", "qwen", "openai"] | None = None
+    llm_fallback_api_key: SecretStr | None = None
+    llm_fallback_base_url: str | None = None
+    llm_fallback_model: str | None = None
     llm_max_tokens: int = Field(default=800, ge=64, le=4096)
     system_prompt_suffix: str = Field(default="", max_length=4000)
     context_token_budget: int = Field(default=8192, ge=1024, le=131072)
@@ -53,6 +57,11 @@ class Settings(BaseSettings):
     rag_top_k: int = Field(default=6, ge=1, le=20)
     rag_candidate_k: int = Field(default=12, ge=1, le=50)
     rag_context_char_budget: int = Field(default=4000, ge=500, le=12000)
+
+    @field_validator("llm_fallback_provider", mode="before")
+    @classmethod
+    def blank_fallback_is_disabled(cls, value: str | None) -> str | None:
+        return value or None
 
     @field_validator("asr_workspace_id")
     @classmethod

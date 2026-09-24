@@ -25,9 +25,11 @@
 - `web-workspace.md`：Day 6 登录、项目选择、Wiki/Task、AI Chat、人工确认与 Markdown 预览，已实现并在 Day 7 完成真实浏览器验收。
 - `public-demo-protection.md`：V1.1 公网 Demo 的注册、配额、限速和模型预算保护。
 
+- [Model Gateway 与 Provider 抽象](model-routing.md)：V3-02 统一模型调用与故障回退。
+
 ## 后续计划
 
 以下文档尚未创建，表示功能也不应开始实现：
 
 - V2-09 Release Gate 已完成；V2-01 至 V2-09 全部收口。Memory Namespace 仅表示 Agent 记忆归属，不代表长期记忆或完整 SaaS 多租户。
-- V3-01 MCP 已实现并通过 Milestone Review；V3-02 及后续节点仍须分别获得 Start Gate 授权。
+- V3-01 MCP 已实现并通过 Milestone Review；V3-02 Model Gateway 已实现并通过 Milestone Review；V3-03 及后续节点仍须分别获得授权。
