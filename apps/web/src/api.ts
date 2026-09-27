@@ -32,6 +32,8 @@ export class ApiProblem extends Error {
   }
 }
 
+export type AgentTaskType = "FORMAT" | "REWRITE" | "PLAN" | "REVIEW" | "ANSWER";
+
 export interface ApiClient {
   login(email: string, password: string): Promise<AuthResponse>;
   listProjects(): Promise<Project[]>;
@@ -42,8 +44,8 @@ export interface ApiClient {
   listConversations(projectId: string): Promise<ConversationSummary[]>;
   getConversation(projectId: string, conversationId: string): Promise<ConversationDetail>;
   deleteConversation(projectId: string, conversationId: string): Promise<void>;
-  chat(projectId: string, message: string, conversationId?: string): Promise<AgentChat>;
-  chatStream(projectId: string, message: string, conversationId: string | undefined, callbacks: AgentStreamCallbacks, signal?: AbortSignal): Promise<AgentChat>;
+  chat(projectId: string, message: string, conversationId?: string, taskType?: AgentTaskType): Promise<AgentChat>;
+  chatStream(projectId: string, message: string, conversationId: string | undefined, callbacks: AgentStreamCallbacks, signal?: AbortSignal, taskType?: AgentTaskType): Promise<AgentChat>;
   startVoice(projectId: string): Promise<{ sessionId: string }>;
   appendVoiceAudio(projectId: string, sessionId: string, audio: Uint8Array): Promise<void>;
   getVoice(projectId: string, sessionId: string): Promise<VoiceSnapshot>;
@@ -84,12 +86,13 @@ export function createApiClient(getToken: () => string | null): ApiClient {
     conversationId: string | undefined,
     callbacks: AgentStreamCallbacks,
     signal?: AbortSignal,
+    taskType: AgentTaskType = "ANSWER",
   ): Promise<AgentChat> {
     const headers = new Headers({ Accept: "text/event-stream", "Content-Type": "application/json" });
     const token = getToken();
     if (token) headers.set("Authorization", `Bearer ${token}`);
     const response = await fetch(`/api/v1/projects/${projectId}/agent/chat/stream`, {
-      method: "POST", headers, body: JSON.stringify({ message, conversationId }), signal,
+      method: "POST", headers, body: JSON.stringify({ message, conversationId, taskType }), signal,
     });
     if (!response.ok) {
       let problem: Record<string, unknown> = {};
@@ -168,7 +171,7 @@ export function createApiClient(getToken: () => string | null): ApiClient {
     listConversations: (projectId) => request(`/api/v1/projects/${projectId}/agent/conversations`),
     getConversation: (projectId, conversationId) => request(`/api/v1/projects/${projectId}/agent/conversations/${conversationId}`),
     deleteConversation: (projectId, conversationId) => request(`/api/v1/projects/${projectId}/agent/conversations/${conversationId}`, { method: "DELETE" }),
-    chat: (projectId, message, conversationId) => request(`/api/v1/projects/${projectId}/agent/chat`, { method: "POST", body: JSON.stringify({ message, conversationId }) }),
+    chat: (projectId, message, conversationId, taskType = "ANSWER") => request(`/api/v1/projects/${projectId}/agent/chat`, { method: "POST", body: JSON.stringify({ message, conversationId, taskType }) }),
     chatStream,
     startVoice: (projectId) => request(`/api/v1/projects/${projectId}/agent/asr/sessions`, { method: "POST" }),
     appendVoiceAudio: async (projectId, sessionId, audio) => {

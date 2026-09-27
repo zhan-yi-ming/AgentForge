@@ -15,6 +15,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 import com.agentforge.core.agent.application.AgentChatResult;
+import com.agentforge.core.agent.application.AgentTaskType;
 import com.agentforge.core.agent.application.AgentResumeResult;
 import com.agentforge.core.agent.application.AgentServiceClient;
 import com.agentforge.core.agent.application.AgentStreamEvent;
@@ -47,6 +48,12 @@ public class HttpAgentServiceClient implements AgentServiceClient {
             UUID conversationId,
             String requestId,
             Consumer<AgentStreamEvent> sink) {
+        stream(projectId, userId, actorAdmin, message, conversationId, requestId, AgentTaskType.ANSWER, sink);
+    }
+
+    @Override
+    public void stream(UUID projectId, UUID userId, boolean actorAdmin, String message,
+            UUID conversationId, String requestId, AgentTaskType taskType, Consumer<AgentStreamEvent> sink) {
         String effectiveRequestId = StringUtils.hasText(requestId)
                 ? requestId
                 : UUID.randomUUID().toString();
@@ -55,7 +62,7 @@ public class HttpAgentServiceClient implements AgentServiceClient {
                     .uri("/internal/v1/chat/stream")
                     .header("X-Request-Id", effectiveRequestId)
                     .body(new InternalChatRequest(
-                            projectId, userId, actorAdmin, message, conversationId, effectiveRequestId))
+                            projectId, userId, actorAdmin, message, conversationId, effectiveRequestId, taskType))
                     .exchange((request, response) -> {
                         if (response.getStatusCode().isError()) {
                             throw new ServiceUnavailableException("Agent Service is unavailable.");
@@ -88,6 +95,12 @@ public class HttpAgentServiceClient implements AgentServiceClient {
             String message,
             UUID conversationId,
             String requestId) {
+        return chat(projectId, userId, actorAdmin, message, conversationId, requestId, AgentTaskType.ANSWER);
+    }
+
+    @Override
+    public AgentChatResult chat(UUID projectId, UUID userId, boolean actorAdmin, String message,
+            UUID conversationId, String requestId, AgentTaskType taskType) {
         String effectiveRequestId = StringUtils.hasText(requestId)
                 ? requestId
                 : UUID.randomUUID().toString();
@@ -101,7 +114,7 @@ public class HttpAgentServiceClient implements AgentServiceClient {
                             actorAdmin,
                             message,
                             conversationId,
-                            effectiveRequestId))
+                            effectiveRequestId, taskType))
                     .retrieve()
                     .body(AgentChatResult.class);
             if (response == null) {
@@ -162,7 +175,8 @@ public class HttpAgentServiceClient implements AgentServiceClient {
             boolean actorAdmin,
             String message,
             UUID conversationId,
-            String requestId) {
+            String requestId,
+            AgentTaskType taskType) {
     }
 
     private record InternalResumeRequest(

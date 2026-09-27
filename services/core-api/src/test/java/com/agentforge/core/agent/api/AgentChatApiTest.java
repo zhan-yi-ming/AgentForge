@@ -211,4 +211,35 @@ class AgentChatApiTest {
                 .andExpect(jsonPath("$.pendingAction.status").value("PENDING"))
                 .andExpect(jsonPath("$.toolProposal").doesNotExist());
     }
+    @Test
+    void explicitFormatModeReachesAuthorizedApplicationService() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        when(agentChatService.chat(eq(projectId), any(), eq("notes"), any(), any(),
+                eq(com.agentforge.core.agent.application.AgentTaskType.FORMAT)))
+                .thenReturn(new AgentChatResult(UUID.randomUUID(), "formatted", "mode-test", List.of()));
+        mockMvc.perform(post("/api/v1/projects/{projectId}/agent/chat", projectId)
+                .with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString()).claim("roles", List.of("USER"))))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"message\":\"notes\",\"taskType\":\"FORMAT\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.answer").value("formatted"));
+    }
+
+    @Test
+    void unknownTaskModeIsRejectedForSyncAndStream() throws Exception {
+        for (String path : List.of("chat", "chat/stream")) {
+            mockMvc.perform(post("/api/v1/projects/{projectId}/agent/" + path, UUID.randomUUID())
+                    .with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString()).claim("roles", List.of("USER"))))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"message\":\"notes\",\"taskType\":\"UNKNOWN\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+    @Test
+    void numericTaskModeDoesNotSelectEnumByOrdinal() throws Exception {
+        mockMvc.perform(post("/api/v1/projects/{projectId}/agent/chat", UUID.randomUUID())
+                .with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString()).claim("roles", List.of("USER"))))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"message\":\"notes\",\"taskType\":0}"))
+                .andExpect(status().isBadRequest());
+    }
 }

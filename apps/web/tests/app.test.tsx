@@ -804,6 +804,7 @@ describe("App", () => {
       undefined,
       expect.any(Object),
       expect.any(AbortSignal),
+      "FORMAT",
     );
     await user.click(screen.getByRole("button", { name: "Wiki 工作台" }));
     expect(screen.getByLabelText("Wiki Markdown 草稿")).toHaveValue("Original draft");
@@ -867,6 +868,7 @@ describe("App", () => {
       undefined,
       expect.any(Object),
       expect.any(AbortSignal),
+      "FORMAT",
     );
     await user.click(await screen.findByRole("button", { name: "应用到 Wiki 草稿" }));
 

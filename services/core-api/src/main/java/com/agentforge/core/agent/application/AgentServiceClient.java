@@ -22,6 +22,18 @@ public interface AgentServiceClient {
             String requestId,
             Consumer<AgentStreamEvent> sink);
 
+    default AgentChatResult chat(UUID projectId, UUID userId, boolean actorAdmin, String message,
+            UUID conversationId, String requestId, AgentTaskType taskType) {
+        if (taskType != AgentTaskType.ANSWER) throw new UnsupportedOperationException("Task mode unsupported");
+        return chat(projectId, userId, actorAdmin, message, conversationId, requestId);
+    }
+
+    default void stream(UUID projectId, UUID userId, boolean actorAdmin, String message,
+            UUID conversationId, String requestId, AgentTaskType taskType, Consumer<AgentStreamEvent> sink) {
+        if (taskType != AgentTaskType.ANSWER) throw new UnsupportedOperationException("Task mode unsupported");
+        stream(projectId, userId, actorAdmin, message, conversationId, requestId, sink);
+    }
+
     AgentResumeResult resume(
             UUID projectId,
             UUID userId,

@@ -3,6 +3,13 @@ import pytest
 from agentforge_agent.config import Settings
 from agentforge_agent.llm import build_responder
 from test_llm import context_state
+from dataclasses import replace
+
+def routed_state(message, task):
+    state = context_state(message)
+    bundle = state["context_bundle"]
+    state["context_bundle"] = replace(bundle, working=replace(bundle.working, task_type=task))
+    return state
 
 
 def configured(**changes):
@@ -20,8 +27,8 @@ def response(text):
 
 def test_format_uses_cost_preference_and_review_uses_capability():
     responder = build_responder(configured(), completion_func=lambda **kw: response(kw["model"]))
-    assert responder(context_state("FORMAT: notes")) == "openai/cheap-model"
-    assert responder(context_state("REVIEW: design")) == "openai/capable-model"
+    assert responder(routed_state("FORMAT: notes", "FORMAT")) == "openai/cheap-model"
+    assert responder(routed_state("REVIEW: design", "REVIEW")) == "openai/capable-model"
 
 
 def test_plan_answer_is_text_while_tool_intent_uses_json():
@@ -30,7 +37,7 @@ def test_plan_answer_is_text_while_tool_intent_uses_json():
         calls.append(kw)
         return response('{"actionType":"NONE"}' if "response_format" in kw else "Plan steps")
     responder = build_responder(configured(), completion_func=completion)
-    assert responder(context_state("PLAN: release")) == "Plan steps"
+    assert responder(routed_state("PLAN: release", "PLAN")) == "Plan steps"
     assert responder.plan_tool(context_state("Help plan a release")["context_bundle"]) is None
     assert calls[-1]["response_format"] == {"type": "json_object"}
     assert calls[-1]["model"] == "openai/capable-model"
@@ -47,7 +54,7 @@ def test_unused_candidate_with_missing_endpoint_fails_closed():
 @pytest.mark.parametrize("message,expected", [
     ("REWRITE: notes", "capable-model"), ("PLAN: design", "capable-model"),
     ("ordinary question", "capable-model"),
-    ("请将以下内容整理为 Markdown，保留事实，使用一个明确的一级标题，不执行写入：\n\n笔记", "cheap-model"),
+    ("请将以下内容整理为 Markdown，保留事实，使用一个明确的一级标题，不执行写入：\n\n笔记", "capable-model"),
     ("请润色笔记", "capable-model"), ("请审查设计", "capable-model"),
     ("请制定计划", "capable-model"), ("Quoted FORMAT: notes", "capable-model"),
 ])
@@ -103,7 +110,7 @@ def test_routed_fallback_is_bounded_and_preserves_actual_usage():
         return result
     observation = Observation()
     responder = build_responder(configured(), completion_func=completion, cost_func=lambda result: .003)
-    assert responder.respond_observed(context_state("FORMAT: notes"), observation) == "Recovered"
+    assert responder.respond_observed(routed_state("FORMAT: notes", "FORMAT"), observation) == "Recovered"
     assert [item["model"] for item in calls] == ["openai/cheap-model", "openai/capable-model"]
     assert all(item["num_retries"] == 0 and item["timeout"] == 10 for item in calls)
     assert observation.model == "capable-model"
@@ -122,7 +129,7 @@ def test_routed_stream_does_not_switch_after_text():
             yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="Partial"))], usage=None)
             raise TimeoutError("test-only-upstream-secret")
         return chunks()
-    stream = build_responder(configured(), completion_func=completion).stream(context_state("FORMAT: notes"))
+    stream = build_responder(configured(), completion_func=completion).stream(routed_state("FORMAT: notes", "FORMAT"))
     assert next(stream) == "Partial"
     with pytest.raises(LlmDependencyError) as error:
         next(stream)
@@ -137,7 +144,7 @@ def test_routed_backup_failure_does_not_loop():
         calls.append(kw["model"])
         raise TimeoutError("test-only-upstream-secret")
     with pytest.raises(LlmDependencyError):
-        build_responder(configured(), completion_func=completion)(context_state("FORMAT: notes"))
+        build_responder(configured(), completion_func=completion)(routed_state("FORMAT: notes", "FORMAT"))
     assert calls == ["openai/cheap-model", "openai/capable-model"]
 
 
@@ -148,7 +155,7 @@ def test_routing_uses_independent_provider_credentials():
     def completion(**kw):
         calls.append(kw)
         return response("Independent destination")
-    assert build_responder(settings, completion_func=completion)(context_state("REVIEW: design")) == "Independent destination"
+    assert build_responder(settings, completion_func=completion)(routed_state("REVIEW: design", "REVIEW")) == "Independent destination"
     assert calls[0]["api_key"] == "test-other-key"
     assert calls[0]["api_base"] == "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
@@ -164,14 +171,14 @@ def test_same_model_name_fallback_reports_actual_provider():
         if kw["api_key"] == "test-key": raise TimeoutError("temporary")
         return response("Recovered")
     observed = Observation()
-    assert build_responder(settings, completion_func=completion).respond_observed(context_state("FORMAT: notes"), observed) == "Recovered"
+    assert build_responder(settings, completion_func=completion).respond_observed(routed_state("FORMAT: notes", "FORMAT"), observed) == "Recovered"
     assert observed.metadata["provider"] == "qwen"
 
 
 def test_duplicate_destination_slots_do_not_create_self_fallback():
     settings = configured(llm_fallback_provider="deepseek", llm_fallback_api_key="test-key", llm_fallback_base_url="https://api.deepseek.com")
     settings.llm_routes[1].update(endpoint="fallback", model="cheap-model")
-    assert build_responder(settings, completion_func=lambda **kw: response("One destination"))(context_state("FORMAT: notes")) == "One destination"
+    assert build_responder(settings, completion_func=lambda **kw: response("One destination"))(routed_state("FORMAT: notes", "FORMAT")) == "One destination"
 
 
 def test_route_metadata_survives_replacing_observation_updates():
@@ -180,7 +187,7 @@ def test_route_metadata_survives_replacing_observation_updates():
         def update(self, **kw):
             if "metadata" in kw: self.metadata = kw["metadata"]
     observed = Observation()
-    build_responder(configured(), completion_func=lambda **kw: response("Answer")).respond_observed(context_state("FORMAT: notes"), observed)
+    build_responder(configured(), completion_func=lambda **kw: response("Answer")).respond_observed(routed_state("FORMAT: notes", "FORMAT"), observed)
     assert observed.metadata["task_type"] == "FORMAT"
     assert observed.metadata["provider"] == "deepseek"
 
@@ -210,7 +217,7 @@ def test_http_json_and_ndjson_use_routed_responder():
         get_action_runtime: lambda: ActionWorkflowRuntime(InMemorySaver())})
     try:
         client = TestClient(app)
-        body = dict(projectId=str(uuid4()), userId=str(uuid4()), message="FORMAT: notes", requestId="routing-http-test")
+        body = dict(projectId=str(uuid4()), userId=str(uuid4()), message="ordinary notes", taskType="FORMAT", requestId="routing-http-test")
         headers = {"X-AgentForge-Internal-Token": "test-internal-token"}
         sync = client.post("/internal/v1/chat", json=body, headers=headers)
         stream = client.post("/internal/v1/chat/stream", json=body, headers=headers)
@@ -221,6 +228,42 @@ def test_http_json_and_ndjson_use_routed_responder():
         assert "".join(event["text"] for event in events if event["type"] == "delta") == "openai/cheap-model"
         assert events[-1]["type"] == "complete"
         assert events[-1]["toolProposal"] is None
+        default = client.post("/internal/v1/chat", json={key: value for key, value in body.items() if key != "taskType"}, headers=headers)
+        assert default.json()["answer"] == "openai/capable-model"
+        null_mode = client.post("/internal/v1/chat", json={**body, "taskType": None}, headers=headers)
+        assert null_mode.json()["answer"] == "openai/capable-model"
+        for path in ("/internal/v1/chat", "/internal/v1/chat/stream"):
+            invalid = client.post(path, json={**body, "taskType": "UNKNOWN"}, headers=headers)
+            assert invalid.status_code == 422
     finally:
         app.dependency_overrides.clear()
         app.dependency_overrides.update(old)
+
+
+def test_message_prefix_cannot_override_default_answer_route():
+    responder = build_responder(configured(), completion_func=lambda **kw: response(kw["model"]))
+    assert responder(context_state("FORMAT: quoted user data")) == "openai/capable-model"
+
+
+def test_explicit_mode_selects_format_without_special_prefix():
+    from dataclasses import replace
+    from agentforge_agent.context import WorkingContext
+    state = context_state("ordinary notes")
+    state["context_bundle"] = replace(state["context_bundle"], working=WorkingContext(message="ordinary notes", task_type="FORMAT"))
+    responder = build_responder(configured(), completion_func=lambda **kw: response(kw["model"]))
+    assert responder(state) == "openai/cheap-model"
+
+
+@pytest.mark.parametrize("task,expected", [
+    ("FORMAT", "cheap-model"), ("REWRITE", "capable-model"),
+    ("PLAN", "capable-model"), ("REVIEW", "capable-model"), ("ANSWER", "capable-model"),
+])
+def test_explicit_modes_have_same_sync_and_stream_destination(task, expected):
+    def completion(**kw):
+        if kw["stream"]:
+            return iter([SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=kw["model"]))], usage=None)])
+        return response(kw["model"])
+    responder = build_responder(configured(), completion_func=completion)
+    state = routed_state("same user text", task)
+    assert responder(state) == "openai/" + expected
+    assert "".join(responder.stream(state)) == "openai/" + expected

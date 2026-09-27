@@ -15,6 +15,7 @@ class ChatRequest(ApiModel):
     actor_admin: bool = False
     message: str = Field(min_length=1, max_length=16000)
     conversation_id: UUID | None = None
+    task_type: Literal["FORMAT", "REWRITE", "PLAN", "REVIEW", "ANSWER"] | None = "ANSWER"
     request_id: str = Field(min_length=1, max_length=128)
 
 

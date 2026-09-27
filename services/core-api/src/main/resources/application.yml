@@ -29,7 +29,7 @@ agentforge:
     base-url: ${AGENTFORGE_AGENT_SERVICE_URL:http://localhost:8000}
     internal-token: ${AGENTFORGE_AGENT_INTERNAL_TOKEN}
     connect-timeout: ${AGENTFORGE_AGENT_CONNECT_TIMEOUT:PT2S}
-    read-timeout: ${AGENTFORGE_AGENT_READ_TIMEOUT:PT30S}
+    read-timeout: ${AGENTFORGE_AGENT_READ_TIMEOUT:PT330S}
   core-internal:
     token: ${AGENTFORGE_CORE_INTERNAL_TOKEN}
   ai:

@@ -618,6 +618,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
           },
         },
         controller.signal,
+        "FORMAT",
       );
       if (activeProjectId.current !== requestedProjectId) return;
       setFormattedText(normalizeMarkdownContent(result.answer));

@@ -19,6 +19,7 @@ class LiteLlmGateway:
         completion_func: Callable[..., Any],
         response_format: dict[str, str] | None = None,
         fallback: tuple[str, str, str, str] | None = None,
+        fallback_json_output: bool = False,
         cost_func: Callable[[Any], float] | None = None,
         stream_cost_func: Callable[[str, dict[str, int]], float] | None = None,
     ) -> None:
@@ -31,6 +32,7 @@ class LiteLlmGateway:
         self.completion_func = completion_func
         self.response_format = response_format
         self.fallback = fallback
+        self.fallback_json_output = fallback_json_output
         self.cost_func = cost_func
         self.stream_cost_func = stream_cost_func
 
@@ -44,7 +46,8 @@ class LiteLlmGateway:
             max_tokens=kwargs.get("max_tokens", self.max_tokens),
             completion_func=self.completion_func,
             response_format=kwargs.get("response_format", self.response_format),
-            fallback=self.fallback,
+            fallback=self.fallback if not kwargs.get("response_format", self.response_format) or self.fallback_json_output else None,
+            fallback_json_output=self.fallback_json_output,
             cost_func=self.cost_func,
             stream_cost_func=self.stream_cost_func,
         )

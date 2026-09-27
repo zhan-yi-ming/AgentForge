@@ -15,6 +15,7 @@ class ChatState(TypedDict, total=False):
     namespace: MemoryNamespace
     actor_admin: bool
     message: str
+    task_type: str
     request_id: str
     context_bundle: ContextBundle
     answer: str
@@ -112,6 +113,7 @@ def _context_nodes(
                     namespace=namespace,
                     actor_admin=state["actor_admin"],
                     message=state["message"],
+                    task_type=state.get("task_type", "ANSWER"),
                     request_id=state["request_id"],
                     conversation=conversation,
                 )

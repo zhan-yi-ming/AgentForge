@@ -101,10 +101,10 @@ class CompatibleLlmResponder:
         model_name: str = "unknown",
         prompt_composer: PromptComposer | None = None,
         system_prompt: str = SYSTEM_PROMPT,
-        intent_json: bool = False,
+        intent_json: bool | None = None,
     ) -> None:
         self.model = model
-        self.intent_json = intent_json
+        self.intent_json = provider == "deepseek" if intent_json is None else intent_json
         self.provider = provider
         self.model_name = model_name
         self.system_prompt = system_prompt
@@ -131,7 +131,7 @@ class CompatibleLlmResponder:
         try:
             planner_model = (
                 self.model.bind(response_format={"type": "json_object"}, max_tokens=512)
-                if self.provider == "deepseek" or self.intent_json else self.model
+                if self.intent_json else self.model
             )
             response = planner_model.invoke([
                 SystemMessage(content=TOOL_INTENT_PROMPT), HumanMessage(content=request)
@@ -170,10 +170,13 @@ class CompatibleLlmResponder:
                 if isinstance(metadata, dict):
                     model = metadata.get("model")
                     provider = metadata.get("provider")
-                    if observation is not None and isinstance(model, str) and isinstance(provider, str) and (model != observed_model or provider != observed_provider):
+                    if isinstance(model, str) and isinstance(provider, str) and (model != observed_model or provider != observed_provider):
                         observed_model = model
                         observed_provider = provider
-                        observation.update(model=model, metadata={"provider": provider})
+                        latest_usage = None
+                        latest_cost_metadata = None
+                        if observation is not None:
+                            observation.update(model=model, metadata={"provider": provider})
                     if isinstance(provider, str) and isinstance(metadata.get("cost_usd"), (int, float)):
                         latest_cost_metadata = {"provider": provider, "cost_usd": metadata["cost_usd"]}
                 usage = _usage_details(response)
@@ -273,6 +276,8 @@ def build_responder(
                     return dict(provider=provider, api_key=getattr(settings, prefix + "api_key"),
                         base_url=getattr(settings, prefix + "base_url"), model=item.model)
                 updates = {"llm_routes": [], "llm_fallback_provider": None,
+                    "llm_json_output": chosen.json_output,
+                    "llm_fallback_json_output": unique[1].json_output if len(unique) > 1 else False,
                     **{"llm_" + key: value for key, value in endpoint(chosen).items()}}
                 if len(unique) > 1:
                     updates.update({"llm_fallback_" + key: value for key, value in endpoint(unique[1]).items()})
@@ -356,6 +361,7 @@ def build_responder(
             max_tokens=settings.llm_max_tokens,
             completion_func=completion_func,
             fallback=fallback,
+            fallback_json_output=settings.llm_fallback_json_output,
             cost_func=cost_func,
             stream_cost_func=stream_cost_func,
         )
@@ -364,6 +370,7 @@ def build_responder(
         system_prompt += "\n" + settings.system_prompt_suffix.strip()
     return CompatibleLlmResponder(
         model,
+        intent_json=settings.llm_json_output if settings.llm_json_output is not None else settings.llm_provider == "deepseek",
         provider=settings.llm_provider,
         model_name=model_name,
         system_prompt=system_prompt,

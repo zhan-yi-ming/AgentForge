@@ -3,7 +3,7 @@
 - 状态：Implemented（V3-02 / V3-03；Milestone Review PASS）
 - 阶段：V3-02 / V3-03
 - 相关决策：ADR-0030（取代 ADR-0012 的模型客户端选择）
-- 相关接口：`../04-api/agent-service.md`（HTTP 契约不变）
+- 相关接口：`../04-api/agent-service.md`（兼容新增可选 taskType）
 
 ## 用户场景与边界
 
@@ -31,7 +31,7 @@ V3-02 仅支持部署时选定的主模型及一个静态故障候选，不实�
 
 `AGENTFORGE_AGENT_LLM_ROUTES` 为候选 JSON 数组。字段：name、endpoint（primary/fallback 凭据槽）、model、tasks（FORMAT/REWRITE/PLAN/REVIEW/ANSWER）、json_output、streaming、cost_rank、latency_rank、capability_rank。等级为部署者校准的 1–100 相对值；成本/延迟越低越好，能力越高越好，不是实际账单或在线测量。凭据留在已有 LLM_API_KEY / LLM_FALLBACK_API_KEY，不进入路由 JSON。
 
-当前用户消息去除首尾空白后，FORMAT: 或“请将以下内容整理为 Markdown”开头进入 FORMAT；REWRITE: /“请改写”/“请润色”进入 REWRITE；REVIEW: /“请评审”/“请审查”进入 REVIEW；PLAN: /“请制定计划”进入 PLAN；其余 ANSWER。Tool 意图入口固定 PLAN。检索与历史不参与分类，分类不提供权限。
+请求 taskType 为有限枚举 FORMAT/REWRITE/PLAN/REVIEW/ANSWER，省略或 null 默认为 ANSWER。Java 与 Python 均校验枚举；消息、检索与历史不能覆盖任务模式。Tool 意图入口固定 PLAN。任务模式不提供权限，也不允许客户端指定模型、provider 或 rank。
 
 排序键：FORMAT=(成本,延迟,-能力,名称)，REWRITE=(延迟,成本,-能力,名称)，PLAN/REVIEW/ANSWER=(-能力,成本,延迟,名称)。按 provider/model 去重，取两个不同目标作主备，至多输出前临时失败回退一次；认证错误和无效输出不回退。所有任务须有候选，所有回答候选须支持流式，PLAN 须声明 JSON object；所有声明候选的凭据与目标均预校验；无覆盖或能力不兼容首次请求失败关闭。自然语言计划回答仍是文本；仅 PLAN 的 Tool 意图调用使用 JSON object 加严格 Intent 校验，不使用原生 Tool Calling。
 
@@ -52,8 +52,14 @@ Trace generation 沿用既有计时，新增 task_type、route 和 rank；实际
 
 ### 契约与观测边界
 
-Web `apps/web/src/App.tsx` 的 FORMAT_PROMPT_PREFIX 是整理入口的显式路由契约：`请将以下内容整理为 Markdown，保留事实，使用一个明确的一级标题，不执行写入：\n\n`。修改该前缀或 Python 分类规则时必须同步调用方、功能文档和对应 Responder 测试；当前无需 HTTP 字段变更。
+Web 整理入口显式发送 taskType=FORMAT；格式提示词仅描述输出要求，不控制路由。普通 Chat 默认为 ANSWER。公共和内部 Chat 同步/流式请求新增可选 taskType 字段；未知模式拒绝。
 
 `task_type/route/rank` metadata 只覆盖同步/流式回答 generation；既有 `plan_tool(bundle)` 不接收 observation，Tool 意图仍走 PLAN 路由，但未提供单独的路由/token/cost Trace。`route` 表示初始路由决策，实际成功调用由 provider/model/usage/cost 表示，回退不改写初始决策名。不能将这些数据视作所有模型调用的完整账单；V3-09 集成验收再评估规划观测覆盖。
 
 紧急切回确定性模式须同时设置 `LLM_PROVIDER=disabled`、`LLM_ROUTES=[]` 并清空 `LLM_FALLBACK_PROVIDER`（环境变量均带 AGENTFORGE_AGENT_ 前缀）；否则配置失败关闭，返回通用依赖错误。
+
+## 审核修复补充
+
+静态主模型 JSON 能力由 LLM_JSON_OUTPUT 声明，省略时仅 DeepSeek 沿用 JSON 模式，其他 provider 默认 false；静态备模型由 LLM_FALLBACK_JSON_OUTPUT 声明，默认 false。未声明 JSON 能力的备模型仍可用于文本，不参与 JSON 意图回退；主模型明确关闭 JSON 模式，或非 DeepSeek 未声明时，使用提示词 JSON 加严格解析。Compose 示例默认声明主模型 JSON=true，切换模型须核对能力。配置路由时采用各候选 json_output 声明。部署者须验证所选模型实际能力。
+
+最大模型调用等待为每次 60 秒；检索回调最多 60 秒，规划及回答各主备两次，合计 300 秒。Core read 默认 330 秒，SSE emitter 360 秒，Nginx read 360 秒。SDK/read timeout 并非端到端绝对截止，流持续输出可延长总时间。使用不同部署超时时须同步校准外层预算。失败主模型的 usage/cost 不混入成功备模型观测；备模型无用量时保持 unknown。

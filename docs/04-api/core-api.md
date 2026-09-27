@@ -297,3 +297,7 @@ Chat 同步与 SSE 请求的 `message` 均要求非空且最多 16,000 字符（
 写 Tool 可选的 `description` 若提供，必须为 1–10,000 字符的非空文本。写 Tool 的结果至少包含 `approvalId`、`status`、`actionType`、`riskLevel` 和安全预览；首次调用时 `status=PENDING` 且 Task 不变。同键重试即使原 Approval 已执行或拒绝，也只返回其当前状态，不重复写 Task。人工决定继续使用 `POST /api/v1/projects/{projectId}/agent/actions/{actionId}/confirm|reject`，confirm 仍要求 `Idempotency-Key`，执行前重新检查 actor、project、Tool Policy 和 Task version。MCP Action 不绑定 Chat conversation/checkpoint，也不会调用 Python resume。
 
 参数或可修正领域错误返回 MCP Tool Result `isError=true`；认证失败保持 HTTP 401；未授权项目、跨项目资源和内部异常不得泄漏资源正文、凭据、数据库细节或堆栈。首版只实现 Tools，不实现 Resources、Prompts、Sampling 或 MCP Client。
+
+### V3 审核修复：任务模式
+
+Chat 和 Chat stream 请求新增可选 taskType：FORMAT、REWRITE、PLAN、REVIEW、ANSWER，省略或 null 为 ANSWER；未知值返回校验错误。模式仅影响部署配置内模型排序，不提供权限；消息正文不控制路由，Tool 意图固定 PLAN。

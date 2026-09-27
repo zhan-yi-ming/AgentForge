@@ -45,18 +45,24 @@ public class AgentChatService {
             String message,
             UUID conversationId,
             String requestId) {
+        return chat(projectId, actor, message, conversationId, requestId, AgentTaskType.ANSWER);
+    }
+
+    public AgentChatResult chat(UUID projectId, AuthenticatedActor actor, String message,
+            UUID conversationId, String requestId, AgentTaskType taskType) {
         projectAccess.requireAccess(projectId, actor);
         if (conversationId != null) {
             conversationHistory.requireWritable(projectId, conversationId, actor);
         }
         aiUsageQuota.consume(actor.userId());
-        AgentChatResult result = agentServiceClient.chat(
+        AgentChatResult result = taskType == AgentTaskType.ANSWER ? agentServiceClient.chat(
                 projectId,
                 actor.userId(),
                 actor.admin(),
                 message.trim(),
                 conversationId,
-                requestId);
+                requestId) : agentServiceClient.chat(projectId, actor.userId(), actor.admin(),
+                        message.trim(), conversationId, requestId, taskType);
         AgentChatResult finalized = result.toolProposal() == null ? result : agentActionService.createPending(
                 projectId,
                 actor,
@@ -75,25 +81,31 @@ public class AgentChatService {
             String message,
             UUID conversationId,
             String requestId) {
+        return prepareStream(projectId, actor, message, conversationId, requestId, AgentTaskType.ANSWER);
+    }
+
+    public AgentChatCommand prepareStream(UUID projectId, AuthenticatedActor actor, String message,
+            UUID conversationId, String requestId, AgentTaskType taskType) {
         projectAccess.requireAccess(projectId, actor);
         if (conversationId != null) {
             conversationHistory.requireWritable(projectId, conversationId, actor);
         }
         aiUsageQuota.consume(actor.userId());
-        return new AgentChatCommand(projectId, actor, message.trim(), conversationId, requestId);
+        return new AgentChatCommand(projectId, actor, message.trim(), conversationId, requestId, taskType);
     }
 
     public void stream(AgentChatCommand command, Consumer<AgentStreamEvent> sink) {
         AtomicReference<UUID> effectiveConversationId = new AtomicReference<>(command.conversationId());
         AtomicReference<List<AgentSource>> sources = new AtomicReference<>(List.of());
         StringBuilder answer = new StringBuilder();
-        agentServiceClient.stream(
+        streamToAgent(
                 command.projectId(),
                 command.actor().userId(),
                 command.actor().admin(),
                 command.message(),
                 command.conversationId(),
                 command.requestId(),
+                command.taskType(),
                 event -> {
                     if ("metadata".equals(event.type())) {
                         effectiveConversationId.set(event.conversationId());
@@ -118,6 +130,15 @@ public class AgentChatService {
                         }
                     }
                 });
+    }
+
+    private void streamToAgent(UUID projectId, UUID userId, boolean actorAdmin, String message,
+            UUID conversationId, String requestId, AgentTaskType taskType, Consumer<AgentStreamEvent> sink) {
+        if (taskType == AgentTaskType.ANSWER) {
+            agentServiceClient.stream(projectId, userId, actorAdmin, message, conversationId, requestId, sink);
+        } else {
+            agentServiceClient.stream(projectId, userId, actorAdmin, message, conversationId, requestId, taskType, sink);
+        }
     }
 
     private AgentChatCommand command(UUID projectId, AuthenticatedActor actor, String message,

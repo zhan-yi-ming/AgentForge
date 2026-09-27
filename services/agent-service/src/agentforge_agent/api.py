@@ -171,6 +171,7 @@ def chat(
                 {
                     "namespace": namespace,
                     "actor_admin": request.actor_admin,
+                    "task_type": request.task_type or "ANSWER",
                     "message": request.message,
                     "request_id": request.request_id,
                 }
@@ -248,6 +249,7 @@ def chat_stream(
             {
                 "namespace": namespace,
                 "actor_admin": request.actor_admin,
+                "task_type": request.task_type or "ANSWER",
                 "message": request.message,
                 "request_id": request.request_id,
             }

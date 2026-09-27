@@ -17,19 +17,6 @@ class ModelCandidate(BaseModel):
     capability_rank: int = Field(ge=1, le=100)
 
 
-def classify(message: str) -> TaskType:
-    current = message.strip()
-    for task, prefixes in (
-        ("FORMAT", ("FORMAT:", "请将以下内容整理为 Markdown")),
-        ("REWRITE", ("REWRITE:", "请改写", "请润色")),
-        ("REVIEW", ("REVIEW:", "请评审", "请审查")),
-        ("PLAN", ("PLAN:", "请制定计划")),
-    ):
-        if current.startswith(prefixes):
-            return task
-    return "ANSWER"
-
-
 def ordered(candidates, task):
     def key(item):
         if task == "FORMAT":
@@ -62,7 +49,7 @@ class RoutedResponder:
         return self.respond_observed(state, None)
 
     def _select(self, state, observation):
-        task = classify(state["context_bundle"].working.message)
+        task = state["context_bundle"].working.task_type
         if observation is not None:
             observation = RouteObservation(observation)
             chosen = self.decisions[task]

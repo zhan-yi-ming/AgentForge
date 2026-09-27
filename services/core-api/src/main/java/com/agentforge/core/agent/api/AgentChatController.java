@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.agentforge.core.agent.application.AgentChatService;
+import com.agentforge.core.agent.application.AgentTaskType;
 import com.agentforge.core.agent.application.AgentChatCommand;
 import com.agentforge.core.agent.application.AgentStreamEvent;
 import com.agentforge.core.security.AuthenticatedActor;
@@ -44,12 +45,13 @@ public class AgentChatController {
             @Valid @RequestBody AgentChatRequest request,
             HttpServletRequest servletRequest) {
         String requestId = (String) servletRequest.getAttribute(RequestIdFilter.REQUEST_ID_ATTRIBUTE);
-        return AgentChatResponse.from(agentChatService.chat(
+        return AgentChatResponse.from(request.taskType() == AgentTaskType.ANSWER ? agentChatService.chat(
                 projectId,
                 AuthenticatedActor.from(jwt),
                 request.message(),
                 request.conversationId(),
-                requestId));
+                requestId) : agentChatService.chat(projectId, AuthenticatedActor.from(jwt),
+                        request.message(), request.conversationId(), requestId, request.taskType()));
     }
 
     @PostMapping(value = "/chat/stream", produces = "text/event-stream;charset=UTF-8")
@@ -59,13 +61,14 @@ public class AgentChatController {
             @Valid @RequestBody AgentChatRequest request,
             HttpServletRequest servletRequest) {
         String requestId = (String) servletRequest.getAttribute(RequestIdFilter.REQUEST_ID_ATTRIBUTE);
-        AgentChatCommand command = agentChatService.prepareStream(
+        AgentChatCommand command = request.taskType() == AgentTaskType.ANSWER ? agentChatService.prepareStream(
                 projectId,
                 AuthenticatedActor.from(jwt),
                 request.message(),
                 request.conversationId(),
-                requestId);
-        SseEmitter emitter = new SseEmitter(120_000L);
+                requestId) : agentChatService.prepareStream(projectId, AuthenticatedActor.from(jwt),
+                        request.message(), request.conversationId(), requestId, request.taskType());
+        SseEmitter emitter = new SseEmitter(360_000L);
         Thread.startVirtualThread(() -> {
             try {
                 agentChatService.stream(command, event -> send(emitter, event));

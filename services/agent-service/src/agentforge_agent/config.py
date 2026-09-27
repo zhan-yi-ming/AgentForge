@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     llm_fallback_base_url: str | None = None
     llm_fallback_model: str | None = None
     llm_routes: list[dict] = Field(default_factory=list, max_length=32)
+    llm_json_output: bool | None = None
+    llm_fallback_json_output: bool = False
     llm_max_tokens: int = Field(default=800, ge=64, le=4096)
     system_prompt_suffix: str = Field(default="", max_length=4000)
     context_token_budget: int = Field(default=8192, ge=1024, le=131072)

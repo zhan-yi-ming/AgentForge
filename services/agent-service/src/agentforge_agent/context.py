@@ -12,6 +12,7 @@ from .schemas import ChatSource, ToolProposal
 @dataclass(frozen=True)
 class WorkingContext:
     message: str
+    task_type: Literal["FORMAT", "REWRITE", "PLAN", "REVIEW", "ANSWER"] = "ANSWER"
 
 
 @dataclass(frozen=True)
@@ -272,6 +273,7 @@ class ContextManager:
         message: str,
         request_id: str,
         conversation: ConversationContext | None = None,
+        task_type: Literal["FORMAT", "REWRITE", "PLAN", "REVIEW", "ANSWER"] = "ANSWER",
     ) -> ContextBundle:
         normalized_message = message.strip()
         if not normalized_message:
@@ -282,7 +284,7 @@ class ContextManager:
         ):
             raise ValueError("conversation namespace does not match loaded context")
         return ContextBundle(
-            working=WorkingContext(message=normalized_message),
+            working=WorkingContext(message=normalized_message, task_type=task_type),
             conversation=conversation
             or ConversationContext(
                 namespace=namespace,

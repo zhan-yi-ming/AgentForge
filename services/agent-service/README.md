@@ -23,3 +23,5 @@ V2-08 提供离线 Evaluation Pipeline。固定小数据集不读取生产数据
 ## V3-03 task routing
 
 Optional `AGENTFORGE_AGENT_LLM_ROUTES` is a JSON candidate array. Keep keys in existing primary/fallback credential slots; see Model Routing (`docs/03-features/model-routing.md` from repository root) for the schema, example, ordering and timeout limits. Empty array preserves V3-02 behavior.
+
+Chat request optional taskType is FORMAT/REWRITE/PLAN/REVIEW/ANSWER (default ANSWER). Message prefixes no longer route models. Static JSON capability is controlled by LLM_JSON_OUTPUT and LLM_FALLBACK_JSON_OUTPUT; undeclared fallback is excluded from JSON-mode intent calls. See the feature document for the outer timeout budget and deployment capability declarations. Tests disable automatic dotenv loading to isolate local deployment settings.

@@ -36,6 +36,7 @@
 - `product-overview.md`：用户问题、产品定位、核心原则和 V1 范围。
 - `roadmap.md`：V1/V2/V3 路线以及 V1 的 7 天节奏。
 - `v2-v3-node-roadmap.md`：V2/V3 的固定 Node 顺序、逐节点 Scope、验收、审核和 GitHub 展示重点。
+- `v3-04-development-plan.md`：V3-04 图领域模型开发计划（Planned，Start Gate 待确认）。
 
 ### `02-architecture/`：系统为什么这样组成
 

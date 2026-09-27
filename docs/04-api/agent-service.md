@@ -114,3 +114,7 @@ V3-02 把生成式模型调用移至 Python 进程内的 LiteLLM Model Gateway�
 ## V3-03 task routing
 
 HTTP fields and auth semantics are unchanged. Optional deployment configuration selects models using deterministic current-message task rules; Tool Intent uses the PLAN route and validated JSON. See Model Routing for recognized prefixes, candidate capability requirements and bounded fallback. Routing does not grant Java permissions.
+
+### V3 审核修复：任务模式
+
+内部 Chat 和 Chat stream 请求新增可选 taskType：FORMAT、REWRITE、PLAN、REVIEW、ANSWER，省略或 null 为 ANSWER；未知值拒绝。Java 转发已校验值，Python 在请求边界验证；Tool 意图固定 PLAN。

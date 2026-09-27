@@ -136,3 +136,13 @@ describe("API client", () => {
     }]);
   });
 });
+
+it("sends explicit FORMAT mode independently of message text", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(
+    'event: metadata\ndata: {"conversationId":"c","requestId":"r","sources":[]}\n\nevent: delta\ndata: {"text":"formatted"}\n\nevent: complete\ndata: {"sources":[],"pendingAction":null}\n\n',
+    { status: 200, headers: { "Content-Type": "text/event-stream" } },
+  ));
+  vi.stubGlobal("fetch", fetchMock);
+  await createApiClient(() => null).chatStream("p", "ordinary notes", undefined, {}, undefined, "FORMAT");
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ message: "ordinary notes", taskType: "FORMAT" });
+});

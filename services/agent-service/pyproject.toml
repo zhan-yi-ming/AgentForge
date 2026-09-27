@@ -32,6 +32,7 @@ packages = ["src/agentforge_agent"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 env = [
+  "PYTHON_DOTENV_DISABLED=1",
   "AGENTFORGE_AGENT_INTERNAL_TOKEN=test-only-internal-token",
   "AGENTFORGE_CORE_INTERNAL_TOKEN=test-only-core-token",
   "AGENTFORGE_AGENT_RAG_DB_DSN=postgresql://agentforge:agentforge@localhost:5432/agentforge",

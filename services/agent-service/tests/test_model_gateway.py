@@ -519,3 +519,54 @@ def test_zero_cost_estimate_is_reported_as_unknown() -> None:
         context_state("查询"), observed
     )
     assert all("cost_usd" not in update.get("metadata", {}) for update in observed.updates)
+
+
+def test_stream_fallback_does_not_inherit_failed_attempt_usage_or_cost():
+    class Observation:
+        def __init__(self):
+            self.metadata = {}
+            self.usage = None
+            self.model = None
+        def update(self, **values):
+            self.metadata.update(values.get("metadata", {}))
+            if "model" in values: self.model = values["model"]
+            if "usage_details" in values: self.usage = values["usage_details"]
+    def completion(**kw):
+        def primary():
+            yield SimpleNamespace(choices=[], usage=SimpleNamespace(prompt_tokens=7, completion_tokens=2, total_tokens=9))
+            raise TimeoutError("temporary")
+        if kw["model"] == "openai/base-model": return primary()
+        return iter([SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content="Recovered"))], usage=None)])
+    settings = Settings(internal_token="test-internal-token", AGENTFORGE_CORE_INTERNAL_TOKEN="test-core-internal-token", rag_db_dsn="postgresql://test:test@localhost/test", llm_provider="deepseek", llm_api_key="test-key", llm_model="base-model", llm_fallback_provider="qwen", llm_fallback_api_key="test-other-key", llm_fallback_model="backup")
+    observed = Observation()
+    responder = build_responder(settings, completion_func=completion, stream_cost_func=lambda model, usage: .003)
+    assert "".join(responder.stream_observed(context_state(), observed)) == "Recovered"
+    assert observed.model == "backup"
+    assert observed.metadata["provider"] == "qwen"
+    assert observed.usage is None
+    assert "cost_usd" not in observed.metadata
+
+
+def test_static_json_intent_does_not_call_incompatible_fallback():
+    calls = []
+    def completion(**kw):
+        calls.append(kw)
+        if len(calls) == 1: raise TimeoutError("temporary")
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"actionType":"CREATE_TASK","title":"unsafe fallback"}'))], usage=None)
+    settings = Settings(internal_token="test-internal-token", AGENTFORGE_CORE_INTERNAL_TOKEN="test-core-internal-token", rag_db_dsn="postgresql://test:test@localhost/test", llm_provider="deepseek", llm_api_key="test-key", llm_fallback_provider="qwen", llm_fallback_api_key="test-other-key", llm_fallback_json_output=False)
+    responder = build_responder(settings, completion_func=completion)
+    assert responder.plan_tool(context_state("Please create a task for login regression")["context_bundle"]) is None
+    assert len(calls) == 1
+
+
+def test_static_json_intent_can_use_declared_compatible_fallback():
+    calls = []
+    def completion(**kw):
+        calls.append(kw)
+        if len(calls) == 1: raise TimeoutError("temporary")
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"actionType":"CREATE_TASK","title":"login regression"}'))], usage=None)
+    settings = Settings(internal_token="test-internal-token", AGENTFORGE_CORE_INTERNAL_TOKEN="test-core-internal-token", rag_db_dsn="postgresql://test:test@localhost/test", llm_provider="deepseek", llm_api_key="test-key", llm_fallback_provider="qwen", llm_fallback_api_key="test-other-key", llm_fallback_json_output=True)
+    proposal = build_responder(settings, completion_func=completion).plan_tool(context_state("Please create a task for login regression")["context_bundle"])
+    assert proposal.title == "login regression"
+    assert len(calls) == 2
+    assert all(call["response_format"] == {"type": "json_object"} for call in calls)
