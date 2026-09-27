@@ -1,12 +1,12 @@
 # V3-04 开发计划：Neo4j Graph Domain Model
 
-- 状态：Planned；Start Gate 待用户确认
+- 状态：Implemented；本机验收已完成，Milestone Review 与 Close Gate 见变更记录
 - 路线依据：v2-v3-node-roadmap.md 的 V3-04
 - 前置：V3-02/V3-03 审核修复完成、验证及远端提交核验
 
 ## 目标与现状
 
-建立可追溯的项目实体和关系写入/查询基础。PostgreSQL 保持业务事实唯一来源；现有 Wiki 链接图仅展示页面引用，不等同于本节点的领域图。Python 只产生候选意图，Java 保持权限、校验及写入控制。当前不存在 Neo4j 领域实现；本文件不改变运行能力。
+建立可追溯的项目实体和关系写入/查询基础。PostgreSQL 保持业务事实唯一来源；现有 Wiki 链接图仅展示页面引用，不等同于本节点的领域图。Python 只产生候选意图，Java 保持权限、校验及写入控制。启动时不存在 Neo4j 领域实现；实现与当前机器验证记录见 ../07-changes/2026-09-27-v3-04-graph-domain-model.md。
 
 ## 图模型草案
 
@@ -35,7 +35,7 @@
 1. 变更记录、Graph Domain 功能文档、数据/后端架构、API 契约和 Neo4j 派生投影 ADR，先明确数据所有权及失败语义。
 2. Java project-scoped application service：鉴权、端点类型、来源归属/版本、证据和置信度校验；从公开 API 测试拒绝跨项目和未知实体。
 3. Neo4j adapter：真实 Testcontainers 验证约束、稳定 ID、幂等、并发和有界查询。初始化约束版本化，Neo4j 配置为可选部署 profile。
-4. 受限图写入入口只允许项目 owner/admin 并重新验证来源；只读入口要求项目访问权。以类型化 DTO 传递实体/关系，无任意 Cypher。批量大小、邻接结果数量和查询超时必须有上限。
+4. 受限图写入入口只允许项目 owner/admin 并重新验证来源；只读入口要求现有项目访问权（ProjectAccess 当前同样为 owner/admin，无普通成员模型）。以类型化 DTO 传递实体/关系，无任意 Cypher。批量大小、邻接结果数量和查询超时必须有上限。
 5. PostgreSQL/Neo4j 不存在跨库原子事务：不让图写入改变业务事实；Neo4j 故障返回通用依赖错误，Chat/Wiki/Task 原链路仍可运行。证据读取再次验证来源当前版本；过期/删除来源不能返回可用证据。自动同步/重建编排留给 V3-05。
 6. 相称测试、跨进程 smoke、敏感扫描、Pi Milestone Review、Close Gate、提交推送并核验。
 
@@ -55,4 +55,4 @@ Core API graph domain/application/infrastructure/API/tests；Neo4j 可选部署�
 
 ## Node Start Gate
 
-Node：V3-04。目标：实体/关系/evidence 写入和查询。当前状态：V3-03 已实现，审核修复单独收口。Scope、数据结构、风险和测试见上文。GitHub 展示价值：具有来源证据与确定性权限边界的领域图基础。下一节点边界：V3-05 才负责自动抽取和来源生命周期流水线。**等待用户确认后，另建变更记录开始实现。**
+Node：V3-04。目标：实体/关系/evidence 写入和查询。当前状态：V3-03 已实现，审核修复单独收口。Scope、数据结构、风险和测试见上文。GitHub 展示价值：具有来源证据与确定性权限边界的领域图基础。下一节点边界：V3-05 才负责自动抽取和来源生命周期流水线。**用户已确认；前置修复远端核验完成，本节点另建变更记录实施。**

@@ -29,3 +29,12 @@ docker compose --env-file .env -f infra/compose.yaml down
 ## 安全说明
 
 示例密码仅用于本地开发。共享、演示或生产环境必须使用密钥管理与独立凭据，且不能把真实值写进 `.env.example` 或 Git。
+
+## V3-04 可选 Neo4j（Implemented）
+
+图默认关闭。显式启用 compose profile graph、AGENTFORGE_GRAPH_ENABLED=true 和独立 GRAPH_PASSWORD 后运行；Neo4j 仅在容器内部暴露 Bolt，不公开端口，持久卷独立。Core graph uri 默认 bolt://neo4j:7687，username neo4j。首次图请求创建 schema v1 约束，需要约束管理和图读写权限。请勿把图密码提供给 Python。图关闭/宕机不影响现有服务启动和 Chat/Wiki/Task 健康。
+
+图是派生数据，重新导入前 owner/admin 调用 DELETE /api/v1/projects/{projectId}/graph?confirm=true，再通过实体/关系 API 按稳定 ID 重建；自动抽取与生命周期编排留给 V3-05。
+启用步骤：先在本地非提交 env 中设置 AGENTFORGE_GRAPH_PASSWORD（独立强密码）及 AGENTFORGE_GRAPH_ENABLED=true，然后使用现有本地启动命令增加 `--profile graph`。Neo4j heap 128..256 MiB、page cache 128 MiB，启动健康检查只确认内部 Bolt 端口，真正鉴权及 schema 由首次 Java graph 请求验证。Neo4j 不列入 Core depends_on，启动竞态期间 graph 返回 503，可待健康后重试。生产 compose 同样提供内部 app 网络 graph profile，无公开 Neo4j 端口。
+
+若 Docker Hub pull 卡住，可在正确配置 Desktop/Containers proxy 后用官方完整地址 `docker pull registry-1.docker.io/library/neo4j:5.26-community`，成功后 `docker tag registry-1.docker.io/library/neo4j:5.26-community neo4j:5.26-community`。两者为同一版本/镜像，不使用第三方替代镜像。

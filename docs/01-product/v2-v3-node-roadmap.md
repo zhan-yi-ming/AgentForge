@@ -2,7 +2,7 @@
 
 - 状态：Accepted（路线已确认；各功能在实现前均为 Planned）
 - 当前状态：V1 completed；V2-01 至 V2-09 completed；V2 Release Gate passed
-- Current Node：V3-03 Multi-model Routing（Implemented；下一 Node V3-04 待授权）
+- Current Node：V3-04 Neo4j Graph Domain Model（Implemented；下一 V3-05 等待用户新授权）
 - 开发协议：`../00-governance/v2-v3-node-development-protocol.md`
 
 本文是 V2/V3 开发顺序与 Node Scope 的唯一来源，同时规定验收标准、DeepSeek Pi Review 重点和 GitHub 展示重点。每次只完成一个 Node，禁止跨节点开发；完成后必须停止并等待用户明确授权下一 Node。
@@ -125,6 +125,8 @@ V2 的总目标不是增加花哨功能，而是把“能运行的 Agent”升�
 - **GitHub**：更新 Model Routing，展示 Task-aware Routing 与 Cost/Latency/Capability Trade-off，不只罗列模型名。
 
 ### V3-04 Neo4j Graph Domain Model
+
+- **状态**：Implemented（2026-09-27；验收与 Milestone Review 见 [变更记录](../07-changes/2026-09-27-v3-04-graph-domain-model.md)）。
 
 - **目标与 Scope**：在 GraphRAG 前设计 Project、Service、API、Wiki、Task、Issue 图模型和 CONTAINS、EXPOSES、DESCRIBES、MODIFIES、AFFECTS 等关系；所有关系从第一天携带 source、evidence、confidence。
 - **边界与验收**：只实现实体/关系/evidence 写入与查询，不做 GraphRAG Answer；Neo4j 不等于 GraphRAG。

@@ -29,7 +29,9 @@
 
 ## 后续计划
 
-以下文档尚未创建，表示功能也不应开始实现：
+以下状态区分已交付能力与后续计划：
 
 - V2-09 Release Gate 已完成；V2-01 至 V2-09 全部收口。Memory Namespace 仅表示 Agent 记忆归属，不代表长期记忆或完整 SaaS 多租户。
-- V3-01 MCP 已实现并通过 Milestone Review；V3-02 Model Gateway 已实现并通过 Milestone Review；V3-03 及后续节点仍须分别获得授权。
+- V3-01 MCP 已实现并通过 Milestone Review；V3-02 Model Gateway 已实现并通过 Milestone Review；V3-03 Multi-model Routing 已实现；V3-04 图领域模型已实现；后续节点仍须分别获得授权。
+
+- [Graph Domain Model](graph-domain-model.md)：V3-04 Implemented；GraphRAG Retrieval Planned。

@@ -33,6 +33,10 @@ services:
       AGENTFORGE_DB_USERNAME: ${POSTGRES_USER}
       AGENTFORGE_DB_PASSWORD: ${POSTGRES_PASSWORD}
       AGENTFORGE_SERVER_PORT: 8080
+      AGENTFORGE_GRAPH_ENABLED: ${AGENTFORGE_GRAPH_ENABLED:-false}
+      AGENTFORGE_GRAPH_URI: bolt://neo4j:7687
+      AGENTFORGE_GRAPH_USERNAME: neo4j
+      AGENTFORGE_GRAPH_PASSWORD: ${AGENTFORGE_GRAPH_PASSWORD:-}
       AGENTFORGE_JWT_SECRET: ${AGENTFORGE_JWT_SECRET:?set AGENTFORGE_JWT_SECRET}
       AGENTFORGE_JWT_ISSUER: ${AGENTFORGE_JWT_ISSUER:?set AGENTFORGE_JWT_ISSUER}
       AGENTFORGE_JWT_TTL: ${AGENTFORGE_JWT_TTL:-PT30M}
@@ -221,11 +225,32 @@ services:
     logging: *bounded-logging
     networks: [app]
 
+  neo4j:
+    image: neo4j:5.26-community
+    profiles: ["graph"]
+    environment:
+      NEO4J_AUTH: neo4j/${AGENTFORGE_GRAPH_PASSWORD:-}
+      NEO4J_server_memory_heap_initial__size: 128m
+      NEO4J_server_memory_heap_max__size: 256m
+      NEO4J_server_memory_pagecache_size: 128m
+    volumes:
+      - agentforge-neo4j-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/7687'"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+    networks: [app]
+    logging: *bounded-logging
+
 networks:
   app:
     driver: bridge
 
 volumes:
+  agentforge-neo4j-data:
   agentforge-postgres-data:
     name: ${AGENTFORGE_POSTGRES_VOLUME:-agentforge-postgres-data}
   agentforge-loki-data:

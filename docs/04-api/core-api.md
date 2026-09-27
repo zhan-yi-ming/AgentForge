@@ -301,3 +301,16 @@ Chat 同步与 SSE 请求的 `message` 均要求非空且最多 16,000 字符（
 ### V3 审核修复：任务模式
 
 Chat 和 Chat stream 请求新增可选 taskType：FORMAT、REWRITE、PLAN、REVIEW、ANSWER，省略或 null 为 ANSWER；未知值返回校验错误。模式仅影响部署配置内模型排序，不提供权限；消息正文不控制路由，Tool 意图固定 PLAN。
+
+## V3-04 项目领域图（Implemented）
+
+前缀 `/api/v1/projects/{projectId}/graph`，所有接口 Bearer + owner/admin；详见 graph-domain-model 功能文档。
+
+- PUT `/entities`：type（PROJECT/SERVICE/API/WIKI/TASK/ISSUE）、externalId（1..200）、displayName（1..200）、source（type=WIKI/TASK,id UUID,version>=0；PROJECT 可省略）、expectedVersion>=0；返回 id/projectId/type/externalId/displayName/source/version。PROJECT externalId 必须是路径项目 UUID，WIKI/TASK externalId 必须匹配 source id/type，显示名称取业务事实。
+- GET `/entities?after={id}&limit=50`：返回 items、nextAfter（最后扫描 id，末页 null），候选扫描上限 100；来源失效实体隐藏。
+- PUT `/relations`：type、fromId/toId UUID、evidence（source 同上、start>=0、end>start、excerpt 1..2000、chunkIndex 可空且>=0、confidence 0..1、expectedVersion>=0）；返回 relation id/type/fromId/toId/evidence list/hasMoreEvidence。每次只写一条 evidence。
+- GET `/entities/{id}/neighbors?after={relationId}&limit=50`：返回 items（relation 与有效 evidence）、nextAfter；未知或失效节点 404，无有效 evidence 的关系隐藏。只遍历一跳，无 Cypher 参数。
+- DELETE `?confirm=true`：人工清理路径项目派生图，204。未确认 400，清理不删除业务事实、不启动重建流水线。
+
+400 格式/非法方向/原文不符；401 未认证；403 无权；404 来源或端点不属于项目/不存在；409 来源、CAS 或图写入后响应前来源并发变更；503 图关闭/Neo4j 故障。请求 source 字段不接受自由字符串 provenance。
+图 source.version 与 expectedVersion 必须为 JSON 整数，拒绝小数或数字字符串，禁止截断为另一版本。

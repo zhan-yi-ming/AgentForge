@@ -1,5 +1,7 @@
 # 变更记录
 
+- [2026-09-27-v3-04-graph-domain-model.md](2026-09-27-v3-04-graph-domain-model.md)：V3-04 Neo4j 派生图、Java 来源校验与项目隔离。
+
 - `2026-09-24-v3-02-litellm-model-gateway.md`：V3-02 LiteLLM Model Gateway。
 
 - `2026-09-24-v3-01-mcp-adapter.md`：V3-01 MCP Streamable HTTP Adapter、Java Tool Policy 与 Approval 复用。

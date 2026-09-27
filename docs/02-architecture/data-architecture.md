@@ -174,3 +174,7 @@ P3-02 删除历史时先检查同一 project/user/conversation 下没有 `PENDIN
 ## 为什么使用 Flyway
 
 数据库变化需要与代码一样可审阅、可排序、可重复执行。Flyway 会维护 schema history，并把迁移到目标版本作为显式操作；这与本项目文档和 Git 的证据链一致。[Flyway repository](https://github.com/flyway/flyway)
+
+## V3-04 Neo4j 派生图（Implemented）
+
+Neo4j 只保存项目图投影，PostgreSQL 仍是唯一业务事实。GraphEntity/GraphRelation/GraphEvidence/GraphProjectLock 唯一 id 约束为 schema v1；source/version 与原文证据由 Java 验证。详见 ../03-features/graph-domain-model.md 和 decisions/ADR-0032-neo4j-derived-graph.md。无 PostgreSQL 业务 schema 变更。

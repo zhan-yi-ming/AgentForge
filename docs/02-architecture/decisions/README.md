@@ -27,3 +27,5 @@ ADR 保存影响长期结构的决定。编号只增不减，Accepted 记录不�
 - `ADR-0021-durable-approval-idempotency-audit.md`：Java 持久化五态 Approval、显式幂等执行与追加式审计事实。
 - `ADR-0022-postgres-langgraph-action-checkpoints.md`：用独立 PostgreSQL schema 持久化待决 Action workflow，Java 保留业务执行权。
 - `ADR-0029-mcp-adapter-through-java-policy.md`：MCP Adapter 复用 Java Tool Policy 与 Approval，不直连业务数据库。
+
+- ADR-0032-neo4j-derived-graph.md：Java 授权和验证 Neo4j 派生图，PostgreSQL 保持业务事实。

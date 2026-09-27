@@ -110,3 +110,7 @@ Java 的 action workflow application service 负责跨服务编排：在短事�
 - [Spring Modulith](https://github.com/spring-projects/spring-modulith)：官方建议把业务模块作为应用根包的直接子包，并支持验证模块结构。当前采用其分包思想，暂不引入额外运行时复杂度。
 - [Spring Modulith fundamentals](https://github.com/spring-projects/spring-modulith/blob/main/src/docs/antora/modules/ROOT/pages/fundamentals.adoc)：参考模块公开 API 与内部包的边界思想。
 - [Spring PetClinic REST](https://github.com/spring-petclinic/spring-petclinic-rest)：参考 Controller、Service、Repository 及 DTO 分离的可学习结构。
+
+## V3-04 图投影边界（Implemented）
+
+graph/api → graph/application → graph/domain port → graph/infrastructure Neo4j driver。应用层复用 ProjectAccess 与 Wiki/Task/Project 公开查询；不读取其他模块持久化实现。ADR-0032 定义派生所有权、CAS、项目锁和失败隔离。

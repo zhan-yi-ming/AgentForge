@@ -1,4 +1,6 @@
 spring:
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.neo4j.Neo4jAutoConfiguration
   application:
     name: agentforge-core-api
   datasource:
@@ -19,6 +21,11 @@ spring:
     default-property-inclusion: non_null
 
 agentforge:
+  graph:
+    enabled: ${AGENTFORGE_GRAPH_ENABLED:false}
+    uri: ${AGENTFORGE_GRAPH_URI:bolt://localhost:7687}
+    username: ${AGENTFORGE_GRAPH_USERNAME:neo4j}
+    password: ${AGENTFORGE_GRAPH_PASSWORD:}
   security:
     registration-enabled: ${AGENTFORGE_REGISTRATION_ENABLED:true}
     jwt:
