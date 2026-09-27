@@ -372,3 +372,9 @@ docker compose --env-file .env -f infra/compose.yaml down
 ## V3-02 Model Gateway 配置
 
 Agent Service 的生成模型由 LiteLLM SDK 调用。`AGENTFORGE_AGENT_LLM_PROVIDER` 可选 `disabled/deepseek/zhipu/qwen/openai`；启用时必须提供主 key。可选的 `AGENTFORGE_AGENT_LLM_FALLBACK_PROVIDER`、`AGENTFORGE_AGENT_LLM_FALLBACK_API_KEY`、`AGENTFORGE_AGENT_LLM_FALLBACK_MODEL`、`AGENTFORGE_AGENT_LLM_FALLBACK_BASE_URL` 仅提供一次静态故障回退，不能用相同 provider/model 形成循环。OpenAI 不默认启用，必须显式配置。模型名和地址以部署账号可用值为准。成本估算未知时不会当作零成本。不要提交任何真实 key。
+
+## V3-03 task routing
+
+Set optional `AGENTFORGE_AGENT_LLM_ROUTES` to the candidate JSON array documented in `docs/03-features/model-routing.md`. Empty array preserves existing behavior. Use existing primary/fallback credential slots; never place keys in routing JSON. Ranks require deployment calibration and timeout budgets must cover planning plus response and bounded fallback.
+
+紧急切回确定性模式必须同时设置 `AGENTFORGE_AGENT_LLM_PROVIDER=disabled`、`AGENTFORGE_AGENT_LLM_ROUTES=[]` 并清空 `AGENTFORGE_AGENT_LLM_FALLBACK_PROVIDER`。非空 routes 与 disabled 会在首次请求失败关闭；仅改 provider 不足以完成降级。

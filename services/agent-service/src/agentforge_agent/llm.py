@@ -101,8 +101,10 @@ class CompatibleLlmResponder:
         model_name: str = "unknown",
         prompt_composer: PromptComposer | None = None,
         system_prompt: str = SYSTEM_PROMPT,
+        intent_json: bool = False,
     ) -> None:
         self.model = model
+        self.intent_json = intent_json
         self.provider = provider
         self.model_name = model_name
         self.system_prompt = system_prompt
@@ -129,7 +131,7 @@ class CompatibleLlmResponder:
         try:
             planner_model = (
                 self.model.bind(response_format={"type": "json_object"}, max_tokens=512)
-                if self.provider == "deepseek" else self.model
+                if self.provider == "deepseek" or self.intent_json else self.model
             )
             response = planner_model.invoke([
                 SystemMessage(content=TOOL_INTENT_PROMPT), HumanMessage(content=request)
@@ -161,14 +163,16 @@ class CompatibleLlmResponder:
         latest_usage = None
         latest_cost_metadata = None
         observed_model = self.model_name
+        observed_provider = self.provider
         try:
             for response in self.model.stream(self._messages(state)):
                 metadata = getattr(response, "response_metadata", None)
                 if isinstance(metadata, dict):
                     model = metadata.get("model")
                     provider = metadata.get("provider")
-                    if observation is not None and isinstance(model, str) and model != observed_model and isinstance(provider, str):
+                    if observation is not None and isinstance(model, str) and isinstance(provider, str) and (model != observed_model or provider != observed_provider):
                         observed_model = model
+                        observed_provider = provider
                         observation.update(model=model, metadata={"provider": provider})
                     if isinstance(provider, str) and isinstance(metadata.get("cost_usd"), (int, float)):
                         latest_cost_metadata = {"provider": provider, "cost_usd": metadata["cost_usd"]}
@@ -206,7 +210,7 @@ class CompatibleLlmResponder:
             return
         provider = metadata.get("provider")
         model = metadata.get("model")
-        if isinstance(model, str) and model != self.model_name and isinstance(provider, str):
+        if isinstance(model, str) and isinstance(provider, str) and (model != self.model_name or provider != self.provider):
             observation.update(model=model, metadata={"provider": provider})
         cost = metadata.get("cost_usd")
         if isinstance(cost, (int, float)) and isinstance(provider, str):
@@ -228,6 +232,60 @@ def build_responder(
     cost_func: Callable[[Any], float] | None = None,
     stream_cost_func: Callable[[str, dict[str, int]], float] | None = None,
 ) -> Responder:
+    if settings.llm_routes:
+        from .model_routing import ModelCandidate, RoutedResponder, ordered
+        try:
+            candidates = [ModelCandidate.model_validate(item) for item in settings.llm_routes]
+            if settings.llm_provider == "disabled" or model_factory is not None:
+                raise ValueError("routing requires enabled Gateway")
+            if len({item.name for item in candidates}) != len(candidates):
+                raise ValueError("duplicate route name")
+            # Validate every declared destination, including lower-ranked candidates.
+            for candidate in candidates:
+                prefix = "llm_" if candidate.endpoint == "primary" else "llm_fallback_"
+                build_responder(settings.model_copy(update={
+                    "llm_routes": [], "llm_fallback_provider": None,
+                    "llm_provider": getattr(settings, prefix + "provider"),
+                    "llm_api_key": getattr(settings, prefix + "api_key"),
+                    "llm_base_url": getattr(settings, prefix + "base_url"),
+                    "llm_model": candidate.model,
+                }), completion_func=completion_func, cost_func=cost_func, stream_cost_func=stream_cost_func)
+            responders, decisions = {}, {}
+            for task in ("FORMAT", "REWRITE", "PLAN", "REVIEW", "ANSWER"):
+                options = ordered(candidates, task)
+                if not options:
+                    raise ValueError("missing task route")
+                if any(not item.streaming or (task == "PLAN" and not item.json_output) for item in options):
+                    raise ValueError("incompatible route capability")
+                def identity(item):
+                    prefix = "llm_" if item.endpoint == "primary" else "llm_fallback_"
+                    return getattr(settings, prefix + "provider"), item.model
+                unique = []
+                for item in options:
+                    if identity(item) not in {identity(x) for x in unique}:
+                        unique.append(item)
+                chosen = unique[0]
+                def endpoint(item):
+                    prefix = "llm_" if item.endpoint == "primary" else "llm_fallback_"
+                    provider = getattr(settings, prefix + "provider")
+                    if provider is None or provider == "disabled":
+                        raise ValueError("missing credential endpoint")
+                    return dict(provider=provider, api_key=getattr(settings, prefix + "api_key"),
+                        base_url=getattr(settings, prefix + "base_url"), model=item.model)
+                updates = {"llm_routes": [], "llm_fallback_provider": None,
+                    **{"llm_" + key: value for key, value in endpoint(chosen).items()}}
+                if len(unique) > 1:
+                    updates.update({"llm_fallback_" + key: value for key, value in endpoint(unique[1]).items()})
+                child = build_responder(settings.model_copy(update=updates), completion_func=completion_func,
+                    cost_func=cost_func, stream_cost_func=stream_cost_func)
+                if task == "PLAN":
+                    child.intent_json = True
+                responders[task] = child
+                decisions[task] = chosen
+            return RoutedResponder(responders, decisions)
+        except Exception:
+            raise LlmDependencyError("Configured model routing is invalid.") from None
+
     if settings.llm_provider == "disabled":
         if settings.llm_fallback_provider:
             raise LlmDependencyError("Configured fallback requires an enabled primary LLM.")

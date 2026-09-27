@@ -126,7 +126,7 @@ scripts/deploy/health-check.sh
 - `docker compose ps`：先看容器健康状态。
 - `scripts/deploy/logs.sh <service>`：只查看指定服务最近日志，禁止复制包含 token 的完整请求。
 - Core API unhealthy：检查 PostgreSQL 健康、Flyway、JWT Base64 长度和内部 token。
-- Agent Chat / AI 整理 503：先用响应 requestId 关联 Core 与 Agent 日志，再依次检查 RAG 回调/数据库、provider key 与余额、模型名、模型请求超时和 Core 下游超时；长文本整理应确认浏览器调用 `/agent/chat/stream` 而非同步 `/agent/chat`。紧急时可把 provider 设为 `disabled`，但这只提供确定性降级，不代表真实模型已恢复。
+- Agent Chat / AI 整理 503：先用响应 requestId 关联 Core 与 Agent 日志，再依次检查 RAG 回调/数据库、provider key 与余额、模型名、模型请求超时和 Core 下游超时；长文本整理应确认浏览器调用 `/agent/chat/stream` 而非同步 `/agent/chat`。紧急时须把 provider 设为 `disabled`、routes 设为 `[]` 并清空 fallback provider；这只提供确定性降级，不代表真实模型已恢复。
 - 401：确认 access token 是否过期或被替换；前端会清除当前标签页会话并返回登录。不要把另一个资源的 401 视为已通过认证的 Chat 503 根因。
 - 浏览器 `ERR_INTERNET_DISCONNECTED`：先恢复客户端网络再重试；该错误描述浏览器连接状态，不能单独证明服务器、Nginx、Core API 或 Agent Service 故障。
 - 磁盘不足：检查 `docker system df` 和备份目录；只清理未使用镜像，不删除 named volume。
@@ -135,3 +135,9 @@ scripts/deploy/health-check.sh
 ## V3-02 Model Gateway
 
 生产 Compose 将主模型与可选的 `AGENTFORGE_AGENT_LLM_FALLBACK_*` 变量转发给 Python Agent Service。fallback 默认关闭；启用时在服务器私有环境文件配置独立 key、provider，并按需配置 model/base URL。OpenAI 只在显式选为 provider 且提供模型名与 key 时调用。流式输出开始后失败不会切换模型，公共错误仍保持通用消息。V3-02 关闭同一 provider 的自动重试；未配置 fallback 时暂时性错误会直接返回通用依赖错误。不得把模型 key 写入仓库或排错日志。
+
+## V3-03 task routing
+
+Set optional `AGENTFORGE_AGENT_LLM_ROUTES` to the candidate JSON array documented in `docs/03-features/model-routing.md`. Empty array preserves existing behavior. Use existing primary/fallback credential slots; never place keys in routing JSON. Ranks require deployment calibration and timeout budgets must cover planning plus response and bounded fallback.
+
+紧急切回确定性模式必须同时设置 `AGENTFORGE_AGENT_LLM_PROVIDER=disabled`、`AGENTFORGE_AGENT_LLM_ROUTES=[]` 并清空 `AGENTFORGE_AGENT_LLM_FALLBACK_PROVIDER`。非空 routes 与 disabled 会在首次请求失败关闭；仅改 provider 不足以完成降级。

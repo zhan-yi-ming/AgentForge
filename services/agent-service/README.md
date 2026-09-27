@@ -19,3 +19,7 @@ V2-08 提供离线 Evaluation Pipeline。固定小数据集不读取生产数据
 ```
 
 报告分别列出 RAG Recall@K/MRR/Hit Rate、Answer Faithfulness 词项支持代理指标，以及 Tool Selection Accuracy/完整参数 Task Success Rate。Faithfulness 是确定性回归信号，不代表语义蕴含或线上事实正确性。
+
+## V3-03 task routing
+
+Optional `AGENTFORGE_AGENT_LLM_ROUTES` is a JSON candidate array. Keep keys in existing primary/fallback credential slots; see Model Routing (`docs/03-features/model-routing.md` from repository root) for the schema, example, ordering and timeout limits. Empty array preserves V3-02 behavior.

@@ -78,3 +78,5 @@ V1.2 在不新增公网端口的前提下增加 SSE/NDJSON 流式链路，并提
 - [Spring PetClinic](https://github.com/spring-projects/spring-petclinic)：借鉴可直接运行、带构建包装器和本地数据库配置的开发体验。
 
 这些参考提供结构原则，不意味着复制其所有工具或框架。V1 只引入当前闭环必需的组件。
+
+V3-03（Implemented）在 Responder 上方增加确定性任务模型路由，复用 Gateway 与凭据槽；详见 ADR-0031 和 Model Routing。HTTP 与 Java 写入边界不变。

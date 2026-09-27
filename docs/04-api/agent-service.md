@@ -110,3 +110,7 @@ Wiki `content` 原样返回；Task `content` 是由 Java 从 title/status/priori
 Core 公共同步/SSE 与 Python 内部 Chat 请求的 `message` 长度上限统一为 16,000 字符；超限由入口验证拒绝。Web 的 AI 文本整理在发送前计算提示词与原文总长度，并对更长文档提示分段处理。
 
 V3-02 把生成式模型调用移至 Python 进程内的 LiteLLM Model Gateway。此节点不改变 `/internal/v1` 或公共 Chat HTTP 字段；主模型与静态 fallback 的暂时性失败在 Python 内部处理，输出开始后的流式失败继续使用现有通用 `error` 事件。详见 `../03-features/model-routing.md`。
+
+## V3-03 task routing
+
+HTTP fields and auth semantics are unchanged. Optional deployment configuration selects models using deterministic current-message task rules; Tool Intent uses the PLAN route and validated JSON. See Model Routing for recognized prefixes, candidate capability requirements and bounded fallback. Routing does not grant Java permissions.
