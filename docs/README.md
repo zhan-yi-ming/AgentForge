@@ -64,6 +64,7 @@
 
 ### `06-operations/`：系统如何部署与排错
 
+- `github-push-proxy-troubleshooting.md`：Windows 下 GitHub SSH 推送超时时，通过本机 HTTP 代理恢复并核验远端提交。
 - `local-stack.md`：本地 PostgreSQL/Redis 容器、健康检查和数据清理。
 - `review-orchestration.md`：已停用 Pi 编排的历史设计、禁用状态和追溯说明。
 - `pi-review-connection.md`：提交前一次性 Pi 审核、启动器配置、十秒预检和快速失败规则。

@@ -129,6 +129,7 @@ docs/                       架构、功能、ADR、变更与测试证据
 ```
 
 - [文档中心](docs/README.md)
+- [GitHub 推送失败恢复手册](docs/06-operations/github-push-proxy-troubleshooting.md)
 - [V2/V3 Node Roadmap](docs/01-product/v2-v3-node-roadmap.md)
 - [测试策略](docs/05-development/testing-strategy.md)
 - [当前变更：V2-09](docs/07-changes/2026-09-09-v2-09-regression-release.md)
