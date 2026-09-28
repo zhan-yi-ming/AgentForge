@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.agentforge.core.project.ProjectAccess;
+import com.agentforge.core.graph.application.GraphSourceSyncQueue;
+import com.agentforge.core.graph.domain.GraphModel.SourceType;
 import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.security.ToolOperation;
 import com.agentforge.core.security.ToolRiskEngine;
@@ -27,16 +29,22 @@ public class TaskService {
     private final TaskItemRepository tasks;
     private final ToolRiskEngine riskEngine;
     private final Clock clock;
+    private final GraphSourceSyncQueue graphSync;
 
     public TaskService(TaskItemRepository tasks, ProjectAccess projectAccess, Clock clock) {
-        this(tasks, new ToolRiskEngine(projectAccess), clock);
+        this(tasks, new ToolRiskEngine(projectAccess), clock, null);
+    }
+
+    public TaskService(TaskItemRepository tasks, ToolRiskEngine riskEngine, Clock clock) {
+        this(tasks, riskEngine, clock, null);
     }
 
     @Autowired
-    public TaskService(TaskItemRepository tasks, ToolRiskEngine riskEngine, Clock clock) {
+    public TaskService(TaskItemRepository tasks, ToolRiskEngine riskEngine, Clock clock, GraphSourceSyncQueue graphSync) {
         this.tasks = tasks;
         this.riskEngine = riskEngine;
         this.clock = clock;
+        this.graphSync = graphSync;
     }
 
     @Transactional
@@ -55,7 +63,9 @@ public class TaskService {
                 status == null ? TaskStatus.TODO : status,
                 priority == null ? TaskPriority.MEDIUM : priority,
                 Instant.now(clock));
-        return TaskView.from(tasks.save(task));
+        var created = TaskView.from(tasks.save(task));
+        if (graphSync != null) graphSync.mark(projectId, SourceType.TASK, created.id());
+        return created;
     }
 
     @Transactional(readOnly = true)
@@ -93,7 +103,9 @@ public class TaskService {
                 priority,
                 Instant.now(clock));
         try {
-            return TaskView.from(tasks.save(task));
+            var updated = TaskView.from(tasks.save(task));
+            if (graphSync != null) graphSync.mark(projectId, SourceType.TASK, taskId);
+            return updated;
         }
         catch (OptimisticLockingFailureException exception) {
             throw new ConflictException("The Task was changed by another request.");
@@ -107,6 +119,7 @@ public class TaskService {
         requireVersion(task, expectedVersion);
         try {
             tasks.delete(task);
+            if (graphSync != null) graphSync.mark(projectId, SourceType.TASK, taskId);
         }
         catch (OptimisticLockingFailureException exception) {
             throw new ConflictException("The Task was changed by another request.");

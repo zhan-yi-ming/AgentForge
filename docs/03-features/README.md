@@ -35,3 +35,4 @@
 - V3-01 MCP 已实现并通过 Milestone Review；V3-02 Model Gateway 已实现并通过 Milestone Review；V3-03 Multi-model Routing 已实现；V3-04 图领域模型已实现；后续节点仍须分别获得授权。
 
 - [Graph Domain Model](graph-domain-model.md)：V3-04 Implemented；GraphRAG Retrieval Planned。
+- [Graph Extraction Pipeline](graph-extraction.md)：V3-05 显式语法抽取、来源生命周期与 evidence provenance；GraphRAG Retrieval Planned。

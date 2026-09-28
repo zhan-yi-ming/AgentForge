@@ -19,8 +19,9 @@ Evidence ID 为关系/sourceType/sourceId/version/chunk/start/end 的稳定 hash
 
 读 evidence 时重新查询 PostgreSQL 当前来源与版本，失效/删除来源不返回 excerpt，关系没有有效 evidence 时不返回。Wiki/Task 实体删除时不返回投影；名称返回当前业务名称。外部实体 source 失效则隐藏。Project 显示当前项目名。分页游标按扫描候选前进，可能返回空页，必须按 nextAfter 继续；无全局快照承诺；扫描后被并发清理的关系跳过，端点已删除可返回 404。
 
-驱动事务内部不自动重试，锁争用/事务 timeout 与依赖失败均 fail-closed 返回通用 503，调用者可按稳定 ID 幂等重试。图功能默认关闭，关闭或 Neo4j 不可用返回通用 503，不暴露连接串/驱动异常。初始化约束只在首次图请求执行，失败不阻止 Chat/Wiki/Task 启动。显式 DELETE graph?confirm=true 清理整个项目投影并保留 schema/project lock，用于人工重建；无自动重建/同步编排。业务更新与图事务不原子，图读取只能保证验证时的来源快照，随后并发修改仍可能发生。写入提交后如来源在响应前失效，返回 409 而非空成功响应；图投影可能已提交，后续读会重新验证并隐藏失效证据。
+驱动事务内部不自动重试，锁争用/事务 timeout 与依赖失败均 fail-closed 返回通用 503，调用者可按稳定 ID 幂等重试。图功能默认关闭，关闭或 Neo4j 不可用返回通用 503，不暴露连接串/驱动异常。初始化约束只在首次图请求执行，失败不阻止 Chat/Wiki/Task 启动。显式 DELETE graph?confirm=true 清理整个项目投影并保留 schema/project lock，用于清空派生图；V3-05 提供独立的来源待办、后台同步与手工重建入口，见 [Graph Extraction](graph-extraction.md)。业务更新与图事务不原子，图读取只能保证验证时的来源快照，随后并发修改仍可能发生。写入提交后如来源在响应前失效，返回 409 而非空成功响应；图投影可能已提交，后续读会重新验证并隐藏失效证据。
 
 ## 验收与非目标
 
-实际 HTTP + PostgreSQL/Neo4j Testcontainers 覆盖授权、非法输入/方向、来源/项目/版本、幂等并发、多证据、CAS、有限查询和依赖隔离。无 V3-05 抽取、V3-06 merge、V3-07 检索/回答，也不改现有 /wiki/graph。
+实际 HTTP + PostgreSQL/Neo4j Testcontainers 覆盖授权、非法输入/方向、来源/项目/版本、幂等并发、多证据、CAS、有限查询和依赖隔离。V3-05 显式语法抽取与生命周期见 graph-extraction.md；V3-06 merge、V3-07 检索/回答仍未实现，也不改现有 /wiki/graph。
+V3-05 已实现的自动来源生命周期见 [Graph Extraction Pipeline](graph-extraction.md)；V3-04 手工 Graph API 保留，自动投影以独立 origin 标识并只按其来源替换。

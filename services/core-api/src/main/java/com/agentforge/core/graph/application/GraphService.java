@@ -21,8 +21,17 @@ public class GraphService {
     private final WikiPageService wiki;
     private final TaskService tasks;
     private final GraphStore store;
-    public GraphService(ProjectService projects, WikiPageService wiki, TaskService tasks, GraphStore store) {
-        this.projects = projects; this.wiki = wiki; this.tasks = tasks; this.store = store;
+    private final GraphSourceSyncQueue syncQueue;
+    public GraphService(ProjectService projects, WikiPageService wiki, TaskService tasks, GraphStore store, GraphSourceSyncQueue syncQueue) {
+        this.projects = projects; this.wiki = wiki; this.tasks = tasks; this.store = store; this.syncQueue = syncQueue;
+    }
+    public GraphSourceSyncQueue.Status syncStatus(UUID projectId, AuthenticatedActor actor) {
+        projects.requireAccess(projectId, actor);
+        return syncQueue.status(projectId);
+    }    @org.springframework.transaction.annotation.Transactional
+    public void rebuild(UUID projectId, AuthenticatedActor actor) {
+        projects.requireAccess(projectId, actor);
+        syncQueue.rebuild(projectId);
     }
     public void clear(UUID projectId, AuthenticatedActor actor, boolean confirm) {
         projects.requireAccess(projectId, actor);

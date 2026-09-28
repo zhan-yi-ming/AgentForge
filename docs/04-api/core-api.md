@@ -314,3 +314,9 @@ Chat 和 Chat stream 请求新增可选 taskType：FORMAT、REWRITE、PLAN、REV
 
 400 格式/非法方向/原文不符；401 未认证；403 无权；404 来源或端点不属于项目/不存在；409 来源、CAS 或图写入后响应前来源并发变更；503 图关闭/Neo4j 故障。请求 source 字段不接受自由字符串 provenance。
 图 source.version 与 expectedVersion 必须为 JSON 整数，拒绝小数或数字字符串，禁止截断为另一版本。
+
+## V3-05 Graph Extraction（已实现）
+
+`POST /api/v1/projects/{projectId}/graph/extraction/rebuild`：Bearer + 项目 owner/admin；无请求 body，返回 202，表示当前项目 Wiki/Task 来源已登记待办，不表示 Neo4j 已同步完成。401/403/404 沿用项目权限语义。Wiki/Task 既有 CRUD 响应契约不变；图抽取在后台最终一致，图关闭或不可用不阻止业务写入。提取语法、证据和限制见 ../03-features/graph-extraction.md。
+
+`GET /api/v1/projects/{projectId}/graph/extraction/status`：Bearer + owner/admin；200 body 为 `{ "pending": number, "retrying": number }`，仅统计本项目的持久待办。

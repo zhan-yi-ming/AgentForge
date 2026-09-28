@@ -2,7 +2,7 @@
 
 - 状态：Accepted（路线已确认；各功能在实现前均为 Planned）
 - 当前状态：V1 completed；V2-01 至 V2-09 completed；V2 Release Gate passed
-- Current Node：V3-04 Neo4j Graph Domain Model（Implemented；下一 V3-05 等待用户新授权）
+- Current Node：V3-05 Graph Extraction Pipeline（Implemented；下一 V3-06 等待用户新授权）
 - 开发协议：`../00-governance/v2-v3-node-development-protocol.md`
 
 本文是 V2/V3 开发顺序与 Node Scope 的唯一来源，同时规定验收标准、DeepSeek Pi Review 重点和 GitHub 展示重点。每次只完成一个 Node，禁止跨节点开发；完成后必须停止并等待用户明确授权下一 Node。
@@ -134,6 +134,8 @@ V2 的总目标不是增加花哨功能，而是把“能运行的 Agent”升�
 - **GitHub**：建立 GraphRAG 文档时必须标明 Graph Domain Model implemented、GraphRAG Retrieval planned/in progress。
 
 ### V3-05 Graph Extraction Pipeline
+
+- **状态**：Implemented（2026-09-28；显式语法与来源生命周期；验收与 Milestone Review 见 [变更记录](../07-changes/2026-09-28-v3-05-graph-extraction.md)）。
 
 - **目标与 Scope**：把 Wiki/Task 内容转换为 Entity/Relation；关系携带 `source_document`、`source_chunk`、`evidence`、`confidence`。
 - **验收**：内容新增、更新、删除均有一致的数据生命周期和可追溯 evidence。

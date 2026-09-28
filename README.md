@@ -100,7 +100,8 @@ flowchart TB
 - ✅ V3-02：Python Agent 已接入进程内 LiteLLM Model Gateway，统一 provider 调用、有限故障回退、usage 与可用时的成本估算；[设计与限制](docs/03-features/model-routing.md)。
 - ✅ V3-03：确定性任务多模型路由已实现；按部署声明的成本、延迟、能力和兼容性选择模型，保持有界回退；[路由契约与限制](docs/03-features/model-routing.md)。
 - ✅ V3-04：项目领域图已实现并通过本机验证；[实体、关系与来源证据契约](docs/03-features/graph-domain-model.md)。
-- 🧭 V3-05 及后续：自动图抽取、实体消歧和 GraphRAG 检索/回答保持规划状态。
+- ✅ V3-05：Wiki/Task 的显式语法行可生成带原文位置、来源版本与置信度的图关系；持久待办处理更新/删除及重建。[范围与限制](docs/03-features/graph-extraction.md)。
+- 🧭 V3-06/V3-07：实体消歧和 GraphRAG 检索/回答仍为规划状态。
 
 每个节点的实现、失败测试、最终验证和独立 Review 都记录在[变更记录](docs/07-changes/README.md)与[审核记录](docs/08-reviews/README.md)。
 

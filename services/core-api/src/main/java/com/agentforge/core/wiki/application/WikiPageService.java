@@ -12,6 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.agentforge.core.project.ProjectAccess;
+import com.agentforge.core.graph.application.GraphSourceSyncQueue;
+import com.agentforge.core.graph.domain.GraphModel.SourceType;
 import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.security.ToolOperation;
 import com.agentforge.core.security.ToolRiskEngine;
@@ -26,16 +28,22 @@ public class WikiPageService {
     private final WikiPageRepository wikiPages;
     private final ToolRiskEngine riskEngine;
     private final Clock clock;
+    private final GraphSourceSyncQueue graphSync;
 
     public WikiPageService(WikiPageRepository wikiPages, ProjectAccess projectAccess, Clock clock) {
-        this(wikiPages, new ToolRiskEngine(projectAccess), clock);
+        this(wikiPages, new ToolRiskEngine(projectAccess), clock, null);
+    }
+
+    public WikiPageService(WikiPageRepository wikiPages, ToolRiskEngine riskEngine, Clock clock) {
+        this(wikiPages, riskEngine, clock, null);
     }
 
     @Autowired
-    public WikiPageService(WikiPageRepository wikiPages, ToolRiskEngine riskEngine, Clock clock) {
+    public WikiPageService(WikiPageRepository wikiPages, ToolRiskEngine riskEngine, Clock clock, GraphSourceSyncQueue graphSync) {
         this.wikiPages = wikiPages;
         this.riskEngine = riskEngine;
         this.clock = clock;
+        this.graphSync = graphSync;
     }
 
     @Transactional
@@ -46,11 +54,13 @@ public class WikiPageService {
             throw new ConflictException("A Wiki page with this title already exists in the project.");
         }
         try {
-            return WikiPageView.from(wikiPages.save(WikiPage.create(
+            var created = WikiPageView.from(wikiPages.save(WikiPage.create(
                     projectId,
                     normalizedTitle,
                     content,
                     Instant.now(clock))));
+            if (graphSync != null) graphSync.mark(projectId, SourceType.WIKI, created.id());
+            return created;
         }
         catch (DataIntegrityViolationException exception) {
             throw new ConflictException("The Wiki page conflicts with existing data.");
@@ -89,7 +99,9 @@ public class WikiPageService {
         }
         page.update(normalizedTitle, content, Instant.now(clock));
         try {
-            return WikiPageView.from(wikiPages.save(page));
+            var updated = WikiPageView.from(wikiPages.save(page));
+            if (graphSync != null) graphSync.mark(projectId, SourceType.WIKI, wikiPageId);
+            return updated;
         }
         catch (DataIntegrityViolationException | OptimisticLockingFailureException exception) {
             throw new ConflictException("The Wiki page was changed by another request.");
@@ -103,6 +115,7 @@ public class WikiPageService {
         requireVersion(page, expectedVersion);
         try {
             wikiPages.delete(page);
+            if (graphSync != null) graphSync.mark(projectId, SourceType.WIKI, wikiPageId);
         }
         catch (OptimisticLockingFailureException exception) {
             throw new ConflictException("The Wiki page was changed by another request.");

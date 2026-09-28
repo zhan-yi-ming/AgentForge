@@ -16,6 +16,16 @@ import com.agentforge.core.graph.domain.GraphModel.*;
 public class GraphController {
     private final GraphService service;
     public GraphController(GraphService service) { this.service = service; }
+    @GetMapping("/extraction/status")
+    public com.agentforge.core.graph.application.GraphSourceSyncQueue.Status syncStatus(
+        @PathVariable UUID projectId, @AuthenticationPrincipal Jwt jwt) {
+        return service.syncStatus(projectId, AuthenticatedActor.from(jwt));
+    }    @PostMapping("/extraction/rebuild")
+    public org.springframework.http.ResponseEntity<Void> rebuild(@PathVariable UUID projectId,
+        @AuthenticationPrincipal Jwt jwt) {
+        service.rebuild(projectId, AuthenticatedActor.from(jwt));
+        return org.springframework.http.ResponseEntity.accepted().build();
+    }
     @DeleteMapping
     public org.springframework.http.ResponseEntity<Void> clear(@PathVariable UUID projectId,
         @AuthenticationPrincipal Jwt jwt, @RequestParam boolean confirm) {

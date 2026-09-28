@@ -113,4 +113,8 @@ Java 的 action workflow application service 负责跨服务编排：在短事�
 
 ## V3-04 图投影边界（Implemented）
 
-graph/api → graph/application → graph/domain port → graph/infrastructure Neo4j driver。应用层复用 ProjectAccess 与 Wiki/Task/Project 公开查询；不读取其他模块持久化实现。ADR-0032 定义派生所有权、CAS、项目锁和失败隔离。
+graph/api → graph/application → graph/domain port → graph/infrastructure Neo4j driver。应用层复用 ProjectAccess 与 Wiki/Task/Project 公开查询；V3-05 graph 来源同步 worker 例外地通过 project/type/id 约束的 PostgreSQL 只读 SQL 获取已登记的 Wiki/Task 当前事实，不修改业务表。 Wiki/Task application 依赖 graph 的 GraphSourceSyncQueue 登记待办；graph application 依赖 Wiki/Task 公开查询，并仅在该 worker 例外读取业务表。这是单体内为同事务待办登记允许的双向模块依赖，不扩展为 Python 或 Web 的直连权限。ADR-0032 定义派生所有权、CAS、项目锁和失败隔离。
+
+## V3-05 图来源抽取（已实现）
+
+Wiki/Task application service 在自身 PostgreSQL 写事务中登记图来源待办；Java graph worker 从当前业务事实生成有原文位置的候选并通过 Neo4j GraphStore 按来源替换自动投影。Neo4j 失败不回滚已提交的业务操作，待办继续存在。Graph API 的重建入口只登记待办；图读仍复用 V3-04 的来源版本验证。Python/LLM 不直接写图。详见 ../03-features/graph-extraction.md 与 decisions/ADR-0033-durable-graph-source-sync.md。

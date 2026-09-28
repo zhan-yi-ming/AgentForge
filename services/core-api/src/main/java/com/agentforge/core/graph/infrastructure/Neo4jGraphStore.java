@@ -166,5 +166,115 @@ public class Neo4jGraphStore implements GraphStore {
         p.put("sourceVersion",e.source()==null ? null : e.source().version());
         return p;
     }
-    @PreDestroy public synchronized void close() { if(driver!=null) driver.close(); }
+    @Override public void replaceSource(UUID projectId, SourceType sourceType, UUID sourceId,
+        com.agentforge.core.graph.domain.GraphExtraction.Projection projection) {
+        transaction(true, tx -> {
+            lock(tx,projectId);
+            var base=Map.<String,Object>of("project",projectId.toString(),"type",sourceType.name(),"source",sourceId.toString());
+            if (projection == null) {
+                String sourceEntity=com.agentforge.core.graph.domain.GraphExtraction.stable(
+                    projectId+":entity:"+sourceType+":"+sourceId).toString();
+                var removed=Map.<String,Object>of("project",projectId.toString(),"sourceEntity",sourceEntity);
+                tx.run("""
+                    MATCH (e:GraphEvidence {projectId:$project,sourceType:$type,sourceId:$source})
+                    DETACH DELETE e
+                    """,base).consume();
+                tx.run("""
+                    MATCH (e:GraphEvidence)-[:SUPPORTS]->(r:GraphRelation {projectId:$project})
+                    WHERE r.fromId=$sourceEntity OR r.toId=$sourceEntity
+                    DETACH DELETE e
+                    """,removed).consume();
+                tx.run("""
+                    MATCH (r:GraphRelation {projectId:$project})
+                    WHERE r.fromId=$sourceEntity OR r.toId=$sourceEntity
+                    DETACH DELETE r
+                    """,removed).consume();
+            }
+            if (projection != null) {
+                var current=new java.util.HashMap<String,Object>(base);
+                current.put("version",projection.document().version());
+                tx.run("""
+                    MATCH (e:GraphEvidence {projectId:$project,sourceType:$type,sourceId:$source})
+                    WHERE e.sourceVersion <> $version
+                    DETACH DELETE e
+                    """,current).consume();
+            }
+            tx.run("""
+                MATCH (e:GraphEvidence {projectId:$project,origin:'EXTRACTED',sourceType:$type,sourceId:$source})
+                DETACH DELETE e
+                """,base).consume();
+            tx.run("""
+                MATCH (r:GraphRelation {projectId:$project})
+                WHERE NOT EXISTS { MATCH (e:GraphEvidence)-[:SUPPORTS]->(r) }
+                DETACH DELETE r
+                """,base).consume();
+            tx.run("""
+                MATCH (n:GraphEntity {projectId:$project,origin:'EXTRACTED',sourceType:$type,sourceId:$source})
+                WHERE n.type IN ['SERVICE','API','ISSUE']
+                  AND NOT EXISTS {
+                    MATCH (r:GraphRelation {projectId:$project})
+                    WHERE (r.fromId=n.id OR r.toId=n.id)
+                      AND EXISTS {
+                        MATCH (e:GraphEvidence)-[:SUPPORTS]->(r)
+                        WHERE coalesce(e.origin,'MANUAL') <> 'EXTRACTED'
+                      }
+                  }
+                DETACH DELETE n
+                """,base).consume();
+            if (projection == null) {
+                tx.run("""
+                    MATCH (n:GraphEntity {projectId:$project})
+                    WHERE n.id=$sourceEntity DETACH DELETE n
+                    """,Map.of("project",projectId.toString(),"sourceEntity",
+                        com.agentforge.core.graph.domain.GraphExtraction.stable(
+                            projectId+":entity:"+sourceType+":"+sourceId).toString())).consume();
+                return null;
+            }
+            var document=projection.document();
+            var sourceEntity=new java.util.HashMap<String,Object>(base);
+            sourceEntity.put("id",projection.sourceEntityId().toString());
+            sourceEntity.put("external",sourceId.toString());
+            sourceEntity.put("name",document.title());
+            sourceEntity.put("version",document.version());
+            tx.run("""
+                MERGE (n:GraphEntity {id:$id})
+                ON CREATE SET n.origin='EXTRACTED',n.version=1
+                SET n.projectId=$project,n.type=$type,n.externalId=$external,n.displayName=$name,
+                    n.sourceType=$type,n.sourceId=$source,n.sourceVersion=$version
+                """,sourceEntity).consume();
+            for (var target:projection.targets()) {
+                var p=new java.util.HashMap<String,Object>(base);
+                p.put("id",target.id().toString()); p.put("entityType",target.type().name());
+                p.put("external",target.externalId()); p.put("name",target.name());
+                p.put("version",document.version());
+                tx.run("""
+                    MERGE (n:GraphEntity {id:$id})
+                    ON CREATE SET n.origin='EXTRACTED',n.version=1
+                    SET n.projectId=$project,n.type=$entityType,n.externalId=$external,n.displayName=$name,
+                        n.sourceType=$type,n.sourceId=$source,n.sourceVersion=$version
+                    """,p).consume();
+            }
+            for (var claim:projection.claims()) {
+                var e=claim.evidence();
+                var p=new java.util.HashMap<String,Object>(base);
+                p.put("id",claim.id().toString()); p.put("from",claim.fromId().toString());
+                p.put("to",claim.toId().toString()); p.put("relationType",claim.type().name());
+                p.put("evidence",e.id().toString()); p.put("version",document.version());
+                p.put("chunk",e.chunkIndex()); p.put("start",e.start()); p.put("end",e.end());
+                p.put("excerpt",e.excerpt()); p.put("confidence",e.confidence());
+                tx.run("""
+                    MATCH (a:GraphEntity {id:$from,projectId:$project}), (b:GraphEntity {id:$to,projectId:$project})
+                    MERGE (r:GraphRelation {id:$id})
+                    SET r.projectId=$project,r.type=$relationType,r.fromId=$from,r.toId=$to
+                    MERGE (r)-[:FROM]->(a) MERGE (r)-[:TO]->(b)
+                    MERGE (e:GraphEvidence {id:$evidence})
+                    SET e.projectId=$project,e.origin='EXTRACTED',e.sourceType=$type,e.sourceId=$source,
+                        e.sourceVersion=$version,e.chunkIndex=$chunk,e.start=$start,e.end=$end,
+                        e.excerpt=$excerpt,e.confidence=$confidence,e.version=1
+                    MERGE (e)-[:SUPPORTS]->(r)
+                    """,p).consume();
+            }
+            return null;
+        });
+    }    @PreDestroy public synchronized void close() { if(driver!=null) driver.close(); }
 }

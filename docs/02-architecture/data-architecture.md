@@ -178,3 +178,7 @@ P3-02 删除历史时先检查同一 project/user/conversation 下没有 `PENDIN
 ## V3-04 Neo4j 派生图（Implemented）
 
 Neo4j 只保存项目图投影，PostgreSQL 仍是唯一业务事实。GraphEntity/GraphRelation/GraphEvidence/GraphProjectLock 唯一 id 约束为 schema v1；source/version 与原文证据由 Java 验证。详见 ../03-features/graph-domain-model.md 和 decisions/ADR-0032-neo4j-derived-graph.md。无 PostgreSQL 业务 schema 变更。
+
+## V3-05 图来源同步待办（已实现）
+
+Flyway V12 建 `graph_source_sync(project_id, source_type, source_id, updated_at)`，三元组主键，`source_type` 限定 WIKI/TASK。业务 CRUD 同事务 upsert；迁移从既有 Wiki/Task 回填。行代表“需要按当前业务事实重算”，不保存旧正文或 Token。worker 锁行后处理，成功删除；失败保留，Neo4j 为可重建派生投影。详见 ../03-features/graph-extraction.md 与 decisions/ADR-0033-durable-graph-source-sync.md。

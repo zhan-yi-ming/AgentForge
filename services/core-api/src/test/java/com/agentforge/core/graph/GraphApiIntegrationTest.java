@@ -34,11 +34,13 @@ import com.agentforge.core.task.domain.TaskPriority;
 import com.agentforge.core.task.domain.TaskStatus;
 
 @Testcontainers
+@org.springframework.test.annotation.DirtiesContext(classMode=org.springframework.test.annotation.DirtiesContext.ClassMode.AFTER_CLASS)
 @AutoConfigureMockMvc
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "agentforge.security.jwt.secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
     "agentforge.agent-service.internal-token=test-only-internal-token",
-    "agentforge.core-internal.token=test-only-core-token", "agentforge.graph.enabled=true"
+    "agentforge.core-internal.token=test-only-core-token", "agentforge.graph.enabled=true",
+    "agentforge.graph.sync.enabled=false"
 })
 class GraphApiIntegrationTest {
     @Container @ServiceConnection
