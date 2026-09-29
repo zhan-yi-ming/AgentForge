@@ -419,3 +419,9 @@ def _memory_namespace(
         user_id=request.user_id,
         thread_id=thread_id,
     )
+
+from .entity_resolution import ResolutionRequest, suggest_resolution
+
+@router.post("/internal/v1/graph/resolution/suggest", dependencies=[Depends(require_internal_token)])
+def graph_resolution_suggest(request: ResolutionRequest, result=Depends(suggest_resolution)):
+    return result

@@ -30,3 +30,4 @@ ADR 保存影响长期结构的决定。编号只增不减，Accepted 记录不�
 
 - ADR-0032-neo4j-derived-graph.md：Java 授权和验证 Neo4j 派生图，PostgreSQL 保持业务事实。
 - [ADR-0033-durable-graph-source-sync.md](ADR-0033-durable-graph-source-sync.md)：PostgreSQL 持久待办驱动可恢复的 Neo4j 来源抽取与清理。
+- [ADR-0034-reviewable-entity-resolution.md](ADR-0034-reviewable-entity-resolution.md)：人工确认与可撤销规范映射，保留来源图和证据。

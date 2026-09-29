@@ -36,3 +36,4 @@
 
 - [Graph Domain Model](graph-domain-model.md)：V3-04 Implemented；GraphRAG Retrieval Planned。
 - [Graph Extraction Pipeline](graph-extraction.md)：V3-05 显式语法抽取、来源生命周期与 evidence provenance；GraphRAG Retrieval Planned。
+- [Entity Resolution](entity-resolution.md)：V3-06 已实现；候选、人工确认与可撤销规范映射。

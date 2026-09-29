@@ -320,3 +320,16 @@ Chat 和 Chat stream 请求新增可选 taskType：FORMAT、REWRITE、PLAN、REV
 `POST /api/v1/projects/{projectId}/graph/extraction/rebuild`：Bearer + 项目 owner/admin；无请求 body，返回 202，表示当前项目 Wiki/Task 来源已登记待办，不表示 Neo4j 已同步完成。401/403/404 沿用项目权限语义。Wiki/Task 既有 CRUD 响应契约不变；图抽取在后台最终一致，图关闭或不可用不阻止业务写入。提取语法、证据和限制见 ../03-features/graph-extraction.md。
 
 `GET /api/v1/projects/{projectId}/graph/extraction/status`：Bearer + owner/admin；200 body 为 `{ "pending": number, "retrying": number }`，仅统计本项目的持久待办。
+
+## V3-06 Entity Resolution（已实现）
+
+前缀 `/api/v1/projects/{projectId}/graph/resolution`，所有接口均需 Bearer 与项目 owner/admin；项目、实体、规范目标和来源必须同项目且当前有效，Service/API/Issue 只能与同类型候选关联。请求携带的模型结果不构成授权。
+
+- `POST /suggestions`：body `{ "entityId": "uuid" }`，返回当前有界候选、规则分数、可选推荐候选 ID、有限 0..1 confidence 及 `reviewRequired`。无合并副作用；Python/LLM 失败时仍可返回需人工审阅的候选。
+- `PUT /decisions/{entityId}`：body 包含 `canonicalEntityId`、`canonicalName`（1..200）、aliases（有界、1..200）、受限 metadata、confidence（0..1）、`sourceVersion`、`canonicalSourceVersion`、`expectedVersion`；只由认证用户确认。Java 重新读取并验证两个实体来源、类型、项目和 CAS，返回 `{entityId,canonicalEntityId,canonicalName,aliases,metadata,confidence,status:"CONFIRMED",version}`；同 payload 重试幂等，过期/冲突 409。已有规范实体的 `canonicalName`/`metadata` 必须与存储值一致；改名或 metadata 更新须先调用规范实体 PUT。
+- `GET /canonicals/{canonicalId}`：读取当前有效规范实体的名称、受限 metadata、来源版本和规范 CAS version。
+- `PUT /canonicals/{canonicalId}`：body `{canonicalName,metadata,sourceVersion,expectedVersion}`；项目 owner/admin 修改规范名与受限 metadata，CAS 和当前来源版本检查后追加审计；同 payload 重试幂等；若名称与 metadata 已等于当前值，即使 `expectedVersion` 较旧也返回当前结果，实际变更仍严格 CAS。
+- `GET /decisions/{entityId}`：返回当前规范映射或 `{entityId,status:"UNMAPPED",version}` 未映射状态，不泄露其他项目成员或失效 alias。
+- `DELETE /decisions/{entityId}?expectedVersion=N`：在 CAS 验证后撤销该成员映射，保留追加式审计，204；原始图和 evidence 不变。
+
+格式错误 400；未认证 401；无项目访问权限 403；候选/成员不存在或当前来源失效 404；来源或决策版本变化 409；图不可用 503。接口不接受任意 Cypher、模型生成的新目标 ID 或自动 merge。详见 ../03-features/entity-resolution.md。

@@ -182,3 +182,7 @@ Neo4j 只保存项目图投影，PostgreSQL 仍是唯一业务事实。GraphEnti
 ## V3-05 图来源同步待办（已实现）
 
 Flyway V12 建 `graph_source_sync(project_id, source_type, source_id, updated_at)`，三元组主键，`source_type` 限定 WIKI/TASK。业务 CRUD 同事务 upsert；迁移从既有 Wiki/Task 回填。行代表“需要按当前业务事实重算”，不保存旧正文或 Token。worker 锁行后处理，成功删除；失败保留，Neo4j 为可重建派生投影。详见 ../03-features/graph-extraction.md 与 decisions/ADR-0033-durable-graph-source-sync.md。
+
+## V3-06 人工实体消歧事实（已实现）
+
+新增 Flyway 迁移保存项目内规范实体（锚点图实体 ID、类型、canonical_name、受限 metadata、CAS version）、来源作用域的 alias/成员映射（成员图实体 ID、规范 ID、确认时成员来源类型/ID/version、规范锚点来源版本、confidence、确认人、CAS version）及追加式确认/撤销审计事件。唯一约束保证一个项目成员同一时刻最多属于一个规范实体；所有查询按 project_id 范围执行。原始 Neo4j 节点、关系与证据维持 V3-04/V3-05 结构，规范映射仅作为可撤销覆盖层。模型建议不作为事实写入；来源失效由 Java 读时重验并隐藏；锚点来源更新需人工确认触发 CAS 刷新，旧成员仍因记录的锚点版本不匹配而保持隐藏，直至逐一重确认。V13 使用 `graph_canonical_entity`、`graph_resolution_member`（含 REVERTED tombstone）与 `graph_resolution_event` 与规范实体名称/metadata 更新审计 `graph_canonical_event`；实体/成员主键均含 project_id，规范锚点/成员指向 Neo4j 稳定 ID，事件只追加。具体约束和索引见 V13 迁移，详见 ../03-features/entity-resolution.md 和 decisions/ADR-0034-reviewable-entity-resolution.md。

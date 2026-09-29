@@ -38,6 +38,10 @@ public class GraphService {
         if (!confirm) throw invalid();
         store.clear(projectId);
     }
+    public Entity entity(UUID projectId, UUID entityId, AuthenticatedActor actor) {
+        projects.requireAccess(projectId, actor);
+        return requireEntity(projectId,entityId,actor);
+    }
     public Entity put(UUID projectId, AuthenticatedActor actor, EntityRequest request) {
         var project = projects.getProject(projectId, actor);
         String external = request.externalId();

@@ -118,3 +118,7 @@ HTTP fields and auth semantics are unchanged. Optional deployment configuration 
 ### V3 审核修复：任务模式
 
 内部 Chat 和 Chat stream 请求新增可选 taskType：FORMAT、REWRITE、PLAN、REVIEW、ANSWER，省略或 null 为 ANSWER；未知值拒绝。Java 转发已校验值，Python 在请求边界验证；Tool 意图固定 PLAN。
+
+## V3-06 内部实体消歧建议（已实现）
+
+`POST /internal/v1/graph/resolution/suggest` 仅接受 Java 配置的 `X-AgentForge-Internal-Token`；请求包含本项目 Java 已验证的来源实体 `{entityId,entityType,displayName}` 和有界同类型候选 `{entityId,displayName}`，不携带凭据、完整 Wiki/Task 正文或数据库连接。响应只能选择请求候选中的 ID 或明确 abstain，返回 0..1 confidence 与有界理由。Python 可组合确定性名称规则、已有 embedding provider 与配置的模型网关；模型故障降级为 abstain/人工审阅，不产生数据库副作用。Java 对所有响应字段重新校验并独立执行权限、来源重验、人工确认与持久化。

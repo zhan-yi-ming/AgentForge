@@ -118,3 +118,7 @@ graph/api → graph/application → graph/domain port → graph/infrastructure N
 ## V3-05 图来源抽取（已实现）
 
 Wiki/Task application service 在自身 PostgreSQL 写事务中登记图来源待办；Java graph worker 从当前业务事实生成有原文位置的候选并通过 Neo4j GraphStore 按来源替换自动投影。Neo4j 失败不回滚已提交的业务操作，待办继续存在。Graph API 的重建入口只登记待办；图读仍复用 V3-04 的来源版本验证。Python/LLM 不直接写图。详见 ../03-features/graph-extraction.md 与 decisions/ADR-0033-durable-graph-source-sync.md。
+
+## V3-06 可审查实体消歧（已实现）
+
+Java graph application 负责从本项目有效来源图实体生成有界候选、校验项目 owner/admin、候选类型和来源版本、执行人工确认的 CAS 写入及撤销。PostgreSQL 保存规范实体/成员映射和追加式决策审计；Neo4j 原始来源实体、关系与 evidence 不被物理合并。Python Agent 只经既有内部 Token 边界接收 Java 筛选的候选，输出 embedding/LLM 建议或 abstain，不获得图数据库写权限；Java 不信任返回 ID、置信度或理由。详见 ../03-features/entity-resolution.md 与 decisions/ADR-0034-reviewable-entity-resolution.md。V3-07 才把规范映射用于 GraphRAG 检索。
