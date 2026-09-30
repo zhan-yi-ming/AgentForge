@@ -13,8 +13,11 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.agentforge.core.graph.domain.GraphModel;
 import com.agentforge.core.graph.domain.GraphModel.*;
 import com.agentforge.core.security.AuthenticatedActor;
+import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.shared.error.ConflictException;
 import com.agentforge.core.shared.error.ResourceNotFoundException;
 
@@ -24,11 +27,16 @@ public class GraphResolutionDecisionService {
     private final GraphService graph;
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
-    public GraphResolutionDecisionService(GraphService graph, JdbcTemplate jdbc, ObjectMapper json) {
-        this.graph=graph; this.jdbc=jdbc; this.json=json;
+    private final GraphProjectLifecycle lifecycle;
+    private final ProjectAccess projects;
+    public GraphResolutionDecisionService(GraphService graph, JdbcTemplate jdbc, ObjectMapper json,
+        GraphProjectLifecycle lifecycle, ProjectAccess projects) {
+        this.graph=graph; this.jdbc=jdbc; this.json=json; this.lifecycle=lifecycle; this.projects=projects;
     }
     public record ConfirmRequest(UUID canonicalEntityId, String canonicalName, List<String> aliases,
-        Map<String,String> metadata, Double confidence, Long sourceVersion, Long canonicalSourceVersion, Long expectedVersion) {}
+        Map<String,String> metadata, Double confidence, @JsonDeserialize(using=GraphModel.StrictVersion.class) Long sourceVersion,
+        @JsonDeserialize(using=GraphModel.StrictVersion.class) Long canonicalSourceVersion,
+        @JsonDeserialize(using=GraphModel.StrictVersion.class) Long expectedVersion) {}
     public record Decision(UUID entityId, UUID canonicalEntityId, String canonicalName,
         List<String> aliases, Map<String,String> metadata, Double confidence, String status, long version) {}
     private record Canonical(UUID id, EntityType type, String name, Map<String,String> metadata,
@@ -36,12 +44,15 @@ public class GraphResolutionDecisionService {
     public record CanonicalView(UUID canonicalEntityId, String canonicalName, Map<String,String> metadata,
         long sourceVersion, long version) {}
     public record UpdateCanonicalRequest(String canonicalName, Map<String,String> metadata,
-        Long sourceVersion, Long expectedVersion) {}
+        @JsonDeserialize(using=GraphModel.StrictVersion.class) Long sourceVersion,
+        @JsonDeserialize(using=GraphModel.StrictVersion.class) Long expectedVersion) {}
     private record Member(UUID canonicalId, SourceType sourceType, UUID sourceId,
         long sourceVersion, long canonicalSourceVersion, List<String> aliases, double confidence, String status, long version) {}
 
     @Transactional
     public Decision confirm(UUID projectId, UUID entityId, AuthenticatedActor actor, ConfirmRequest request) {
+        projects.requireAccess(projectId,actor);
+        long generation=lifecycle.lockAvailable(projectId);
         var member=graph.entity(projectId,entityId,actor);
         if (request == null || request.canonicalEntityId()==null || request.expectedVersion()==null
             || request.expectedVersion()<0 || request.canonicalName()==null || request.confidence()==null
@@ -81,10 +92,16 @@ public class GraphResolutionDecisionService {
         String aliasesJson=encode(aliases);
         jdbc.update("""
             INSERT INTO graph_canonical_entity
-                (project_id,id,entity_type,canonical_name,metadata,anchor_source_type,anchor_source_id,anchor_source_version)
-            VALUES (?,?,?,?,?::jsonb,?,?,?) ON CONFLICT DO NOTHING
+                (project_id,id,entity_type,canonical_name,metadata,anchor_source_type,anchor_source_id,anchor_source_version,generation)
+            VALUES (?,?,?,?,?::jsonb,?,?,?,?)
+            ON CONFLICT (project_id,id) DO UPDATE SET
+                entity_type=EXCLUDED.entity_type,canonical_name=EXCLUDED.canonical_name,
+                metadata=EXCLUDED.metadata,anchor_source_type=EXCLUDED.anchor_source_type,
+                anchor_source_id=EXCLUDED.anchor_source_id,anchor_source_version=EXCLUDED.anchor_source_version,
+                generation=EXCLUDED.generation,version=graph_canonical_entity.version+1,updated_at=now()
+            WHERE graph_canonical_entity.generation<>EXCLUDED.generation
             """,projectId,anchor.id(),anchor.type().name(),name,metadataJson,
-            anchor.source().type().name(),anchor.source().id(),anchor.source().version());
+            anchor.source().type().name(),anchor.source().id(),anchor.source().version(),generation);
         var canonical=canonical(projectId,anchor.id()).orElseThrow();
         if(canonical.type()!=anchor.type() || !canonical.name().equals(name)
             || !canonical.metadata().equals(metadata)
@@ -96,8 +113,8 @@ public class GraphResolutionDecisionService {
                 throw new ConflictException("The canonical source version moved backward.");
             int refreshed=jdbc.update("""
                 UPDATE graph_canonical_entity SET anchor_source_version=?,version=version+1,updated_at=now()
-                WHERE project_id=? AND id=? AND anchor_source_version=? AND version=?
-                """,anchor.source().version(),projectId,anchor.id(),canonical.sourceVersion(),canonical.version());
+                WHERE project_id=? AND id=? AND anchor_source_version=? AND version=? AND generation=?
+                """,anchor.source().version(),projectId,anchor.id(),canonical.sourceVersion(),canonical.version(),generation);
             if(refreshed!=1) throw new ConflictException("The canonical entity changed.");
             canonicalEvent(projectId,anchor.id(),"REFRESH_SOURCE",canonical.name(),canonical.name(),
                 canonical.metadata(),canonical.metadata(),canonical.sourceVersion(),anchor.source().version(),
@@ -158,6 +175,8 @@ public class GraphResolutionDecisionService {
     @Transactional
     public CanonicalView updateCanonical(UUID projectId, UUID canonicalId, AuthenticatedActor actor,
         UpdateCanonicalRequest request) {
+        projects.requireAccess(projectId,actor);
+        long generation=lifecycle.lockAvailable(projectId);
         var current=canonicalView(projectId,canonicalId,actor);
         if(request==null || request.canonicalName()==null || request.metadata()==null
             || request.sourceVersion()==null || request.expectedVersion()==null
@@ -179,8 +198,8 @@ public class GraphResolutionDecisionService {
         int changed=jdbc.update("""
             UPDATE graph_canonical_entity SET canonical_name=?,metadata=?::jsonb,
                 version=version+1,updated_at=now()
-            WHERE project_id=? AND id=? AND version=? AND anchor_source_version=?
-            """,name,encode(metadata),projectId,canonicalId,current.version(),current.sourceVersion());
+            WHERE project_id=? AND id=? AND version=? AND anchor_source_version=? AND generation=?
+            """,name,encode(metadata),projectId,canonicalId,current.version(),current.sourceVersion(),generation);
         if(changed!=1) throw new ConflictException("The canonical version is stale.");
         canonicalEvent(projectId,canonicalId,"UPDATE",current.canonicalName(),name,
             current.metadata(),metadata,current.sourceVersion(),current.sourceVersion(),
@@ -190,6 +209,8 @@ public class GraphResolutionDecisionService {
 
     @Transactional
     public void revert(UUID projectId, UUID entityId, AuthenticatedActor actor, Long expectedVersion) {
+        projects.requireAccess(projectId,actor);
+        lifecycle.lockAvailable(projectId);
         var entity=graph.entity(projectId,entityId,actor);
         if(!resolvable(entity.type()) || expectedVersion==null || expectedVersion<0) throw invalid();
         var stored=member(projectId,entityId).orElseThrow(
@@ -206,6 +227,12 @@ public class GraphResolutionDecisionService {
             """,actor.userId(),projectId,entityId,stored.version());
         if(changed!=1) throw new ConflictException("The resolution version is stale.");
         event(projectId,entityId,"REVERT",stored.canonicalId(),null,actor.userId(),stored.version()+1);
+    }
+    public boolean canBeAnchor(UUID projectId, UUID entityId) {
+        return member(projectId,entityId).map(value -> !value.status().equals("CONFIRMED")).orElse(true);
+    }
+    public boolean isCanonicalAnchor(UUID projectId, UUID entityId) {
+        return canonical(projectId,entityId).isPresent();
     }
     public Decision decision(UUID projectId, UUID entityId, AuthenticatedActor actor) {
         var entity=graph.entity(projectId,entityId,actor);
@@ -235,7 +262,9 @@ public class GraphResolutionDecisionService {
         return jdbc.query("""
             SELECT id,entity_type,canonical_name,metadata::text AS metadata,
                 anchor_source_type,anchor_source_id,anchor_source_version,version
-            FROM graph_canonical_entity WHERE project_id=? AND id=?
+            FROM graph_canonical_entity c
+            JOIN graph_project_state s ON s.project_id=c.project_id AND s.generation=c.generation
+            WHERE c.project_id=? AND c.id=? AND NOT s.resetting
             """,(rs,i)->new Canonical(rs.getObject("id",UUID.class),EntityType.valueOf(rs.getString("entity_type")),
                 rs.getString("canonical_name"),decodeMap(rs.getString("metadata")),
                 SourceType.valueOf(rs.getString("anchor_source_type")),

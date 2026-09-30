@@ -37,4 +37,6 @@ docker compose --env-file .env -f infra/compose.yaml down
 图是派生数据，重新导入前 owner/admin 调用 DELETE /api/v1/projects/{projectId}/graph?confirm=true，再通过实体/关系 API 按稳定 ID 重建；自动抽取与生命周期编排留给 V3-05。
 启用步骤：先在本地非提交 env 中设置 AGENTFORGE_GRAPH_PASSWORD（独立强密码）及 AGENTFORGE_GRAPH_ENABLED=true，然后使用现有本地启动命令增加 `--profile graph`。Neo4j heap 128..256 MiB、page cache 128 MiB，启动健康检查只确认内部 Bolt 端口，真正鉴权及 schema 由首次 Java graph 请求验证。Neo4j 不列入 Core depends_on，启动竞态期间 graph 返回 503，可待健康后重试。生产 compose 同样提供内部 app 网络 graph profile，无公开 Neo4j 端口。
 
+图清理状态保存在 PostgreSQL `graph_project_state`。运维可只读查询 `project_id,generation,resetting,updated_at` 并关注 `resetting=true`；有效清理五分钟内拒绝重叠请求，超过五分钟后重新调用同一 `DELETE graph?confirm=true` 会以新 generation 接管。当前租约没有心跳；若一次清理可能超过五分钟，应暂停该项目写入并在接管清理完成后调用 extraction rebuild，成功清理或失败后重试也以显式 rebuild 恢复完整派生投影。不要手工删除 canonical/event 审计行。
+
 若 Docker Hub pull 卡住，可在正确配置 Desktop/Containers proxy 后用官方完整地址 `docker pull registry-1.docker.io/library/neo4j:5.26-community`，成功后 `docker tag registry-1.docker.io/library/neo4j:5.26-community neo4j:5.26-community`。两者为同一版本/镜像，不使用第三方替代镜像。

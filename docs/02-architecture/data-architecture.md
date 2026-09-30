@@ -186,3 +186,7 @@ Flyway V12 建 `graph_source_sync(project_id, source_type, source_id, updated_at
 ## V3-06 人工实体消歧事实（已实现）
 
 新增 Flyway 迁移保存项目内规范实体（锚点图实体 ID、类型、canonical_name、受限 metadata、CAS version）、来源作用域的 alias/成员映射（成员图实体 ID、规范 ID、确认时成员来源类型/ID/version、规范锚点来源版本、confidence、确认人、CAS version）及追加式确认/撤销审计事件。唯一约束保证一个项目成员同一时刻最多属于一个规范实体；所有查询按 project_id 范围执行。原始 Neo4j 节点、关系与证据维持 V3-04/V3-05 结构，规范映射仅作为可撤销覆盖层。模型建议不作为事实写入；来源失效由 Java 读时重验并隐藏；锚点来源更新需人工确认触发 CAS 刷新，旧成员仍因记录的锚点版本不匹配而保持隐藏，直至逐一重确认。V13 使用 `graph_canonical_entity`、`graph_resolution_member`（含 REVERTED tombstone）与 `graph_resolution_event` 与规范实体名称/metadata 更新审计 `graph_canonical_event`；实体/成员主键均含 project_id，规范锚点/成员指向 Neo4j 稳定 ID，事件只追加。具体约束和索引见 V13 迁移，详见 ../03-features/entity-resolution.md 和 decisions/ADR-0034-reviewable-entity-resolution.md。
+
+## V3-04～06 清理 generation（2026-09-29 修正）
+
+V14 为项目图增加持久 generation 和 `resetting` 状态，并在规范实体行记录其确认 generation。graph clear 先提交新 generation、暂停 worker 并移除旧待办，再执行 Neo4j 清理，最后恢复 worker；新业务变更形成的待办保留。旧成员行在清理开始时删除；规范实体行及事件留存供审计，但规范实体读写只认当前 generation，避免稳定图 ID 重建后旧人工合并复活。清理失败可重试，跨 PostgreSQL/Neo4j 不声明原子提交。

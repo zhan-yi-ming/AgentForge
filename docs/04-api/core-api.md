@@ -332,4 +332,6 @@ Chat 和 Chat stream 请求新增可选 taskType：FORMAT、REWRITE、PLAN、REV
 - `GET /decisions/{entityId}`：返回当前规范映射或 `{entityId,status:"UNMAPPED",version}` 未映射状态，不泄露其他项目成员或失效 alias。
 - `DELETE /decisions/{entityId}?expectedVersion=N`：在 CAS 验证后撤销该成员映射，保留追加式审计，204；原始图和 evidence 不变。
 
-格式错误 400；未认证 401；无项目访问权限 403；候选/成员不存在或当前来源失效 404；来源或决策版本变化 409；图不可用 503。接口不接受任意 Cypher、模型生成的新目标 ID 或自动 merge。详见 ../03-features/entity-resolution.md。
+格式错误 400；未认证 401；无项目访问权限 403；候选/成员不存在或当前来源失效 404；来源或决策版本变化，或 suggestions 源实体已是当前代次规范锚点时返回 409；图不可用 503。接口不接受任意 Cypher、模型生成的新目标 ID 或自动 merge。详见 ../03-features/entity-resolution.md。
+
+V3-04～06 严重缺陷修正：图清理会持久失效旧规范映射、移除清理前来源待办，并在清理完成后恢复新待办处理；同 ID 重建不得复活旧合并。有效清理进行中的重叠请求返回 503；resetting 超过五分钟后，同一路径重试会以新 generation 接管。并发邻接读取的临时清理冲突会做有界重读，最终状态为 200/404，持续依赖故障仍为 503。V3-06 建议不得返回确认接口必然拒绝的候选。V3-06 三个版本字段与 V3-04 一致，只接受 JSON 整数，拒绝小数和数字字符串。

@@ -1,5 +1,8 @@
 # 架构决策记录
 
+- [ADR-0035](ADR-0035-graph-clear-generation.md)：项目图清理的持久 generation。
+
+
 ADR 保存影响长期结构的决定。编号只增不减，Accepted 记录不通过覆写“改历史”；若改变决定，新建 ADR 并声明取代关系。
 
 ## 索引

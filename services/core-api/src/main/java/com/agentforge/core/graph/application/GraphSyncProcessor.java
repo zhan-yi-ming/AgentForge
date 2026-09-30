@@ -14,23 +14,36 @@ public class GraphSyncProcessor {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(GraphSyncProcessor.class);
     private final JdbcTemplate jdbc;
     private final GraphStore store;
+    private final GraphProjectLifecycle lifecycle;
     private final boolean enabled;
-    public GraphSyncProcessor(JdbcTemplate jdbc, GraphStore store,
+    public GraphSyncProcessor(JdbcTemplate jdbc, GraphStore store, GraphProjectLifecycle lifecycle,
         @Value("${agentforge.graph.enabled:false}") boolean enabled) {
-        this.jdbc=jdbc; this.store=store; this.enabled=enabled;
+        this.jdbc=jdbc; this.store=store; this.lifecycle=lifecycle; this.enabled=enabled;
     }
     private record Pending(UUID projectId, SourceType type, UUID sourceId) {}
 
     @Transactional
     public boolean processOne() {
         if (!enabled) return false;
-        var rows=jdbc.query("""
-            SELECT project_id, source_type, source_id FROM graph_source_sync
-            WHERE next_attempt_at<=now()
-            ORDER BY next_attempt_at, updated_at
-            LIMIT 1 FOR UPDATE SKIP LOCKED
+        var candidates=jdbc.query("""
+            SELECT q.project_id, q.source_type, q.source_id
+            FROM graph_source_sync q
+            LEFT JOIN graph_project_state s ON s.project_id=q.project_id
+            WHERE q.next_attempt_at<=now() AND coalesce(s.resetting,false)=false
+            ORDER BY q.next_attempt_at, q.updated_at
+            LIMIT 1
             """, (rs,i) -> new Pending(rs.getObject(1,UUID.class),
                 SourceType.valueOf(rs.getString(2)),rs.getObject(3,UUID.class)));
+        if (candidates.isEmpty()) return false;
+        var candidate=candidates.getFirst();
+        if (!lifecycle.lockForSync(candidate.projectId())) return false;
+        var rows=jdbc.query("""
+            SELECT project_id, source_type, source_id FROM graph_source_sync
+            WHERE project_id=? AND source_type=? AND source_id=? AND next_attempt_at<=now()
+            FOR UPDATE SKIP LOCKED
+            """, (rs,i) -> new Pending(rs.getObject(1,UUID.class),
+                SourceType.valueOf(rs.getString(2)),rs.getObject(3,UUID.class)),
+            candidate.projectId(),candidate.type().name(),candidate.sourceId());
         if (rows.isEmpty()) return false;
         var row=rows.getFirst();
         try {

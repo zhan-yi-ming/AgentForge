@@ -22,8 +22,11 @@ public class GraphService {
     private final TaskService tasks;
     private final GraphStore store;
     private final GraphSourceSyncQueue syncQueue;
-    public GraphService(ProjectService projects, WikiPageService wiki, TaskService tasks, GraphStore store, GraphSourceSyncQueue syncQueue) {
-        this.projects = projects; this.wiki = wiki; this.tasks = tasks; this.store = store; this.syncQueue = syncQueue;
+    private final GraphProjectLifecycle lifecycle;
+    public GraphService(ProjectService projects, WikiPageService wiki, TaskService tasks, GraphStore store,
+        GraphSourceSyncQueue syncQueue, GraphProjectLifecycle lifecycle) {
+        this.projects = projects; this.wiki = wiki; this.tasks = tasks; this.store = store;
+        this.syncQueue = syncQueue; this.lifecycle = lifecycle;
     }
     public GraphSourceSyncQueue.Status syncStatus(UUID projectId, AuthenticatedActor actor) {
         projects.requireAccess(projectId, actor);
@@ -36,7 +39,14 @@ public class GraphService {
     public void clear(UUID projectId, AuthenticatedActor actor, boolean confirm) {
         projects.requireAccess(projectId, actor);
         if (!confirm) throw invalid();
-        store.clear(projectId);
+        long generation=lifecycle.beginClear(projectId);
+        try { store.clear(projectId); }
+        catch(RuntimeException failure) {
+            try { lifecycle.finishClear(projectId,generation); }
+            catch(RuntimeException cleanupFailure) { failure.addSuppressed(cleanupFailure); }
+            throw failure;
+        }
+        lifecycle.finishClear(projectId,generation);
     }
     public Entity entity(UUID projectId, UUID entityId, AuthenticatedActor actor) {
         projects.requireAccess(projectId, actor);

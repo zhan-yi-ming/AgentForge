@@ -1,5 +1,7 @@
 # 变更记录
 
+- [2026-09-29-v3-04-06-critical-fixes.md](2026-09-29-v3-04-06-critical-fixes.md)：修复图清理、实体消歧候选与严格版本输入。
+
 - [2026-09-28-v3-05-graph-extraction.md](2026-09-28-v3-05-graph-extraction.md)：V3-05 Wiki/Task 显式证据抽取、持久来源同步与清理。
 
 - [2026-09-28-github-push-proxy-recovery.md](2026-09-28-github-push-proxy-recovery.md)：沉淀 Windows OpenSSH 通过本机 HTTP 代理恢复 GitHub 推送的方法。

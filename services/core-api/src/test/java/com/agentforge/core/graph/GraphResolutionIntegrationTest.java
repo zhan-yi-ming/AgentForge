@@ -59,6 +59,7 @@ class GraphResolutionIntegrationTest {
     }
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Autowired AuthenticationService auth;
     @Autowired ProjectService projects;
     @Autowired WikiPageService wiki;
@@ -368,4 +369,123 @@ class GraphResolutionIntegrationTest {
             .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(reverse)))
             .andExpect(status().isConflict());
     }
-}
+    @Test
+    void resolutionVersionsRequireJsonIntegers() throws Exception {
+        var f=fixture();
+        var first=wiki.create(f.project(),f.actor(),"First","Service: Billing");
+        var second=wiki.create(f.project(),f.actor(),"Second","Service: Billing");
+        String member=awaitService(f,first.id());
+        String anchor=awaitService(f,second.id());
+        long memberSource=graph.entity(f.project(),UUID.fromString(member),f.actor()).source().version();
+        long anchorSource=graph.entity(f.project(),UUID.fromString(anchor),f.actor()).source().version();
+        var payload=new java.util.LinkedHashMap<String,Object>();
+        payload.put("canonicalEntityId",anchor); payload.put("canonicalName","Billing");
+        payload.put("aliases",java.util.List.of()); payload.put("metadata",Map.of());
+        payload.put("confidence",0.9); payload.put("expectedVersion",0.5);
+        payload.put("sourceVersion",memberSource); payload.put("canonicalSourceVersion",anchorSource);
+        mvc.perform(put(f.path()+"/resolution/decisions/"+member).with(f.token())
+            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(payload)))
+            .andExpect(status().isBadRequest());
+        payload.put("expectedVersion","0");
+        mvc.perform(put(f.path()+"/resolution/decisions/"+member).with(f.token())
+            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(payload)))
+            .andExpect(status().isBadRequest());
+        payload.put("expectedVersion",0);
+        payload.put("sourceVersion",memberSource+0.5);
+        mvc.perform(put(f.path()+"/resolution/decisions/"+member).with(f.token())
+            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(payload)))
+            .andExpect(status().isBadRequest());
+        payload.put("sourceVersion",memberSource);
+        payload.put("canonicalSourceVersion",anchorSource+0.5);
+        mvc.perform(put(f.path()+"/resolution/decisions/"+member).with(f.token())
+            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(payload)))
+            .andExpect(status().isBadRequest());
+        mvc.perform(get(f.path()+"/resolution/decisions/"+member).with(f.token()))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("UNMAPPED"));
+    }
+    @Test
+    void clearInvalidatesResolutionAfterStableIdsAreRebuilt() throws Exception {
+        var f=fixture();
+        var first=wiki.create(f.project(),f.actor(),"First","Service: Billing");
+        var second=wiki.create(f.project(),f.actor(),"Second","Service: Billing Platform");
+        String member=awaitService(f,first.id());
+        String anchor=awaitService(f,second.id());
+        var confirm=Map.of("canonicalEntityId",anchor,"canonicalName","Billing Platform",
+            "aliases",java.util.List.of("Billing"),"metadata",Map.of("team","payments"),
+            "confidence",0.9,"expectedVersion",0,
+            "sourceVersion",graph.entity(f.project(),UUID.fromString(member),f.actor()).source().version(),
+            "canonicalSourceVersion",graph.entity(f.project(),UUID.fromString(anchor),f.actor()).source().version());
+        mvc.perform(put(f.path()+"/resolution/decisions/"+member).with(f.token())
+            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(confirm)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CONFIRMED"));
+        jdbc.update("""
+            INSERT INTO graph_source_sync(project_id,source_type,source_id,next_attempt_at)
+            VALUES (?,'WIKI',?,now()+interval '1 day')
+            ON CONFLICT (project_id,source_type,source_id)
+            DO UPDATE SET next_attempt_at=EXCLUDED.next_attempt_at
+            """,f.project(),first.id());
+        jdbc.update("UPDATE graph_project_state SET resetting=true,updated_at=now() WHERE project_id=?",f.project());
+        mvc.perform(delete(f.path()).param("confirm","true").with(f.token()))
+            .andExpect(status().isServiceUnavailable());
+        jdbc.update("""
+            UPDATE graph_project_state SET updated_at=now()-interval '10 minutes'
+            WHERE project_id=?
+            """,f.project());
+        mvc.perform(delete(f.path()).param("confirm","true").with(f.token()))
+            .andExpect(status().isNoContent());
+        assertThat(jdbc.queryForObject("SELECT resetting FROM graph_project_state WHERE project_id=?",
+            Boolean.class,f.project())).isFalse();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM graph_source_sync WHERE project_id=?",
+            Long.class,f.project())).isZero();
+        mvc.perform(post(f.path()+"/extraction/rebuild").with(f.token()))
+            .andExpect(status().isAccepted());
+        assertThat(awaitService(f,first.id())).isEqualTo(member);
+        assertThat(awaitService(f,second.id())).isEqualTo(anchor);
+        mvc.perform(get(f.path()+"/resolution/decisions/"+member).with(f.token()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("UNMAPPED"))
+            .andExpect(jsonPath("$.version").value(0));
+        mvc.perform(get(f.path()+"/resolution/canonicals/"+anchor).with(f.token()))
+            .andExpect(status().isNotFound());
+        mvc.perform(put(f.path()+"/resolution/decisions/"+member).with(f.token())
+            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(confirm)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("CONFIRMED"))
+            .andExpect(jsonPath("$.version").value(1));
+    }
+    @Test
+    void resolutionWriteForMissingProjectReturnsNotFound() throws Exception {
+        var f=fixture();
+        UUID missingProject=UUID.randomUUID();
+        UUID member=UUID.randomUUID();
+        var body=Map.of("canonicalEntityId",UUID.randomUUID(),"canonicalName","Missing",
+            "aliases",java.util.List.of(),"metadata",Map.of(),"confidence",0.9,
+            "expectedVersion",0,"sourceVersion",0,"canonicalSourceVersion",0);
+        mvc.perform(put("/api/v1/projects/"+missingProject+"/graph/resolution/decisions/"+member)
+            .with(f.token()).contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(body)))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void suggestionExcludesMappedMembersThatCannotBeAnchors() throws Exception {
+        var f=fixture();
+        var first=wiki.create(f.project(),f.actor(),"First","Service: Billing");
+        var second=wiki.create(f.project(),f.actor(),"Second","Service: Billing");
+        var third=wiki.create(f.project(),f.actor(),"Third","Service: Billing");
+        String mapped=awaitService(f,first.id());
+        String anchor=awaitService(f,second.id());
+        String source=awaitService(f,third.id());
+        var confirm=Map.of("canonicalEntityId",anchor,"canonicalName","Billing",
+            "aliases",java.util.List.of("Billing"),"metadata",Map.of(),"confidence",0.9,
+            "expectedVersion",0,"sourceVersion",graph.entity(f.project(),UUID.fromString(mapped),f.actor()).source().version(),
+            "canonicalSourceVersion",graph.entity(f.project(),UUID.fromString(anchor),f.actor()).source().version());
+        mvc.perform(put(f.path()+"/resolution/decisions/"+mapped).with(f.token())
+            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(confirm)))
+            .andExpect(status().isOk());
+        var suggestion=json.readTree(mvc.perform(post(f.path()+"/resolution/suggestions")
+            .with(f.token()).contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of("entityId",source))))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertThat(suggestion.get("candidates").toString()).contains(anchor).doesNotContain(mapped);
+    }}

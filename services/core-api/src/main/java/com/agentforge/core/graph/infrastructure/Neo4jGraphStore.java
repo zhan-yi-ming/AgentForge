@@ -15,6 +15,7 @@ import com.agentforge.core.shared.error.ConflictException;
 import com.agentforge.core.shared.error.ServiceUnavailableException;
 @Component
 public class Neo4jGraphStore implements GraphStore {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(Neo4jGraphStore.class);
     private final boolean enabled;
     private final String uri, username, password;
     private volatile Driver driver;
@@ -43,11 +44,21 @@ public class Neo4jGraphStore implements GraphStore {
         return driver;
     }
     private <T> T transaction(boolean write, Function<TransactionContext,T> work) {
-        try(var session=driver().session()) {
-            return write ? session.executeWrite(work::apply, TX) : session.executeRead(work::apply, TX);
-        } catch (Neo4jException | IllegalArgumentException e) {
-            throw new ServiceUnavailableException("Graph service is unavailable.");
+        int attempts=write ? 1 : 3;
+        for(int attempt=1;attempt<=attempts;attempt++) {
+            try(var session=driver().session()) {
+                return write ? session.executeWrite(work::apply, TX) : session.executeRead(work::apply, TX);
+            } catch (Neo4jException failure) {
+                if(attempt==attempts) {
+                    log.warn("Graph transaction failed after {} attempt(s), write={}, failure={}",
+                        attempts,write,failure.getClass().getSimpleName());
+                    throw new ServiceUnavailableException("Graph service is unavailable.",failure);
+                }
+            } catch (IllegalArgumentException failure) {
+                throw new ServiceUnavailableException("Graph service is unavailable.");
+            }
         }
+        throw new ServiceUnavailableException("Graph service is unavailable.");
     }
     private void lock(TransactionContext tx, UUID project) {
         tx.run("MERGE (p:GraphProjectLock {id:$project}) SET p.revision=coalesce(p.revision,0)+1",

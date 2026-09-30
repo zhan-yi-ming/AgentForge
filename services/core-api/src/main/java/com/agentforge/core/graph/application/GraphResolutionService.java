@@ -3,6 +3,7 @@ package com.agentforge.core.graph.application;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 import com.agentforge.core.graph.domain.GraphModel.*;
 import com.agentforge.core.graph.domain.GraphStore;
 import com.agentforge.core.security.AuthenticatedActor;
+import com.agentforge.core.shared.error.ConflictException;
 
 @Service
 public class GraphResolutionService {
@@ -28,7 +30,9 @@ public class GraphResolutionService {
     public Suggestion suggest(UUID projectId, UUID entityId, AuthenticatedActor actor) {
         var source=graph.entity(projectId,entityId,actor);
         if (!resolvable(source.type())) throw new IllegalArgumentException("Entity type cannot be resolved.");
-        var candidates=new ArrayList<Candidate>();
+        if (decisions.isCanonicalAnchor(projectId,entityId))
+            throw new ConflictException("A canonical anchor cannot become a member.");
+        var byId=new LinkedHashMap<UUID,Candidate>();
         String normalized=normalize(source.displayName());
         String after="";
         int scanned=0;
@@ -43,14 +47,22 @@ public class GraphResolutionService {
                 catch (com.agentforge.core.shared.error.ResourceNotFoundException expired) { continue; }
                 double score=similarity(normalized,normalize(current.displayName()));
                 var decision=decisions.decision(projectId,current.id(),actor);
-                if(decision.status().equals("CONFIRMED"))
-                    for(String alias:decision.aliases()) score=Math.max(score,similarity(normalized,normalize(alias)));
-                if(score>0) candidates.add(new Candidate(current.id(),current.displayName(),score));
+                if(decision.status().equals("CONFIRMED")) {
+                    for(String alias:decision.aliases())
+                        score=Math.max(score,similarity(normalized,normalize(alias)));
+                    try { current=graph.entity(projectId,decision.canonicalEntityId(),actor); }
+                    catch (com.agentforge.core.shared.error.ResourceNotFoundException expired) { continue; }
+                } else if(!decisions.canBeAnchor(projectId,current.id())) continue;
+                if(current.id().equals(entityId) || score<=0) continue;
+                var candidate=new Candidate(current.id(),current.displayName(),score);
+                byId.merge(candidate.entityId(),candidate,
+                    (left,right) -> left.ruleScore()>=right.ruleScore() ? left : right);
             }
             if(page.nextAfter()==null) break;
             after=page.nextAfter();
             if(scanned>=500) truncated=true;
         }
+        var candidates=new ArrayList<>(byId.values());
         candidates.sort(Comparator.comparingDouble(Candidate::ruleScore).reversed()
             .thenComparing(c -> c.entityId().toString()));
         if(candidates.size()>20) {
