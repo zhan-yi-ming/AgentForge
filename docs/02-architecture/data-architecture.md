@@ -190,6 +190,6 @@ Flyway V12 建 `graph_source_sync(project_id, source_type, source_id, updated_at
 
 本节点不新增持久化表。Neo4j 的 GraphEntity/GraphRelation/GraphEvidence 仍是可重建投影，PostgreSQL 的 Wiki/Task 为引用事实，V3-06 人工规范映射保存在 PostgreSQL。GraphRAG 读取时重验项目、实体来源、映射状态与 evidence 原文/版本，向 Agent Service 只返回有界 DTO。跨库无原子快照承诺；来源竞争时关系可被隐藏，不能以旧图证据作为当前事实。参见 [ADR-0035](decisions/ADR-0035-evidence-bounded-graphrag.md)。
 
-## V3-08 Repository Context 数据路径（Accepted，实施中）
+## V3-08 Repository Context 数据路径（Implemented）
 
 本节点不新增 PostgreSQL 表或 RAG Chunk 持久化来源类型。部署映射只存在 Agent Service 配置；Git HEAD 的 tree/blob 与提交摘要按请求读取。仓库候选的 `sourceId` 由 project UUID、HEAD SHA 和逻辑路径确定性生成，HEAD 改变即生成不同引用身份。Wiki/Task 的业务事实仍由 Java 管理；Repository Context 不参与业务写入或图 evidence 的来源重验。参见 [ADR-0036](decisions/ADR-0036-project-scoped-repository-context.md)。

@@ -1,6 +1,6 @@
 # GraphRAG Hybrid Retrieval
 
-- 状态：Implemented（V3-07；待 Milestone Review 收口）
+- 状态：Implemented（V3-07；Milestone Review PASS）
 - 相关：[RAG 检索](rag-retrieval.md)、[Graph Domain Model](graph-domain-model.md)、[Entity Resolution](entity-resolution.md)、[ADR-0035](../02-architecture/decisions/ADR-0035-evidence-bounded-graphrag.md)
 
 ## 用户场景与流程

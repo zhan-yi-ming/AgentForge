@@ -2,7 +2,7 @@
 
 - 状态：Accepted（路线已确认；各功能在实现前均为 Planned）
 - 当前状态：V1 completed；V2-01 至 V2-09 completed；V2 Release Gate passed
-- Current Node：V3-09 Integration / V3 Release Gate（Implemented；Release Gate 与 Milestone Review PASS，待提交推送核验）
+- Current Node：V3 已完成；V3-09 Integration / V3 Release Gate 已推送并由 `v3-stable` 标记；独立的 V3 全量跨功能影响审计已 PASS，不新增 V3-10。
 - 开发协议：`../00-governance/v2-v3-node-development-protocol.md`
 
 本文是 V2/V3 开发顺序与 Node Scope 的唯一来源，同时规定验收标准、DeepSeek Pi Review 重点和 GitHub 展示重点。每次只完成一个 Node，禁止跨节点开发；完成后必须停止并等待用户明确授权下一 Node。
@@ -171,7 +171,7 @@ V2 的总目标不是增加花哨功能，而是把“能运行的 Agent”升�
 
 ### V3-09 Integration / V3 Release Gate
 
-- **状态**：Implemented（2026-10-02；完整 Release Regression 与 Milestone Review PASS，待提交推送核验）。
+- **状态**：Implemented（2026-10-02；完整 Release Regression 与 Milestone Review PASS；提交、远端分支与 `v3-stable` 已核验）。
 
 - **目标与 Scope**：禁止新增功能；完整验收 RAG、GraphRAG、Entity Resolution、HITL、Risk、Approval、Audit、Retry/Resume、Langfuse、Evaluation、MCP、LiteLLM、Fallback、Multi-model Routing，可选 Git Context；全部通过后才可 `tag v3-stable`。
 - **Pi V3 Release Review**：完整架构、安全、数据、恢复、评测、集成与文档真实性审核。

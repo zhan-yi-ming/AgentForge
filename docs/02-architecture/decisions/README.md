@@ -26,8 +26,11 @@ ADR 保存影响长期结构的决定。编号只增不减，Accepted 记录不�
 - `ADR-0020-core-owned-conversation-display-history.md`：Core API 持久化授权范围内的会话展示历史，不提前实现 Agent checkpoint。
 - `ADR-0021-durable-approval-idempotency-audit.md`：Java 持久化五态 Approval、显式幂等执行与追加式审计事实。
 - `ADR-0022-postgres-langgraph-action-checkpoints.md`：用独立 PostgreSQL schema 持久化待决 Action workflow，Java 保留业务执行权。
-- `ADR-0029-mcp-adapter-through-java-policy.md`：MCP Adapter 复用 Java Tool Policy 与 Approval，不直连业务数据库。
-
-- ADR-0032-neo4j-derived-graph.md：Java 授权和验证 Neo4j 派生图，PostgreSQL 保持业务事实。
+- [ADR-0029-mcp-adapter-through-java-policy.md](ADR-0029-mcp-adapter-through-java-policy.md)：MCP Adapter 复用 Java Tool Policy 与 Approval，不直连业务数据库。
+- [ADR-0030-litellm-model-gateway.md](ADR-0030-litellm-model-gateway.md)：Agent Service 通过 LiteLLM Gateway 统一模型调用、有限 fallback 与 usage/cost 观测。
+- [ADR-0031-deterministic-task-model-routing.md](ADR-0031-deterministic-task-model-routing.md)：部署配置按确定性任务类型选择模型，模型输出不能自行路由。
+- [ADR-0032-neo4j-derived-graph.md](ADR-0032-neo4j-derived-graph.md)：Java 授权和验证 Neo4j 派生图，PostgreSQL 保持业务事实。
 - [ADR-0033-durable-graph-source-sync.md](ADR-0033-durable-graph-source-sync.md)：PostgreSQL 持久待办驱动可恢复的 Neo4j 来源抽取与清理。
 - [ADR-0034-reviewable-entity-resolution.md](ADR-0034-reviewable-entity-resolution.md)：人工确认与可撤销规范映射，保留来源图和证据。
+- [ADR-0035-evidence-bounded-graphrag.md](ADR-0035-evidence-bounded-graphrag.md)：GraphRAG 只消费当前有效来源证据，并与文本检索在统一预算内融合。
+- [ADR-0036-project-scoped-repository-context.md](ADR-0036-project-scoped-repository-context.md)：Repository Context 由部署配置绑定项目，只读取 Git HEAD 的有界白名单资料。
