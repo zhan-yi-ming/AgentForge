@@ -103,6 +103,7 @@ flowchart TB
 - ✅ V3-05：Wiki/Task 的显式语法行可生成带原文位置、来源版本与置信度的图关系；持久待办处理更新/删除及重建。[范围与限制](docs/03-features/graph-extraction.md)。
 - ✅ V3-06：同项目同类型实体的候选建议、人工确认、规范映射与可撤销审计已实现；[契约与限制](docs/03-features/entity-resolution.md)。
 - ✅ V3-07：有证据约束的 GraphRAG 混合检索已实现；[设计、测试与限制](docs/03-features/graphrag.md)。
+- ✅ V3-08：可选 Git Repository Context；[只读边界与范围](docs/03-features/repository-context.md)。
 
 每个节点的实现、失败测试、最终验证和独立 Review 都记录在[变更记录](docs/07-changes/README.md)与[审核记录](docs/08-reviews/README.md)。
 

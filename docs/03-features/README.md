@@ -38,3 +38,4 @@
 - [Graph Extraction Pipeline](graph-extraction.md)：V3-05 显式语法抽取、来源生命周期与 evidence provenance；GraphRAG Retrieval Implemented。
 - [Entity Resolution](entity-resolution.md)：V3-06 已实现；候选、人工确认与可撤销规范映射。
 - [GraphRAG Hybrid Retrieval](graphrag.md)：V3-07 Implemented；有界图遍历、文本融合与文档引用。
+- [Git Repository Context](repository-context.md)：V3-08 In Progress；按项目绑定的 HEAD 只读资料与仓库引用。

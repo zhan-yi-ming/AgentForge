@@ -84,3 +84,7 @@ V3-03（Implemented）在 Responder 上方增加确定性任务模型路由，�
 ## V3-07 GraphRAG 读取边界（Implemented）
 
 Agent Service 在既有 Hybrid RAG 来源回调后，以独立内部 token 请求 Java 的只读图检索。Java 重新校验用户和项目权限，并通过 GraphService 重验 Neo4j 实体、关系及 PostgreSQL Wiki/Task evidence。只有有限两跳、当前有效且可引用的结果进入 Python；Python 完成融合排序和 Context 预算。图不可用时文本 RAG 可继续，权限错误必须失败关闭。GraphRAG 不改变 Java 对业务写入和审批的最终控制权。参见 [GraphRAG](../03-features/graphrag.md) 与 [ADR-0035](decisions/ADR-0035-evidence-bounded-graphrag.md)。
+
+## V3-08 Git Repository Context（Accepted，实施中）
+
+Java 在跨服务调用前完成用户、项目与额度检查；Python 只根据服务端部署映射读取该项目仓库 HEAD 的已提交白名单资料。可选只读挂载不改变业务数据库边界，Git 资料只进入 Agent 的有界 Retrieved Context。仓库来源由现有 Chat JSON/SSE `sources` 传递，Java 不执行 Git 操作，模型不能选择路径或写仓库。参见 [Repository Context](../03-features/repository-context.md) 与 [ADR-0036](decisions/ADR-0036-project-scoped-repository-context.md)。

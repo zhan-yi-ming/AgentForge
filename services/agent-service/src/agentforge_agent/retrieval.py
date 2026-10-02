@@ -6,7 +6,8 @@ from .config import Settings
 from .core_client import CoreApiClient
 from .embeddings import HashEmbeddingProvider
 from .rag_store import RagStore, StoredChunk
-from .ranking import reciprocal_rank_fusion
+from .ranking import RankableChunk, bm25_rank, reciprocal_rank_fusion
+from .repository_context import RepositoryContextProvider
 from .schemas import ChatSource, GraphMatch, RagSource
 
 
@@ -33,6 +34,7 @@ class RetrievalService:
         top_k: int,
         candidate_k: int,
         context_char_budget: int,
+        repository_provider: RepositoryContextProvider | None = None,
     ) -> None:
         self.core_client = core_client
         self.store = store
@@ -40,6 +42,7 @@ class RetrievalService:
         self.top_k = top_k
         self.candidate_k = candidate_k
         self.context_char_budget = context_char_budget
+        self.repository_provider = repository_provider
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "RetrievalService":
@@ -55,6 +58,7 @@ class RetrievalService:
             top_k=settings.rag_top_k,
             candidate_k=settings.rag_candidate_k,
             context_char_budget=settings.rag_context_char_budget,
+            repository_provider=RepositoryContextProvider.from_settings(settings),
         )
 
     def retrieve(
@@ -85,9 +89,31 @@ class RetrievalService:
         graph_chunks = _graph_chunks(project_id, sources, graph_matches)
         chunks.update({chunk.id: chunk for chunk in graph_chunks})
         graph_ids = [chunk.id for chunk in graph_chunks]
-        ranked_ids = reciprocal_rank_fusion([vector_ids, lexical_ids, graph_ids], self.top_k)
+        repository_matches = (
+            self.repository_provider.retrieve(project_id, query)
+            if self.repository_provider is not None and query.strip() else []
+        )
+        repository_chunks = [
+            StoredChunk(f"repository:{match.source_id}", project_id, "REPOSITORY",
+                        match.source_id, 0, 0, match.title,
+                        f"Repository HEAD {match.revision[:12]}\n{match.content}")
+            for match in repository_matches
+        ]
+        chunks.update({chunk.id: chunk for chunk in repository_chunks})
+        repository_ids = bm25_rank(
+            query, [RankableChunk(chunk.id, f"{chunk.title}\n{chunk.content}")
+                    for chunk in repository_chunks], self.candidate_k,
+        )
+        ranked_ids = reciprocal_rank_fusion(
+            [vector_ids, lexical_ids, graph_ids, repository_ids], self.top_k,
+        )
         if graph_ids and ranked_ids and not any(chunk_id in graph_ids for chunk_id in ranked_ids):
             ranked_ids[-1] = graph_ids[0]
+        if repository_ids and ranked_ids and not any(chunk_id in repository_ids for chunk_id in ranked_ids):
+            if len(ranked_ids) > 1 and ranked_ids[-1] in graph_ids:
+                ranked_ids[-2] = repository_ids[0]
+            else:
+                ranked_ids[-1] = repository_ids[0]
         ranked_chunks = [chunks[chunk_id] for chunk_id in ranked_ids if chunk_id in chunks]
         context, included = _build_context(ranked_chunks, self.context_char_budget)
         return RetrievalResult(

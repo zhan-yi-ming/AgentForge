@@ -57,6 +57,8 @@ Prompt 中的展示顺序保持 `Current Request → Recent Messages → Convers
 
 ## 安全与失败
 
+V3-08 可选 Repository Context 由服务端项目 UUID 映射提供，只从绑定仓库当前 HEAD 的已提交白名单资料构造独立 `REPOSITORY` 来源。它与 Wiki/Task/Graph 共用 Retrieved Context 的模型预算，不能写入 Conversation Summary、Tool Context 或 Langfuse metadata。仓库不可用时 Retrieved Context 保留已有来源；Java 项目授权仍先于该读取。
+
 - Java 仍在调用 Python 前完成认证、项目权限和配额；Context Manager 不替代授权。
 - Retrieved Context 只接受当前 project 的检索结果；跨项目负向测试继续由 RAG seam 保证。
 - Tool Context 只保存白名单 planner 的结构化意图，Python 不执行写入。

@@ -66,7 +66,8 @@ class AgentChatApiTest {
             sink.accept(AgentStreamEvent.delta("第一段"));
             sink.accept(AgentStreamEvent.delta("，第二段"));
             sink.accept(new AgentStreamEvent("complete", null, null,
-                    List.of(new AgentSource("WIKI", sourceId, "Architecture", "Java owns writes.")),
+                    List.of(new AgentSource("WIKI", sourceId, "Architecture", "Java owns writes."),
+                            new AgentSource("REPOSITORY", UUID.randomUUID(), "README.md", "Core entry")),
                     null, null, null, null));
             return null;
         }).when(agentChatService).stream(eq(command), any());
@@ -87,7 +88,8 @@ class AgentChatApiTest {
                 .andExpect(content().string(org.hamcrest.Matchers.containsString(
                         "data:{\"text\":\"\\u7B2C\\u4E00\\u6BB5\"}")))
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("event:complete")))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString(sourceId.toString())));
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(sourceId.toString())))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("REPOSITORY")));
     }
 
     @Test
@@ -134,7 +136,8 @@ class AgentChatApiTest {
                         conversationId,
                         "Relevant project context",
                         invocation.getArgument(4),
-                        List.of(new AgentSource("WIKI", UUID.randomUUID(), "Architecture", "Java owns writes."))));
+                        List.of(new AgentSource("WIKI", UUID.randomUUID(), "Architecture", "Java owns writes."),
+                                new AgentSource("REPOSITORY", UUID.randomUUID(), "README.md", "Core entry"))));
 
         mockMvc.perform(post("/api/v1/projects/{projectId}/agent/chat", projectId)
                         .with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString()).claim("roles", List.of("USER"))))
@@ -148,7 +151,9 @@ class AgentChatApiTest {
                 .andExpect(jsonPath("$.answer").value("Relevant project context"))
                 .andExpect(jsonPath("$.requestId").value("request-123"))
                 .andExpect(jsonPath("$.sources[0].sourceType").value("WIKI"))
-                .andExpect(jsonPath("$.sources[0].title").value("Architecture"));
+                .andExpect(jsonPath("$.sources[0].title").value("Architecture"))
+                .andExpect(jsonPath("$.sources[1].sourceType").value("REPOSITORY"))
+                .andExpect(jsonPath("$.sources[1].title").value("README.md"));
     }
 
     @Test

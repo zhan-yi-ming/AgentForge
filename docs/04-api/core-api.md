@@ -337,3 +337,7 @@ Chat 和 Chat stream 请求新增可选 taskType：FORMAT、REWRITE、PLAN、REV
 ## V3-07 内部 GraphRAG 只读入口（Implemented）
 
 `POST /internal/v1/graph/retrieval` 只供 Agent Service 使用，沿用来源接口的独立 `X-AgentForge-Core-Internal-Token`；浏览器 JWT 不能替代。请求 `{projectId,userId,actorAdmin,requestId,query}`，其中 query 为 1–1000 字符；Java 先验证 token、用户和项目访问，再读取图。响应包含关联的 projectId/requestId 和有界 `matches`；每项给出跳数、实体、关系及当前有效 evidence 的 Wiki/Task 来源身份、版本、摘录和 confidence。详细字段和故障语义见 [Agent Service API](agent-service.md)。没有可信关系返回空数组；图关闭或故障返回通用 503，内部鉴权/项目错误保持 401/403/404，输入错误 400。
+
+## V3-08 Chat 来源传递（Implemented）
+
+Core API 仍先校验 Java 用户和项目权限，然后调用 Agent Service；不新增公开或内部请求字段。Agent 返回的 `sources` 可含 `sourceType=REPOSITORY`、确定性 UUID、标题和有界摘录；Core API 在同步 JSON 与 SSE complete 中按现有来源结构传递。历史回答沿用通用来源 JSON 存储路径，但本 Node 不声明其专项回读验收。Core API 不接收仓库路径、不提供仓库读取/下载接口，也不把仓库来源当作 Wiki/Task 的业务来源。

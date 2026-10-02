@@ -20,7 +20,7 @@ class ChatRequest(ApiModel):
 
 
 class ChatSource(ApiModel):
-    source_type: Literal["WIKI", "TASK"]
+    source_type: Literal["WIKI", "TASK", "REPOSITORY"]
     source_id: UUID
     title: str
     excerpt: str

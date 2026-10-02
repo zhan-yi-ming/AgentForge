@@ -128,3 +128,7 @@ HTTP fields and auth semantics are unchanged. Optional deployment configuration 
 Python 在已有来源回调之后调用 Core API `POST /internal/v1/graph/retrieval`，携带同一 `X-AgentForge-Core-Internal-Token`、`X-Request-Id`，body 为 `{projectId,userId,actorAdmin,requestId,query}`；query 非空且至多 1000 字符。Java 再次验证服务 token、当前用户和项目访问，再执行有界图读取。成功响应为 `{projectId,requestId,matches:[...]}`，每个 match 含 `hop`（1 或 2）、`relationId`、`relationType`、`from`/`to`（`entityId`,`entityType`,`displayName`,`canonicalEntityId` 可空）及 `evidence`（`sourceType`,`sourceId`,`sourceVersion`,`excerpt`,`confidence`）。每项 evidence 的来源版本与原文在 Java 读取时有效；无有效 evidence 的边不返回。结果不含凭据、Cypher 或完整业务正文。
 
 公开 Chat JSON/SSE 字段不变；Python 将图证据与原有 Vector/BM25 结果融合，统一来源编号及 Context 预算。图关闭、超时或 503 时仅文本检索继续；401/403/404、其他非成功状态和响应关联不匹配均使请求失败，不把越权当作空结果。最终 `sources` 仍只由回答显式 `【来源N】` 引用的当前项目 Wiki/Task 文档生成。
+
+## V3-08 Repository 来源（Implemented）
+
+内部 Chat 与 Chat stream 请求字段保持不变；Java 授权后的 `projectId` 选择 Python 部署配置中的本机只读仓库。响应的 `sources` 允许新增 `sourceType=REPOSITORY`，其余字段 `sourceId`（UUID）、`title`、`excerpt` 不变。Repository 来源只能对应当前 HEAD 中选中的白名单资料或近期提交摘要，并且最终回答须显式引用其编号。图 evidence 的来源仍仅为 Wiki/Task；Repository 来源不成为 Task Tool 目标。未配置或 Git 不可用时没有 Repository 来源，不新增请求参数或错误状态。

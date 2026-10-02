@@ -52,6 +52,7 @@
 - `graph-extraction.md`：V3-05 显式证据抽取与可恢复来源生命周期（Implemented）。
 - `entity-resolution.md`：V3-06 候选、人工确认与可撤销规范映射（Implemented）。
 - `graphrag.md`：V3-07 证据约束的图与文本混合检索（Implemented）。
+- `repository-context.md`：V3-08 项目绑定的 Git 仓库上下文（Implemented）。
 
 每个可见功能或关键平台能力必须有独立文档。功能文档描述目标、角色、流程、接口、数据、权限、异常、测试和已知限制。当前从 `user-and-project.md` 开始。
 

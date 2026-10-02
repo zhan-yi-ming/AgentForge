@@ -378,3 +378,7 @@ Agent Service 的生成模型由 LiteLLM SDK 调用。`AGENTFORGE_AGENT_LLM_PROV
 Set optional `AGENTFORGE_AGENT_LLM_ROUTES` to the candidate JSON array documented in `docs/03-features/model-routing.md`. Empty array preserves existing behavior. Use existing primary/fallback credential slots; never place keys in routing JSON. Ranks require deployment calibration and timeout budgets must cover planning plus response and bounded fallback.
 
 紧急切回确定性模式必须同时设置 `AGENTFORGE_AGENT_LLM_PROVIDER=disabled`、`AGENTFORGE_AGENT_LLM_ROUTES=[]` 并清空 `AGENTFORGE_AGENT_LLM_FALLBACK_PROVIDER`。非空 routes 与 disabled 会在首次请求失败关闭；仅改 provider 不足以完成降级。
+
+## V3-08 可选仓库上下文
+
+默认 `AGENTFORGE_AGENT_REPOSITORIES=[]`。启用时由部署方在 Agent Service 设置 JSON 数组，例如 `[{"projectId":"<项目 UUID>","path":"<绝对仓库根目录>"}]`。路径必须是容器或本机可读的标准 Git 工作树根；每个项目最多绑定一个，不能通过 Chat 输入覆盖。仅可配置经过安全审查且允许进入模型的仓库。生产/Compose 可使用单独的只读覆盖文件 `infra/compose.repository-context.yaml`，并将绑定路径设为挂载点。不要挂载整个宿主家目录；禁用时删除映射和覆盖文件即可。首次请求若仓库不可用，现有 Wiki/Task/Graph 检索仍可继续。

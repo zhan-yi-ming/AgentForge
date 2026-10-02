@@ -1,0 +1,10 @@
+# Optional V3-08 override; use with infra/compose.yaml after choosing one project/repository.
+services:
+  agent-service:
+    environment:
+      AGENTFORGE_AGENT_REPOSITORIES: '[{"projectId":"${AGENTFORGE_REPOSITORY_PROJECT_ID:?set the project UUID}","path":"/app/repositories/project"}]'
+    volumes:
+      - type: bind
+        source: ${AGENTFORGE_REPOSITORY_HOST_PATH:?set an approved repository root}
+        target: /app/repositories/project
+        read_only: true

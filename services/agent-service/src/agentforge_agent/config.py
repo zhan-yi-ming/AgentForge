@@ -1,9 +1,26 @@
 from functools import lru_cache
 
+from pathlib import Path
 from typing import Literal
+from uuid import UUID
 
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
+from pydantic.alias_generators import to_camel
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class RepositoryBinding(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    project_id: UUID
+    path: Path
+
+    @field_validator("path")
+    @classmethod
+    def require_absolute_path(cls, value: Path) -> Path:
+        if not value.is_absolute():
+            raise ValueError("Repository path must be absolute.")
+        return value
 
 
 class Settings(BaseSettings):
@@ -60,6 +77,7 @@ class Settings(BaseSettings):
     rag_top_k: int = Field(default=6, ge=1, le=20)
     rag_candidate_k: int = Field(default=12, ge=1, le=50)
     rag_context_char_budget: int = Field(default=4000, ge=500, le=12000)
+    repositories: list[RepositoryBinding] = Field(default_factory=list, max_length=32)
 
     @field_validator("llm_fallback_provider", mode="before")
     @classmethod
@@ -88,6 +106,9 @@ class Settings(BaseSettings):
             raise ValueError(
                 "context summary budget must not exceed total context budget"
             )
+        projects = [binding.project_id for binding in self.repositories]
+        if len(projects) != len(set(projects)):
+            raise ValueError("Repository project bindings must be unique.")
         return self
 
     def effective_checkpoint_db_dsn(self) -> str:

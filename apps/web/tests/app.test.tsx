@@ -573,7 +573,8 @@ describe("App", () => {
       .mockResolvedValueOnce({ conversationId: "cited-chat", answer: "First answer", requestId: "r1",
         sources: [{ sourceType: "WIKI", sourceId: "wiki-a", title: "Architecture", excerpt: "Core owns writes" }] })
       .mockResolvedValueOnce({ conversationId: "cited-chat", answer: "Second answer", requestId: "r2",
-        sources: [{ sourceType: "WIKI", sourceId: "wiki-b", title: "Runbook", excerpt: "Review steps" }] });
+        sources: [{ sourceType: "REPOSITORY", sourceId: "repo-b", title: "README.md",
+          excerpt: "<img src=x onerror=alert(1)> Core entry" }] });
     const user = await login(api({ chatStream }));
     await user.type(screen.getByLabelText("给 Agent 的消息"), "first");
     await user.click(screen.getByRole("button", { name: "发送" }));
@@ -582,14 +583,20 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "发送" }));
     expect(await screen.findByText("Second answer")).toBeInTheDocument();
     expect(screen.queryByText("Architecture")).not.toBeInTheDocument();
-    expect(screen.queryByText("Runbook")).not.toBeInTheDocument();
+    expect(screen.queryByText("README.md")).not.toBeInTheDocument();
     const sourceButtons = screen.getAllByRole("button", { name: /引用来源/ });
     expect(sourceButtons).toHaveLength(2);
     await user.click(sourceButtons[0]);
     expect(screen.getByText("Architecture")).toBeInTheDocument();
-    expect(screen.queryByText("Runbook")).not.toBeInTheDocument();
+    expect(screen.queryByText("README.md")).not.toBeInTheDocument();
     await user.click(sourceButtons[0]);
     expect(screen.queryByText("Architecture")).not.toBeInTheDocument();
+    await user.click(sourceButtons[1]);
+    expect(screen.getByText("README.md")).toBeInTheDocument();
+    expect(screen.getByText("<img src=x onerror=alert(1)> Core entry")).toBeInTheDocument();
+    const citationContainer = screen.getByText("README.md").closest(".sources-list");
+    expect(citationContainer).not.toBeNull();
+    expect(citationContainer!.querySelector("img")).toBeNull();
   });
 
   it("shows pending action above chat content and can reopen it after Escape without deciding", async () => {

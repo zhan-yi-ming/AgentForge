@@ -261,6 +261,52 @@ def test_chat_stream_sends_only_cited_sources_at_completion() -> None:
     assert [source["title"] for source in events[-1]["sources"]] == ["Architecture"]
 
 
+def test_repository_source_is_cited_in_sync_and_stream_chat() -> None:
+    repository_id = uuid4()
+
+    class RepositoryRetrieval:
+        def retrieve(self, *_args):
+            source = ChatSource(
+                source_type="REPOSITORY", source_id=repository_id,
+                title="README.md", excerpt="Core entry is services/core-api.",
+            )
+            return RetrievalResult(
+                context=f"【来源1】 [REPOSITORY:{repository_id}] README.md\nCore entry is services/core-api.",
+                sources=[source],
+            )
+
+    class CitingResponder:
+        def __call__(self, _state):
+            return "The Core entry is documented in README.md.【来源1】"
+
+        def stream(self, state):
+            yield self(state)
+
+    app.dependency_overrides[get_retrieval_service] = lambda: RepositoryRetrieval()
+    app.dependency_overrides[get_responder] = lambda: CitingResponder()
+    try:
+        sync = client.post(
+            "/internal/v1/chat",
+            headers={"X-AgentForge-Internal-Token": TOKEN},
+            json=chat_request(message="Where is the Core entry?"),
+        )
+        stream = client.post(
+            "/internal/v1/chat/stream",
+            headers={"X-AgentForge-Internal-Token": TOKEN},
+            json=chat_request(message="Where is the Core entry?"),
+        )
+    finally:
+        app.dependency_overrides[get_retrieval_service] = lambda: FakeRetrievalService()
+        app.dependency_overrides.pop(get_responder, None)
+
+    events = [__import__("json").loads(line) for line in stream.text.splitlines()]
+    assert sync.status_code == 200
+    assert sync.json()["sources"][0]["sourceType"] == "REPOSITORY"
+    assert sync.json()["sources"][0]["sourceId"] == str(repository_id)
+    assert events[0]["sources"] == []
+    assert events[-1]["sources"] == sync.json()["sources"]
+
+
 def test_chat_stream_reports_a_waiting_action_conflict() -> None:
     class ConflictingRuntime:
         def interrupt(self, namespace, proposal, request_id):
