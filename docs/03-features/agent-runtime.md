@@ -23,18 +23,18 @@ stateDiagram-v2
 ```
 
 1. Python 完成 Context、Retrieval、Tool planning 和回答生成。
-2. 仅当存在有效 Tool proposal 时，Action workflow 以完整 Memory Namespace 派生的稳定物理 thread key 写入 checkpoint 并动态 interrupt；对外 Thread 标识仍是 `conversationId`。
-3. Java 校验 proposal、持久化 PENDING Approval，并把 pending action 返回用户。
+2. 仅当存在有效 Tool proposal 时，Action workflow 以完整 Memory Namespace 派生的稳定物理 thread key 写入 checkpoint 并动态 interrupt；每次新等待轮次生成不可复用的内部 `workflowId`，对外 Thread 标识仍是 `conversationId`。
+3. Python 在内部 proposal 中返回本轮 `workflowId`；Java 校验 proposal、以该 ID 幂等持久化唯一 PENDING Approval，并把不含 workflow ID 的公共 pending action 返回用户。
 4. 用户 confirm/reject 后，Java 重新验证 Project、actor 和服务端 Tool Policy，并先持久化决定。
-5. Java 使用内部凭据把 action、decision 和 Idempotency Key 发送给 Python Resume 接口。
-6. Python 从 PostgreSQL 恢复相同 Thread；批准恢复成功后 Java 再锁定 Approval、再次复核权限并执行 Tool。
+5. Java 使用内部凭据把 workflow、action、decision 和 Idempotency Key 发送给 Python Resume 接口。
+6. Python 从 PostgreSQL 恢复相同 Thread，并要求 workflow ID 精确匹配当前等待轮次；批准恢复成功后 Java 再锁定 Approval、再次复核权限并执行 Tool。
 7. 任一网络响应丢失时，相同 key 重试返回已提交事实；不同 key 或相反 decision 冲突。
 
 ## 状态与隔离
 
-checkpoint 只保存恢复所需的受限状态：schema version、tenant/workspace/project/user/thread、proposal 指纹、等待/恢复状态、action ID、decision、Idempotency Key 和 request ID。不得保存 JWT、服务间 token、密码、完整 Prompt、回答正文或检索正文。
+checkpoint 只保存恢复所需的受限状态：schema version、tenant/workspace/project/user/thread、不可复用 workflow ID、proposal 指纹、等待/恢复状态、action ID、decision、Idempotency Key 和 request ID。不得保存 JWT、服务间 token、密码、完整 Prompt、回答正文或检索正文。
 
-Thread 恢复必须同时匹配完整 Memory Namespace。仅知道 conversation ID 不能跨 Project 或 User 恢复。等待期间相同 proposal 的重试返回原等待状态，另一个 Tool proposal 冲突；普通无 Tool Chat 不创建或覆盖 Action workflow。恢复完成后的新 proposal 会建立新一轮状态，同时保留 LangGraph checkpoint 历史。
+Thread 恢复必须同时匹配完整 Memory Namespace 和本轮 workflow ID。仅知道 conversation ID 或旧 Action ID 不能跨 Project/User/轮次恢复。等待期间只有相同 request 与相同 proposal 的重试返回原 workflow；不同 request 即使 proposal 内容相同也冲突。恢复完成后的新 proposal 建立新的 workflow ID，同时保留 LangGraph checkpoint 历史。
 
 ## 一致性与重试
 
@@ -48,12 +48,12 @@ Java 不在数据库事务或 action 行锁内调用 Python。confirm 分为：
 
 reject 先提交 REJECTED，再恢复 Python 为 rejected；Python 暂时不可用时相同 key 可重试恢复，但 rejected action 永远不能执行。
 
-V2-07 之前已持久化的 V2-06 Action 没有 checkpoint。V8 以可空 `action_workflow_version` 区分这些旧记录：旧记录继续沿用 Java 原有的确定性 confirm/reject，不调用不存在的 Resume；V2-07 新 Action 标记版本 1，并强制通过上述恢复链路。该字段不进入公共 API。
+V2-07 之前已持久化的 V2-06 Action 没有 checkpoint。V8 以可空 `action_workflow_version` 区分这些旧记录：旧记录继续沿用 Java 原有的确定性 confirm/reject，不调用不存在的 Resume。既有 V2-07 Action/checkpoint 保持版本 1 和无 workflow ID 的兼容恢复；本修复后的新 Chat Action 标记版本 2，并强制校验持久化 workflow ID。版本与 workflow ID 均不进入公共 API。
 
 ## 失败语义
 
 - checkpoint 数据库不可用：Agent Service 启动或待决 Action 请求失败，不退回内存 checkpoint。
-- Thread/Namespace/action 不匹配：内部 Resume 返回冲突或不存在，不尝试新建运行态。
+- Thread/Namespace/workflow/action 不匹配：内部 Resume 返回冲突或不存在，不尝试新建运行态，也不消费当前等待轮次。
 - checkpoint schema version 不受支持：失败关闭并保留原 checkpoint，等待显式迁移策略。
 - Python Resume 暂时失败：公共决定返回依赖不可用；Java 已提交的 Approval 决定不回滚。
 - Tool 业务冲突：Java 提交 FAILED；未知基础设施异常保持可安全重试的既有状态。

@@ -6,6 +6,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
@@ -28,20 +29,22 @@ class AgentActionWorkflowServiceTest {
         AgentActionWorkflowService workflow = new AgentActionWorkflowService(actions, agentService);
         UUID projectId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
+        UUID workflowId = UUID.randomUUID();
         UUID actionId = UUID.randomUUID();
         AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
         Instant now = Instant.parse("2026-09-20T00:00:00Z");
         AgentActionView approved = new AgentActionView(actionId, projectId, conversationId,
                 AgentActionType.CREATE_TASK, AgentActionStatus.APPROVED, null, null,
-                "Timed create", null, "TODO", "LOW", null, now.minusSeconds(61), null, 1);
+                "Timed create", null, "TODO", "LOW", null, now.minusSeconds(61), null, 2, workflowId);
         AgentActionView executed = new AgentActionView(actionId, projectId, conversationId,
                 AgentActionType.CREATE_TASK, AgentActionStatus.EXECUTED, null, null,
-                "Timed create", null, "TODO", "LOW", null, now.minusSeconds(61), now, 1);
+                "Timed create", null, "TODO", "LOW", null, now.minusSeconds(61), now, 2, workflowId);
         when(actions.approveAutomatically(projectId, actionId, actor, "auto-key", "auto-request"))
                 .thenReturn(approved);
-        when(agentService.resume(projectId, actor.userId(), false, conversationId, actionId,
+        when(agentService.resume(projectId, actor.userId(), false, conversationId, workflowId, actionId,
                 "APPROVE", "auto-key", "auto-request"))
-                .thenReturn(new AgentResumeResult(conversationId, actionId, "APPROVE", "RESUMED", "auto-request"));
+                .thenReturn(new AgentResumeResult(
+                        conversationId, workflowId, actionId, "APPROVE", "RESUMED", "auto-request"));
         when(actions.executeApproved(projectId, actionId, actor, "auto-key", "auto-request"))
                 .thenReturn(executed);
 
@@ -49,7 +52,8 @@ class AgentActionWorkflowServiceTest {
                 .isEqualTo(AgentActionStatus.EXECUTED);
         InOrder order = inOrder(actions, agentService);
         order.verify(actions).approveAutomatically(projectId, actionId, actor, "auto-key", "auto-request");
-        order.verify(agentService).resume(projectId, actor.userId(), false, conversationId, actionId,
+        order.verify(agentService).resume(
+                projectId, actor.userId(), false, conversationId, workflowId, actionId,
                 "APPROVE", "auto-key", "auto-request");
         order.verify(actions).executeApproved(projectId, actionId, actor, "auto-key", "auto-request");
     }
@@ -62,24 +66,25 @@ class AgentActionWorkflowServiceTest {
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
+        UUID workflowId = UUID.randomUUID();
         UUID actionId = UUID.randomUUID();
         AuthenticatedActor actor = new AuthenticatedActor(userId, false);
         Instant now = Instant.parse("2026-09-09T00:00:00Z");
         AgentActionView approved = new AgentActionView(
                 actionId, projectId, conversationId, AgentActionType.CREATE_TASK,
                 AgentActionStatus.APPROVED, null, null, "Resume", null,
-                "TODO", "HIGH", null, now, null, 1);
+                "TODO", "HIGH", null, now, null, 2, workflowId);
         AgentActionView executed = new AgentActionView(
                 actionId, projectId, conversationId, AgentActionType.CREATE_TASK,
                 AgentActionStatus.EXECUTED, null, null, "Resume", null,
-                "TODO", "HIGH", null, now, now, 1);
+                "TODO", "HIGH", null, now, now, 2, workflowId);
         when(actions.approve(projectId, actionId, actor, "workflow-key", "request-1"))
                 .thenReturn(approved);
         when(agentService.resume(
-                projectId, userId, false, conversationId, actionId,
+                projectId, userId, false, conversationId, workflowId, actionId,
                 "APPROVE", "workflow-key", "request-1"))
                 .thenReturn(new AgentResumeResult(
-                        conversationId, actionId, "APPROVE", "RESUMED", "request-1"));
+                        conversationId, workflowId, actionId, "APPROVE", "RESUMED", "request-1"));
         when(actions.executeApproved(projectId, actionId, actor, "workflow-key", "request-1"))
                 .thenReturn(executed);
 
@@ -90,7 +95,7 @@ class AgentActionWorkflowServiceTest {
         InOrder order = inOrder(actions, agentService);
         order.verify(actions).approve(projectId, actionId, actor, "workflow-key", "request-1");
         order.verify(agentService).resume(
-                projectId, userId, false, conversationId, actionId,
+                projectId, userId, false, conversationId, workflowId, actionId,
                 "APPROVE", "workflow-key", "request-1");
         order.verify(actions).executeApproved(
                 projectId, actionId, actor, "workflow-key", "request-1");
@@ -104,6 +109,7 @@ class AgentActionWorkflowServiceTest {
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
+        UUID workflowId = UUID.randomUUID();
         UUID actionId = UUID.randomUUID();
         AuthenticatedActor actor = new AuthenticatedActor(userId, false);
         Instant now = Instant.parse("2026-09-09T00:00:00Z");
@@ -111,12 +117,45 @@ class AgentActionWorkflowServiceTest {
                 .thenReturn(new AgentActionView(
                         actionId, projectId, conversationId, AgentActionType.CREATE_TASK,
                         AgentActionStatus.APPROVED, null, null, "Resume", null,
-                        "TODO", "HIGH", null, now, null, 1));
+                        "TODO", "HIGH", null, now, null, 2, workflowId));
         when(agentService.resume(
-                projectId, userId, false, conversationId, actionId,
+                projectId, userId, false, conversationId, workflowId, actionId,
                 "APPROVE", "workflow-key", "request-1"))
                 .thenReturn(new AgentResumeResult(
-                        conversationId, UUID.randomUUID(), "APPROVE", "RESUMED", "request-1"));
+                        conversationId, workflowId, UUID.randomUUID(),
+                        "APPROVE", "RESUMED", "request-1"));
+
+        assertThatThrownBy(() -> workflow.confirm(
+                projectId, actionId, actor, "workflow-key", "request-1"))
+                .isInstanceOf(ServiceUnavailableException.class);
+
+        verify(actions, never()).executeApproved(
+                projectId, actionId, actor, "workflow-key", "request-1");
+    }
+
+    @Test
+    void confirmDoesNotExecuteWhenResumeResponseBelongsToAnotherWorkflowRound() {
+        AgentActionService actions = mock(AgentActionService.class);
+        AgentServiceClient agentService = mock(AgentServiceClient.class);
+        AgentActionWorkflowService workflow = new AgentActionWorkflowService(actions, agentService);
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        UUID workflowId = UUID.randomUUID();
+        UUID actionId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(userId, false);
+        Instant now = Instant.parse("2026-09-09T00:00:00Z");
+        when(actions.approve(projectId, actionId, actor, "workflow-key", "request-1"))
+                .thenReturn(new AgentActionView(
+                        actionId, projectId, conversationId, AgentActionType.CREATE_TASK,
+                        AgentActionStatus.APPROVED, null, null, "Resume", null,
+                        "TODO", "HIGH", null, now, null, 2, workflowId));
+        when(agentService.resume(
+                projectId, userId, false, conversationId, workflowId, actionId,
+                "APPROVE", "workflow-key", "request-1"))
+                .thenReturn(new AgentResumeResult(
+                        conversationId, UUID.randomUUID(), actionId,
+                        "APPROVE", "RESUMED", "request-1"));
 
         assertThatThrownBy(() -> workflow.confirm(
                 projectId, actionId, actor, "workflow-key", "request-1"))
@@ -154,9 +193,7 @@ class AgentActionWorkflowServiceTest {
                 projectId, actionId, actor, "legacy-key", "request-legacy");
 
         assertThat(result.status()).isEqualTo(AgentActionStatus.EXECUTED);
-        verify(agentService, never()).resume(
-                projectId, userId, false, conversationId, actionId,
-                "APPROVE", "legacy-key", "request-legacy");
+        verifyNoInteractions(agentService);
     }
 
     @Test
@@ -167,20 +204,21 @@ class AgentActionWorkflowServiceTest {
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
+        UUID workflowId = UUID.randomUUID();
         UUID actionId = UUID.randomUUID();
         AuthenticatedActor actor = new AuthenticatedActor(userId, false);
         Instant now = Instant.parse("2026-09-09T00:00:00Z");
         AgentActionView rejected = new AgentActionView(
                 actionId, projectId, conversationId, AgentActionType.CREATE_TASK,
                 AgentActionStatus.REJECTED, null, null, "Reject", null,
-                "TODO", "HIGH", null, now, now, 1);
+                "TODO", "HIGH", null, now, now, 2, workflowId);
         when(actions.reject(projectId, actionId, actor, "reject-key", "request-reject"))
                 .thenReturn(rejected);
         when(agentService.resume(
-                projectId, userId, false, conversationId, actionId,
+                projectId, userId, false, conversationId, workflowId, actionId,
                 "REJECT", "reject-key", "request-reject"))
                 .thenReturn(new AgentResumeResult(
-                        conversationId, actionId, "REJECT", "RESUMED", "request-reject"));
+                        conversationId, workflowId, actionId, "REJECT", "RESUMED", "request-reject"));
 
         AgentActionView result = workflow.reject(
                 projectId, actionId, actor, "reject-key", "request-reject");
@@ -190,7 +228,7 @@ class AgentActionWorkflowServiceTest {
         order.verify(actions).reject(
                 projectId, actionId, actor, "reject-key", "request-reject");
         order.verify(agentService).resume(
-                projectId, userId, false, conversationId, actionId,
+                projectId, userId, false, conversationId, workflowId, actionId,
                 "REJECT", "reject-key", "request-reject");
     }
 }

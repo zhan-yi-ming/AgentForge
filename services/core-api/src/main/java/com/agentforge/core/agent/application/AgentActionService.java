@@ -100,6 +100,20 @@ public class AgentActionService {
             case UPDATE_TASK -> ToolOperation.UPDATE_TASK;
         };
         riskEngine.authorize(operation, projectId, actor);
+        UUID actionWorkflowId = proposal.actionWorkflowId();
+        if (actionWorkflowId == null) {
+            return Optional.empty();
+        }
+        actions.lockChatWorkflow(projectId, actor.userId(), conversationId, actionWorkflowId);
+        Optional<AgentTaskAction> existing = actions.findChatWorkflow(
+                projectId, actor.userId(), conversationId, actionWorkflowId);
+        if (existing.isPresent()) {
+            if (!matchesProposal(existing.get(), normalized)) {
+                throw new ConflictException(
+                        "The Action workflow identity is already used for another intent.");
+            }
+            return Optional.of(AgentActionView.from(existing.get(), null));
+        }
         if (normalized.type() == AgentActionType.UPDATE_TASK) {
             TaskView current = taskService.get(projectId, normalized.taskId(), actor);
             if (current.version() != normalized.expectedVersion()) {
@@ -110,6 +124,7 @@ public class AgentActionService {
                 projectId,
                 actor.userId(),
                 conversationId,
+                actionWorkflowId,
                 normalized.type(),
                 normalized.taskId(),
                 normalized.title(),
@@ -151,7 +166,7 @@ public class AgentActionService {
         Optional<AgentTaskAction> existing = actions.findMcpProposal(
                 projectId, actor.userId(), normalizedIdempotencyKey);
         if (existing.isPresent()) {
-            if (!matchesMcpProposal(existing.get(), normalized)) {
+            if (!matchesProposal(existing.get(), normalized)) {
                 throw new ConflictException(
                         "The MCP proposal idempotency key is already used for another intent.");
             }
@@ -422,7 +437,7 @@ public class AgentActionService {
         return normalized;
     }
 
-    private boolean matchesMcpProposal(AgentTaskAction action, NormalizedProposal proposal) {
+    private boolean matchesProposal(AgentTaskAction action, NormalizedProposal proposal) {
         return action.getActionType() == proposal.type()
                 && Objects.equals(action.getTaskId(), proposal.taskId())
                 && Objects.equals(action.getExpectedTaskVersion(), proposal.expectedVersion())

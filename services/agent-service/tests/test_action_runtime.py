@@ -46,6 +46,7 @@ def test_action_workflow_interrupts_resumes_and_replays_the_same_decision():
     action_id = uuid4()
     resumed = runtime.resume(
         scope,
+        workflow_id=waiting.workflow_id,
         action_id=action_id,
         decision="APPROVE",
         idempotency_key="decision-key-1",
@@ -53,6 +54,7 @@ def test_action_workflow_interrupts_resumes_and_replays_the_same_decision():
     )
     replayed = runtime.resume(
         scope,
+        workflow_id=waiting.workflow_id,
         action_id=action_id,
         decision="APPROVE",
         idempotency_key="decision-key-1",
@@ -67,6 +69,7 @@ def test_action_workflow_interrupts_resumes_and_replays_the_same_decision():
     with pytest.raises(ActionWorkflowConflict):
         runtime.resume(
             scope,
+            workflow_id=waiting.workflow_id,
             action_id=action_id,
             decision="APPROVE",
             idempotency_key="another-key",
@@ -108,9 +111,10 @@ def test_same_conversation_id_is_isolated_by_project_and_user_namespace():
 def test_new_proposal_after_resume_starts_another_waiting_round():
     runtime = ActionWorkflowRuntime(InMemorySaver())
     scope = namespace()
-    runtime.interrupt(scope, proposal(), "request-first")
+    first_waiting = runtime.interrupt(scope, proposal(), "request-first")
     runtime.resume(
         scope,
+        workflow_id=first_waiting.workflow_id,
         action_id=uuid4(),
         decision="APPROVE",
         idempotency_key="first-key",
@@ -128,6 +132,46 @@ def test_new_proposal_after_resume_starts_another_waiting_round():
     assert waiting.status == "WAITING"
     assert waiting.action_id is None
     assert waiting.request_id == "request-second"
+
+
+def test_old_decision_cannot_resume_a_new_waiting_round():
+    runtime = ActionWorkflowRuntime(InMemorySaver())
+    scope = namespace()
+    first_waiting = runtime.interrupt(scope, proposal(), "request-first")
+    first_action = uuid4()
+    runtime.resume(
+        scope,
+        workflow_id=first_waiting.workflow_id,
+        action_id=first_action,
+        decision="REJECT",
+        idempotency_key="first-key",
+        request_id="resume-first",
+    )
+
+    second_waiting = runtime.interrupt(scope, proposal(), "request-second")
+
+    assert second_waiting.workflow_id != first_waiting.workflow_id
+    with pytest.raises(ActionWorkflowConflict):
+        runtime.resume(
+            scope,
+            workflow_id=first_waiting.workflow_id,
+            action_id=first_action,
+            decision="REJECT",
+            idempotency_key="first-key",
+            request_id="retry-old-reject",
+        )
+
+
+def test_waiting_round_replays_only_the_same_request_and_proposal():
+    runtime = ActionWorkflowRuntime(InMemorySaver())
+    scope = namespace()
+
+    waiting = runtime.interrupt(scope, proposal(), "same-request")
+    replayed = runtime.interrupt(scope, proposal(), "same-request")
+
+    assert replayed.workflow_id == waiting.workflow_id
+    with pytest.raises(ActionWorkflowConflict):
+        runtime.interrupt(scope, proposal(), "new-request")
 
 
 def test_postgres_action_workflow_resumes_after_runtime_is_recreated():
@@ -149,6 +193,7 @@ def test_postgres_action_workflow_resumes_after_runtime_is_recreated():
         with open_postgres_action_runtime(dsn) as restarted_runtime:
             resumed = restarted_runtime.resume(
                 scope,
+                workflow_id=waiting.workflow_id,
                 action_id=action_id,
                 decision="APPROVE",
                 idempotency_key="restart-key",
@@ -185,15 +230,42 @@ def test_postgres_action_runtime_handles_concurrent_interrupts_and_resumes():
                     executor.map(
                         lambda item: runtime.resume(
                             item[0],
+                            workflow_id=item[2].workflow_id,
                             action_id=item[1],
                             decision="APPROVE",
                             idempotency_key=f"key-{item[1]}",
                             request_id=f"resume-{item[1]}",
                         ),
-                        zip(scopes, action_ids, strict=True),
+                        zip(scopes, action_ids, waiting, strict=True),
                     )
                 )
 
         assert {view.status for view in waiting} == {"WAITING"}
         assert {view.status for view in resumed} == {"RESUMED"}
         assert {view.action_id for view in resumed} == set(action_ids)
+
+
+def test_postgres_concurrent_replay_of_one_round_returns_one_workflow_id():
+    scope = namespace()
+    with PostgresContainer("pgvector/pgvector:pg17") as postgres:
+        dsn = postgres.get_connection_url().replace(
+            "postgresql+psycopg2", "postgresql"
+        )
+        import psycopg
+
+        with psycopg.connect(dsn, autocommit=True) as connection:
+            connection.execute("CREATE SCHEMA agent_checkpoint")
+
+        with open_postgres_action_runtime(dsn) as runtime:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                waiting = list(
+                    executor.map(
+                        lambda _: runtime.interrupt(
+                            scope, proposal(), "same-round-request"
+                        ),
+                        range(2),
+                    )
+                )
+
+        assert {view.status for view in waiting} == {"WAITING"}
+        assert len({view.workflow_id for view in waiting}) == 1

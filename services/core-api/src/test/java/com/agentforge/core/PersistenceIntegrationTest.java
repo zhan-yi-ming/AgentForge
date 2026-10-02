@@ -199,7 +199,8 @@ class PersistenceIntegrationTest {
         var actor = new AuthenticatedActor(authentication.user().id(), false);
         var project = projectService.createProject(actor, "Agent Action Project", null);
         var proposal = new ToolProposal(
-                "CREATE_TASK", null, null, "Confirm me", "Created after confirmation", "TODO", "HIGH");
+                "CREATE_TASK", null, null, "Confirm me", "Created after confirmation", "TODO", "HIGH",
+                java.util.UUID.randomUUID());
 
         var pending = agentActionService.createPending(project.id(), actor, java.util.UUID.randomUUID(), proposal)
                 .orElseThrow();
@@ -230,6 +231,56 @@ class PersistenceIntegrationTest {
     }
 
     @Test
+    void concurrentReplayOfOneChatWorkflowCreatesOnePendingApproval() throws Exception {
+        var authentication = authenticationService.register(
+                "agent-action-workflow@example.com",
+                "Agent Action Workflow",
+                "integration-password");
+        var actor = new AuthenticatedActor(authentication.user().id(), false);
+        var project = projectService.createProject(actor, "Workflow Project", null);
+        var conversationId = java.util.UUID.randomUUID();
+        var workflowId = java.util.UUID.randomUUID();
+        var proposal = new ToolProposal(
+                "CREATE_TASK", null, null, "Create once", null, "TODO", "HIGH", workflowId);
+
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        AgentActionView first;
+        AgentActionView replayed;
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var firstFuture = executor.submit(() -> {
+                ready.countDown();
+                start.await(10, TimeUnit.SECONDS);
+                return agentActionService.createPending(
+                        project.id(), actor, conversationId, proposal, "workflow-request")
+                        .orElseThrow();
+            });
+            var replayFuture = executor.submit(() -> {
+                ready.countDown();
+                start.await(10, TimeUnit.SECONDS);
+                return agentActionService.createPending(
+                        project.id(), actor, conversationId, proposal, "workflow-request")
+                        .orElseThrow();
+            });
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            first = firstFuture.get(20, TimeUnit.SECONDS);
+            replayed = replayFuture.get(20, TimeUnit.SECONDS);
+        }
+
+        assertThat(replayed.id()).isEqualTo(first.id());
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from agent_task_action where action_workflow_id = ?",
+                Integer.class, workflowId)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from agent_action_audit_event where approval_id = ? and event_type = 'REQUESTED'",
+                Integer.class, first.id())).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select action_workflow_version from agent_task_action where id = ?",
+                Integer.class, first.id())).isEqualTo(2);
+    }
+
+    @Test
     void approvedActionPersistsFailedStateWhenTheTargetVersionChanged() {
         var authentication = authenticationService.register(
                 "agent-action-failure@example.com", "Agent Action Failure", "integration-password");
@@ -237,7 +288,8 @@ class PersistenceIntegrationTest {
         var project = projectService.createProject(actor, "Failed Approval Project", null);
         var task = taskService.create(project.id(), actor, "Original", null, null, null);
         var proposal = new ToolProposal(
-                "UPDATE_TASK", task.id(), task.version(), "Approved title", null, null, null);
+                "UPDATE_TASK", task.id(), task.version(), "Approved title", null, null, null,
+                java.util.UUID.randomUUID());
         var pending = agentActionService.createPending(
                 project.id(), actor, java.util.UUID.randomUUID(), proposal, "failure-requested")
                 .orElseThrow();
@@ -270,7 +322,8 @@ class PersistenceIntegrationTest {
         var project = projectService.createProject(actor, "Concurrent Approval Project", null);
         var pending = agentActionService.createPending(
                 project.id(), actor, java.util.UUID.randomUUID(),
-                new ToolProposal("CREATE_TASK", null, null, "Create once", null, "TODO", "MEDIUM"),
+                new ToolProposal("CREATE_TASK", null, null, "Create once", null, "TODO", "MEDIUM",
+                        java.util.UUID.randomUUID()),
                 "concurrent-requested").orElseThrow();
         var ready = new CountDownLatch(2);
         var start = new CountDownLatch(1);

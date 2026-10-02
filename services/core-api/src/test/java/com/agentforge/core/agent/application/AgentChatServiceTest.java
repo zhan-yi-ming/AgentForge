@@ -206,7 +206,7 @@ class AgentChatServiceTest {
         UUID conversationId = UUID.randomUUID();
         AuthenticatedActor actor = new AuthenticatedActor(userId, false);
         ToolProposal proposal = new ToolProposal(
-                "CREATE_TASK", null, null, "Interview task", null, "TODO", "HIGH");
+                "CREATE_TASK", null, null, "Interview task", null, "TODO", "HIGH", UUID.randomUUID());
         AgentActionView pending = org.mockito.Mockito.mock(AgentActionView.class);
         when(actionService.createPending(projectId, actor, conversationId, proposal, "request-proposal"))
                 .thenReturn(Optional.of(pending));
@@ -262,7 +262,8 @@ class AgentChatServiceTest {
         UUID userId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
         AuthenticatedActor actor = new AuthenticatedActor(userId, false);
-        ToolProposal proposal = new ToolProposal("CREATE_TASK", null, null, "Add login", null, "TODO", "HIGH");
+        ToolProposal proposal = new ToolProposal(
+                "CREATE_TASK", null, null, "Add login", null, "TODO", "HIGH", UUID.randomUUID());
         AgentActionView pending = org.mockito.Mockito.mock(AgentActionView.class);
         when(client.chat(projectId, userId, false, "create", null, "request-2"))
                 .thenReturn(new AgentChatResult(conversationId, "Please confirm", "request-2", java.util.List.of(), proposal, null));
@@ -286,7 +287,8 @@ class AgentChatServiceTest {
         UUID userId = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
         AuthenticatedActor actor = new AuthenticatedActor(userId, false);
-        ToolProposal proposal = new ToolProposal("CREATE_TASK", null, null, "x".repeat(201), null, "TODO", "HIGH");
+        ToolProposal proposal = new ToolProposal(
+                "CREATE_TASK", null, null, "x".repeat(201), null, "TODO", "HIGH", UUID.randomUUID());
         when(client.chat(projectId, userId, false, "create", null, "request-3"))
                 .thenReturn(new AgentChatResult(conversationId, "Ordinary answer", "request-3", java.util.List.of(), proposal, null));
         when(actionService.createPending(projectId, actor, conversationId, proposal, "request-3"))

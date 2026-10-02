@@ -110,7 +110,8 @@ Flyway V3 迁移启用 `vector` 扩展并创建 `rag_chunk`。该表可从 Wiki/
 | `result_task_id` | UUID | executed 后填写 | 已创建/更新 Task |
 | `idempotency_key` | VARCHAR(100) | requester 范围内部分唯一 | 首次决策绑定的幂等键 |
 | `proposal_idempotency_key` | VARCHAR(100) | MCP 必填、CHAT 为空；project/user/source 范围唯一 | MCP Tool Call 重试复用同一 Approval 的提案幂等键 |
-| `action_workflow_version` | INTEGER | 可空、当前仅允许 1 | CHAT 新 Action 为 1 并恢复 V2-07 workflow；MCP 必须为空并走既有 Java 决策执行链；升级前 V2-06 Action 兼容为空；不进入公共 API |
+| `action_workflow_id` | UUID | CHAT workflow v2 必填且唯一；v1/legacy 与 MCP 为空 | 将 Java Approval 绑定到唯一 LangGraph 等待轮次；不进入公共 API |
+| `action_workflow_version` | INTEGER | 可空、允许 1 或 2 | CHAT v1 兼容无 workflow ID；新 Action 为 v2 并强制校验 workflow ID；MCP 必须为空；升级前 V2-06 Action 兼容为空 |
 | `version` | BIGINT | 非空 | action 乐观锁 |
 | `created_at` / `approved_at` / `decided_at` | TIMESTAMPTZ | created 非空 | 生命周期时间 |
 
@@ -120,9 +121,9 @@ confirm/reject 在事务内悲观锁定 action。同 key 的终态请求返回�
 
 ## V2-07 LangGraph checkpoint（目标状态）
 
-Flyway V8 创建独立 `agent_checkpoint` schema，并为 `agent_task_action` 增加可空的 `action_workflow_version` 兼容标记；该 schema 内部的 checkpoint migrations、checkpoints、writes 与 blobs 表由 `langgraph-checkpoint-postgres` 的幂等 setup 管理，应用代码不依赖其内部列结构。它们是 Python Agent 运行态，不是 Java 业务事实。
+Flyway V8 创建独立 `agent_checkpoint` schema，并为 `agent_task_action` 增加可空的 `action_workflow_version` 兼容标记；后续迁移为 workflow v2 增加唯一 `action_workflow_id`，不回填或重写既有 v1 Action。该 schema 内部的 checkpoint migrations、checkpoints、writes 与 blobs 表由 `langgraph-checkpoint-postgres` 的幂等 setup 管理，应用代码不依赖其内部列结构。它们是 Python Agent 运行态，不是 Java 业务事实。
 
-checkpoint state 只保存 schema version、完整 Memory Namespace、proposal 指纹、等待/恢复状态、action/decision/idempotency/request 元数据。禁止保存 JWT、内部 token、密码、完整 Prompt、回答正文和检索正文。生产部署应把 Python 数据库权限限制为 checkpoint schema 及既有 RAG 派生数据；Python 不得写 `agent_task_action`、`task_item` 或 audit 表。
+checkpoint state 只保存 schema version、完整 Memory Namespace、workflow ID、proposal 指纹、等待/恢复状态、action/decision/idempotency/request 元数据。workflow v2 的 ID 必须与 Java Action 唯一列一致；v1 checkpoint 仅用于已有 Action 的兼容恢复。禁止保存 JWT、内部 token、密码、完整 Prompt、回答正文和检索正文。生产部署应把 Python 数据库权限限制为 checkpoint schema 及既有 RAG 派生数据；Python 不得写 `agent_task_action`、`task_item` 或 audit 表。
 
 ## 隔离与并发
 

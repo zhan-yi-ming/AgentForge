@@ -58,11 +58,13 @@ public class AgentActionWorkflowService {
                     actor.userId(),
                     actor.admin(),
                     approved.conversationId(),
+                    approved.actionWorkflowId(),
                     actionId,
                     "APPROVE",
                     idempotencyKey,
                     requestId);
-            requireMatchingResume(resumed, approved.conversationId(), actionId, "APPROVE");
+            requireMatchingResume(
+                    resumed, approved.conversationId(), approved.actionWorkflowId(), actionId, "APPROVE");
         }
         return actions.executeApproved(
                 projectId, actionId, actor, idempotencyKey, requestId);
@@ -82,11 +84,13 @@ public class AgentActionWorkflowService {
                     actor.userId(),
                     actor.admin(),
                     rejected.conversationId(),
+                    rejected.actionWorkflowId(),
                     actionId,
                     "REJECT",
                     idempotencyKey,
                     requestId);
-            requireMatchingResume(resumed, rejected.conversationId(), actionId, "REJECT");
+            requireMatchingResume(
+                    resumed, rejected.conversationId(), rejected.actionWorkflowId(), actionId, "REJECT");
         }
         return rejected;
     }
@@ -94,10 +98,12 @@ public class AgentActionWorkflowService {
     private void requireMatchingResume(
             AgentResumeResult resumed,
             UUID conversationId,
+            UUID actionWorkflowId,
             UUID actionId,
             String decision) {
         if (resumed == null
                 || !conversationId.equals(resumed.conversationId())
+                || !java.util.Objects.equals(actionWorkflowId, resumed.actionWorkflowId())
                 || !actionId.equals(resumed.actionId())
                 || !decision.equals(resumed.decision())
                 || !"RESUMED".equals(resumed.status())) {

@@ -166,11 +166,15 @@ def chat(
                 }
             )
             bundle = state["context_bundle"]
-            if bundle.tool.proposal is not None:
-                action_runtime.interrupt(
+            proposal = bundle.tool.proposal
+            if proposal is not None:
+                waiting = action_runtime.interrupt(
                     namespace,
-                    bundle.tool.proposal,
+                    proposal,
                     bundle.project.request_id,
+                )
+                proposal = proposal.model_copy(
+                    update={"action_workflow_id": waiting.workflow_id}
                 )
             conversation_memory.commit_exchange(
                 bundle.conversation.lease,
@@ -205,7 +209,7 @@ def chat(
         answer=state["answer"],
         request_id=bundle.project.request_id,
         sources=cited_sources(state["answer"], bundle.retrieved.sources),
-        tool_proposal=bundle.tool.proposal,
+        tool_proposal=proposal,
     )
 
 
@@ -286,10 +290,13 @@ def chat_stream(
             bundle = state["context_bundle"]
             proposal = bundle.tool.proposal
             if proposal is not None:
-                action_runtime.interrupt(
+                waiting = action_runtime.interrupt(
                     namespace,
                     proposal,
                     bundle.project.request_id,
+                )
+                proposal = proposal.model_copy(
+                    update={"action_workflow_id": waiting.workflow_id}
                 )
             conversation_memory.commit_exchange(
                 bundle.conversation.lease,
@@ -371,6 +378,7 @@ def resume_action(
     try:
         resumed = action_runtime.resume(
             namespace,
+            workflow_id=request.action_workflow_id,
             action_id=request.action_id,
             decision=request.decision,
             idempotency_key=request.idempotency_key,
@@ -382,6 +390,7 @@ def resume_action(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exception)) from exception
     return ResumeResponse(
         conversation_id=resumed.conversation_id,
+        action_workflow_id=resumed.workflow_id,
         action_id=resumed.action_id,
         decision=resumed.decision,
         status="RESUMED",

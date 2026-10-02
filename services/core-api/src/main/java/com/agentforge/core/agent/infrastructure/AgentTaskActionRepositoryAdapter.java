@@ -40,6 +40,23 @@ class AgentTaskActionRepositoryAdapter implements AgentTaskActionRepository {
     }
 
     @Override
+    public void lockChatWorkflow(
+            UUID projectId, UUID userId, UUID conversationId, UUID actionWorkflowId) {
+        String lockKey = projectId + ":" + userId + ":" + conversationId + ":" + actionWorkflowId;
+        entityManager.createNativeQuery(
+                        "select pg_advisory_xact_lock(hashtextextended(cast(?1 as text), 0))")
+                .setParameter(1, lockKey)
+                .getSingleResult();
+    }
+
+    @Override
+    public Optional<AgentTaskAction> findChatWorkflow(
+            UUID projectId, UUID userId, UUID conversationId, UUID actionWorkflowId) {
+        return repository.findByProjectIdAndRequestedByUserIdAndSourceAndConversationIdAndActionWorkflowId(
+                projectId, userId, AgentActionSource.CHAT, conversationId, actionWorkflowId);
+    }
+
+    @Override
     public void lockMcpProposal(UUID projectId, UUID userId, String proposalIdempotencyKey) {
         String lockKey = projectId + ":" + userId + ":" + proposalIdempotencyKey;
         entityManager.createNativeQuery(
@@ -78,6 +95,13 @@ interface SpringDataAgentTaskActionRepository extends JpaRepository<AgentTaskAct
             UUID userId,
             AgentActionSource source,
             String proposalIdempotencyKey);
+
+    Optional<AgentTaskAction> findByProjectIdAndRequestedByUserIdAndSourceAndConversationIdAndActionWorkflowId(
+            UUID projectId,
+            UUID userId,
+            AgentActionSource source,
+            UUID conversationId,
+            UUID actionWorkflowId);
     boolean existsByProjectIdAndRequestedByUserIdAndConversationIdAndStatusIn(
             UUID projectId, UUID userId, UUID conversationId, List<AgentActionStatus> statuses);
 }

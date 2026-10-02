@@ -88,6 +88,9 @@ public class AgentTaskAction {
     @Column(name = "action_workflow_version")
     private Integer actionWorkflowVersion;
 
+    @Column(name = "action_workflow_id")
+    private UUID actionWorkflowId;
+
     protected AgentTaskAction() {
     }
 
@@ -97,6 +100,7 @@ public class AgentTaskAction {
             AgentActionSource source,
             UUID conversationId,
             String proposalIdempotencyKey,
+            UUID actionWorkflowId,
             AgentActionType actionType,
             UUID taskId,
             String title,
@@ -111,11 +115,13 @@ public class AgentTaskAction {
         this.source = Objects.requireNonNull(source);
         this.conversationId = conversationId;
         this.proposalIdempotencyKey = proposalIdempotencyKey;
-        if (source == AgentActionSource.CHAT && (conversationId == null || proposalIdempotencyKey != null)) {
-            throw new IllegalArgumentException("Chat actions require a conversation.");
+        this.actionWorkflowId = actionWorkflowId;
+        if (source == AgentActionSource.CHAT
+                && (conversationId == null || proposalIdempotencyKey != null || actionWorkflowId == null)) {
+            throw new IllegalArgumentException("Chat actions require a conversation and workflow identity.");
         }
         if (source == AgentActionSource.MCP
-                && (conversationId != null || proposalIdempotencyKey == null)) {
+                && (conversationId != null || proposalIdempotencyKey == null || actionWorkflowId != null)) {
             throw new IllegalArgumentException(
                     "MCP actions require a proposal idempotency key and cannot bind a conversation.");
         }
@@ -127,7 +133,7 @@ public class AgentTaskAction {
         this.priority = priority;
         this.expectedTaskVersion = expectedTaskVersion;
         this.status = AgentActionStatus.PENDING;
-        this.actionWorkflowVersion = source == AgentActionSource.CHAT ? 1 : null;
+        this.actionWorkflowVersion = source == AgentActionSource.CHAT ? 2 : null;
         this.createdAt = Objects.requireNonNull(createdAt);
     }
 
@@ -135,6 +141,7 @@ public class AgentTaskAction {
             UUID projectId,
             UUID requestedByUserId,
             UUID conversationId,
+            UUID actionWorkflowId,
             AgentActionType actionType,
             UUID taskId,
             String title,
@@ -149,6 +156,7 @@ public class AgentTaskAction {
                 AgentActionSource.CHAT,
                 conversationId,
                 null,
+                Objects.requireNonNull(actionWorkflowId),
                 actionType,
                 taskId,
                 title,
@@ -177,6 +185,7 @@ public class AgentTaskAction {
                 AgentActionSource.MCP,
                 null,
                 Objects.requireNonNull(proposalIdempotencyKey),
+                null,
                 actionType,
                 taskId,
                 title,
@@ -244,4 +253,5 @@ public class AgentTaskAction {
     public String getIdempotencyKey() { return idempotencyKey; }
     public Instant getApprovedAt() { return approvedAt; }
     public Integer getActionWorkflowVersion() { return actionWorkflowVersion; }
+    public UUID getActionWorkflowId() { return actionWorkflowId; }
 }

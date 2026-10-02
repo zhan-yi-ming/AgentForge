@@ -75,13 +75,16 @@ class AgentServiceHttpContractIntegrationTest {
         var events = new ArrayList<AgentStreamEvent>();
 
         client.stream(
-                UUID.randomUUID(), UUID.randomUUID(), false, "stream contract", null, null,
+                UUID.randomUUID(), UUID.randomUUID(), false,
+                "create task: Stream workflow identity; priority=HIGH", null, null,
                 events::add);
 
         assertThat(events).isNotEmpty();
         assertThat(events.getFirst().type()).isEqualTo("metadata");
         assertThat(events).anyMatch(event -> "delta".equals(event.type()) && !event.text().isBlank());
         assertThat(events.getLast().type()).isEqualTo("complete");
+        assertThat(events.getLast().toolProposal()).isNotNull();
+        assertThat(events.getLast().toolProposal().actionWorkflowId()).isNotNull();
     }
 
     @Test
@@ -98,19 +101,23 @@ class AgentServiceHttpContractIntegrationTest {
                 "create task: Resume contract; priority=HIGH",
                 conversationId,
                 "resume-contract-start");
+        UUID workflowId = chat.toolProposal().actionWorkflowId();
 
         var resumed = client.resume(
                 projectId,
                 userId,
                 false,
                 conversationId,
+                workflowId,
                 actionId,
                 "APPROVE",
                 "resume-contract-key",
                 "resume-contract-finish");
 
         assertThat(chat.toolProposal()).isNotNull();
+        assertThat(workflowId).isNotNull();
         assertThat(resumed.conversationId()).isEqualTo(conversationId);
+        assertThat(resumed.actionWorkflowId()).isEqualTo(workflowId);
         assertThat(resumed.actionId()).isEqualTo(actionId);
         assertThat(resumed.decision()).isEqualTo("APPROVE");
         assertThat(resumed.status()).isEqualTo("RESUMED");
@@ -192,11 +199,13 @@ class AgentServiceHttpContractIntegrationTest {
         RestClient.Builder recordingBuilder = restClientBuilder.clone().baseUrl("http://contract.test");
         MockRestServiceServer server = MockRestServiceServer.bindTo(recordingBuilder).build();
         UUID taskId = UUID.randomUUID();
+        UUID workflowId = UUID.randomUUID();
         server.expect(request -> { }).andRespond(withSuccess(
                 "{\"conversationId\":\"15fd0b81-7cc8-4833-b5d9-79fb67784bc5\","
                         + "\"answer\":\"confirm\",\"requestId\":\"proposal-contract\","
                         + "\"toolProposal\":{\"actionType\":\"UPDATE_TASK\",\"taskId\":\"" + taskId + "\","
-                        + "\"expectedVersion\":2,\"status\":\"DONE\"}}",
+                        + "\"expectedVersion\":2,\"status\":\"DONE\",\"actionWorkflowId\":\""
+                        + workflowId + "\"}}",
                 MediaType.APPLICATION_JSON));
 
         AgentChatResult result = new HttpAgentServiceClient(recordingBuilder.build()).chat(
@@ -205,6 +214,7 @@ class AgentServiceHttpContractIntegrationTest {
         assertThat(result.toolProposal().taskId()).isEqualTo(taskId);
         assertThat(result.toolProposal().expectedVersion()).isEqualTo(2);
         assertThat(result.toolProposal().status()).isEqualTo("DONE");
+        assertThat(result.toolProposal().actionWorkflowId()).isEqualTo(workflowId);
         server.verify();
     }
 

@@ -104,11 +104,13 @@ def test_resume_restores_an_interrupted_action_and_replays_the_same_decision() -
         headers={"X-AgentForge-Internal-Token": TOKEN},
         json=request,
     )
+    workflow_id = chat_response.json()["toolProposal"]["actionWorkflowId"]
     resume_request = {
         "projectId": str(project_id),
         "userId": str(user_id),
         "actorAdmin": False,
         "conversationId": str(conversation_id),
+        "actionWorkflowId": workflow_id,
         "actionId": str(action_id),
         "decision": "APPROVE",
         "idempotencyKey": "resume-http-key",
@@ -131,6 +133,7 @@ def test_resume_restores_an_interrupted_action_and_replays_the_same_decision() -
     assert resumed.status_code == 200
     assert resumed.json() == {
         "conversationId": str(conversation_id),
+        "actionWorkflowId": workflow_id,
         "actionId": str(action_id),
         "decision": "APPROVE",
         "status": "RESUMED",
@@ -745,7 +748,9 @@ def test_chat_proposes_create_task_without_executing_it() -> None:
     )
 
     assert response.status_code == 200
-    assert response.json()["toolProposal"] == {
+    tool_proposal = response.json()["toolProposal"]
+    assert UUID(tool_proposal.pop("actionWorkflowId"))
+    assert tool_proposal == {
         "actionType": "CREATE_TASK",
         "taskId": None,
         "expectedVersion": None,
@@ -787,7 +792,9 @@ def test_chat_proposes_explicit_task_update() -> None:
     )
 
     assert response.status_code == 200
-    assert response.json()["toolProposal"] == {
+    tool_proposal = response.json()["toolProposal"]
+    assert UUID(tool_proposal.pop("actionWorkflowId"))
+    assert tool_proposal == {
         "actionType": "UPDATE_TASK",
         "taskId": str(task_id),
         "expectedVersion": 3,

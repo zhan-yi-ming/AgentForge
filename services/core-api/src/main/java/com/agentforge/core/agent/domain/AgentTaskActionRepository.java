@@ -10,6 +10,11 @@ public interface AgentTaskActionRepository {
 
     Optional<AgentTaskAction> findByProjectIdAndIdForUpdate(UUID projectId, UUID id);
 
+    void lockChatWorkflow(UUID projectId, UUID userId, UUID conversationId, UUID actionWorkflowId);
+
+    Optional<AgentTaskAction> findChatWorkflow(
+            UUID projectId, UUID userId, UUID conversationId, UUID actionWorkflowId);
+
     void lockMcpProposal(UUID projectId, UUID userId, String proposalIdempotencyKey);
 
     Optional<AgentTaskAction> findMcpProposal(

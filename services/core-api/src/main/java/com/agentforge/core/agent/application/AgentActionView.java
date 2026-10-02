@@ -23,7 +23,8 @@ public record AgentActionView(
         TaskView resultTask,
         Instant createdAt,
         Instant decidedAt,
-        Integer actionWorkflowVersion) {
+        Integer actionWorkflowVersion,
+        UUID actionWorkflowId) {
 
     public AgentActionView(
             UUID id,
@@ -43,7 +44,29 @@ public record AgentActionView(
         this(
                 id, projectId, conversationId, actionType, status, taskId,
                 expectedVersion, title, description, taskStatus, priority,
-                resultTask, createdAt, decidedAt, null);
+                resultTask, createdAt, decidedAt, null, null);
+    }
+
+    public AgentActionView(
+            UUID id,
+            UUID projectId,
+            UUID conversationId,
+            AgentActionType actionType,
+            AgentActionStatus status,
+            UUID taskId,
+            Long expectedVersion,
+            String title,
+            String description,
+            String taskStatus,
+            String priority,
+            TaskView resultTask,
+            Instant createdAt,
+            Instant decidedAt,
+            Integer actionWorkflowVersion) {
+        this(
+                id, projectId, conversationId, actionType, status, taskId,
+                expectedVersion, title, description, taskStatus, priority,
+                resultTask, createdAt, decidedAt, actionWorkflowVersion, null);
     }
 
     static AgentActionView from(AgentTaskAction action, TaskView resultTask) {
@@ -62,6 +85,7 @@ public record AgentActionView(
                 resultTask,
                 action.getCreatedAt(),
                 action.getDecidedAt(),
-                action.getActionWorkflowVersion());
+                action.getActionWorkflowVersion(),
+                action.getActionWorkflowId());
     }
 }

@@ -34,3 +34,4 @@ ADR 保存影响长期结构的决定。编号只增不减，Accepted 记录不�
 - [ADR-0034-reviewable-entity-resolution.md](ADR-0034-reviewable-entity-resolution.md)：人工确认与可撤销规范映射，保留来源图和证据。
 - [ADR-0035-evidence-bounded-graphrag.md](ADR-0035-evidence-bounded-graphrag.md)：GraphRAG 只消费当前有效来源证据，并与文本检索在统一预算内融合。
 - [ADR-0036-project-scoped-repository-context.md](ADR-0036-project-scoped-repository-context.md)：Repository Context 由部署配置绑定项目，只读取 Git HEAD 的有界白名单资料。
+- [ADR-0037-action-workflow-round-identity.md](ADR-0037-action-workflow-round-identity.md)：每轮 Chat Approval 使用不可复用 workflow ID 绑定 Java Action 与 LangGraph checkpoint。

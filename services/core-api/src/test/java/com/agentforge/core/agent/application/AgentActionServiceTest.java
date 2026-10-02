@@ -63,7 +63,7 @@ class AgentActionServiceTest {
     void automaticApprovalRejectsAnEarlyCreateWithoutWriting() {
         UUID projectId = UUID.randomUUID();
         AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
-        AgentTaskAction action = AgentTaskAction.pending(projectId, actor.userId(), UUID.randomUUID(),
+        AgentTaskAction action = AgentTaskAction.pending(projectId, actor.userId(), UUID.randomUUID(), UUID.randomUUID(),
                 AgentActionType.CREATE_TASK, null, "Timed create", null, TaskStatus.TODO,
                 TaskPriority.LOW, null, Instant.now(clock).minusSeconds(59));
         when(actions.findByProjectIdAndIdForUpdate(projectId, action.getId())).thenReturn(Optional.of(action));
@@ -81,7 +81,7 @@ class AgentActionServiceTest {
     void automaticApprovalAfterDeadlineRecordsItsSource() {
         UUID projectId = UUID.randomUUID();
         AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
-        AgentTaskAction action = AgentTaskAction.pending(projectId, actor.userId(), UUID.randomUUID(),
+        AgentTaskAction action = AgentTaskAction.pending(projectId, actor.userId(), UUID.randomUUID(), UUID.randomUUID(),
                 AgentActionType.CREATE_TASK, null, "Timed create", null, TaskStatus.TODO,
                 TaskPriority.LOW, null, Instant.now(clock).minusSeconds(61));
         when(actions.findByProjectIdAndIdForUpdate(projectId, action.getId())).thenReturn(Optional.of(action));
@@ -106,7 +106,7 @@ class AgentActionServiceTest {
     void automaticApprovalRejectsNonLowRiskEvenAfterDeadline() {
         UUID projectId = UUID.randomUUID();
         AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
-        AgentTaskAction action = AgentTaskAction.pending(projectId, actor.userId(), UUID.randomUUID(),
+        AgentTaskAction action = AgentTaskAction.pending(projectId, actor.userId(), UUID.randomUUID(), UUID.randomUUID(),
                 AgentActionType.UPDATE_TASK, UUID.randomUUID(), "Timed update", null, TaskStatus.DONE,
                 TaskPriority.HIGH, 0L, Instant.now(clock).minusSeconds(61));
         when(actions.findByProjectIdAndIdForUpdate(projectId, action.getId())).thenReturn(Optional.of(action));
@@ -125,7 +125,8 @@ class AgentActionServiceTest {
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         var actor = new AuthenticatedActor(userId, false);
-        var proposal = new ToolProposal("CREATE_TASK", null, null, "Add login", "JWT", "TODO", "HIGH");
+        var proposal = new ToolProposal(
+                "CREATE_TASK", null, null, "Add login", "JWT", "TODO", "HIGH", UUID.randomUUID());
 
         AgentActionView pending = service.createPending(projectId, actor, UUID.randomUUID(), proposal).orElseThrow();
 
@@ -147,7 +148,8 @@ class AgentActionServiceTest {
                 taskService, clock, conversations);
 
         assertThatThrownBy(() -> guardedService.createPending(projectId, actor, conversationId,
-                new ToolProposal("CREATE_TASK", null, null, "Orphan", null, "TODO", "HIGH")))
+                new ToolProposal(
+                        "CREATE_TASK", null, null, "Orphan", null, "TODO", "HIGH", UUID.randomUUID())))
                 .isInstanceOf(ConflictException.class);
         verify(actions, never()).save(any());
     }
@@ -160,6 +162,7 @@ class AgentActionServiceTest {
         AgentTaskAction action = AgentTaskAction.pending(
                 projectId,
                 userId,
+                UUID.randomUUID(),
                 UUID.randomUUID(),
                 com.agentforge.core.agent.domain.AgentActionType.CREATE_TASK,
                 null,
@@ -203,6 +206,7 @@ class AgentActionServiceTest {
                 projectId,
                 userId,
                 UUID.randomUUID(),
+                UUID.randomUUID(),
                 com.agentforge.core.agent.domain.AgentActionType.CREATE_TASK,
                 null,
                 "Resume safely",
@@ -237,6 +241,7 @@ class AgentActionServiceTest {
         AgentTaskAction action = AgentTaskAction.pending(
                 projectId,
                 userId,
+                UUID.randomUUID(),
                 UUID.randomUUID(),
                 com.agentforge.core.agent.domain.AgentActionType.CREATE_TASK,
                 null,
@@ -275,7 +280,8 @@ class AgentActionServiceTest {
         var actor = new AuthenticatedActor(userId, false);
         TaskView current = task(taskId, projectId, "Existing title", 2);
         when(taskService.get(projectId, taskId, actor)).thenReturn(current);
-        var proposal = new ToolProposal("UPDATE_TASK", taskId, 2L, null, null, "DONE", null);
+        var proposal = new ToolProposal(
+                "UPDATE_TASK", taskId, 2L, null, null, "DONE", null, UUID.randomUUID());
 
         AgentActionView pending = service.createPending(projectId, actor, UUID.randomUUID(), proposal).orElseThrow();
         AgentTaskAction action = org.mockito.Mockito.mockingDetails(actions).getInvocations().stream()
@@ -302,7 +308,7 @@ class AgentActionServiceTest {
         UUID projectId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         AgentTaskAction action = AgentTaskAction.pending(
-                projectId, ownerId, UUID.randomUUID(),
+                projectId, ownerId, UUID.randomUUID(), UUID.randomUUID(),
                 com.agentforge.core.agent.domain.AgentActionType.CREATE_TASK,
                 null, "Add login", null, TaskStatus.TODO, TaskPriority.MEDIUM, null, Instant.now(clock));
         when(actions.findByProjectIdAndIdForUpdate(projectId, action.getId())).thenReturn(Optional.of(action));
@@ -316,7 +322,8 @@ class AgentActionServiceTest {
     void invalidProposalIsIgnoredWithoutSavingAction() {
         UUID projectId = UUID.randomUUID();
         var actor = new AuthenticatedActor(UUID.randomUUID(), false);
-        var proposal = new ToolProposal("CREATE_TASK", null, null, "x".repeat(201), null, "TODO", "HIGH");
+        var proposal = new ToolProposal(
+                "CREATE_TASK", null, null, "x".repeat(201), null, "TODO", "HIGH", UUID.randomUUID());
 
         assertThat(service.createPending(projectId, actor, UUID.randomUUID(), proposal)).isEmpty();
         verify(actions, never()).save(any());
@@ -328,7 +335,8 @@ class AgentActionServiceTest {
         UUID taskId = UUID.randomUUID();
         var actor = new AuthenticatedActor(UUID.randomUUID(), false);
         when(taskService.get(projectId, taskId, actor)).thenReturn(task(taskId, projectId, "Existing title", 3));
-        var proposal = new ToolProposal("UPDATE_TASK", taskId, 2L, null, null, "DONE", null);
+        var proposal = new ToolProposal(
+                "UPDATE_TASK", taskId, 2L, null, null, "DONE", null, UUID.randomUUID());
 
         assertThatThrownBy(() -> service.createPending(projectId, actor, UUID.randomUUID(), proposal))
                 .isInstanceOf(ConflictException.class);
@@ -341,7 +349,7 @@ class AgentActionServiceTest {
         UUID taskId = UUID.randomUUID();
         var actor = new AuthenticatedActor(UUID.randomUUID(), false);
         AgentTaskAction action = AgentTaskAction.pending(
-                projectId, actor.userId(), UUID.randomUUID(),
+                projectId, actor.userId(), UUID.randomUUID(), UUID.randomUUID(),
                 com.agentforge.core.agent.domain.AgentActionType.UPDATE_TASK,
                 taskId, null, null, TaskStatus.DONE, null, 2L, Instant.now(clock));
         when(actions.findByProjectIdAndIdForUpdate(projectId, action.getId())).thenReturn(Optional.of(action));
@@ -371,7 +379,7 @@ class AgentActionServiceTest {
         UUID taskId = UUID.randomUUID();
         var actor = new AuthenticatedActor(UUID.randomUUID(), false);
         AgentTaskAction action = AgentTaskAction.pending(
-                projectId, actor.userId(), UUID.randomUUID(),
+                projectId, actor.userId(), UUID.randomUUID(), UUID.randomUUID(),
                 com.agentforge.core.agent.domain.AgentActionType.CREATE_TASK,
                 null, "Created then deleted", null, TaskStatus.TODO, TaskPriority.MEDIUM, null, Instant.now(clock));
         action.approve("deleted-result-key", Instant.now(clock));

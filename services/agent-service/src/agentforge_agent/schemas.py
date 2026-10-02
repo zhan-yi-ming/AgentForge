@@ -28,6 +28,7 @@ class ChatSource(ApiModel):
 
 class ToolProposal(ApiModel):
     action_type: Literal["CREATE_TASK", "UPDATE_TASK"]
+    action_workflow_id: UUID | None = None
     task_id: UUID | None = None
     expected_version: int | None = Field(default=None, ge=0)
     title: str | None = None
@@ -49,6 +50,7 @@ class ResumeRequest(ApiModel):
     user_id: UUID
     actor_admin: bool = False
     conversation_id: UUID
+    action_workflow_id: UUID | None = None
     action_id: UUID
     decision: Literal["APPROVE", "REJECT"]
     idempotency_key: str = Field(
@@ -61,6 +63,7 @@ class ResumeRequest(ApiModel):
 
 class ResumeResponse(ApiModel):
     conversation_id: UUID
+    action_workflow_id: UUID | None = None
     action_id: UUID
     decision: Literal["APPROVE", "REJECT"]
     status: Literal["RESUMED"]

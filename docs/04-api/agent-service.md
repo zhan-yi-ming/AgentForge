@@ -46,6 +46,8 @@ data: {"pendingAction":null}
 
 Python 不返回 actionId/status，也不执行写入。Java 不信任 proposal，必须重新校验组合、长度、枚举、actor、project 和 Task version。内部 token 错误返回 401。`GET /health` 返回服务状态，不包含密钥或环境值。
 
+当 proposal 已进入持久化 Action workflow 时，内部 `toolProposal` 额外包含 `actionWorkflowId`。它由 Python 为本次等待轮次生成，Java 必须持久化并用于同轮 proposal 去重；该字段不进入公共 Chat/pending action 响应，也不授予执行权限。等待中的同 request/proposal 重放返回同一 ID，不同 request 不得复用当前等待轮次。
+
 `POST /internal/v1/chat/stream` 使用相同 header 与 body，返回 `application/x-ndjson`。事件为 `metadata`、`delta`、`complete` 或 `error`，每行一个 JSON 对象。`complete` 可包含 Python `toolProposal`，但不包含 actionId/status；Java 消费并执行与 JSON 入口完全相同的白名单校验和 pending action 持久化。内部流不得直接暴露给浏览器。
 
 P3-04 起 `metadata.sources` 为空，仅表示来源尚未结算；`complete.sources` 包含最终回答实际标注的授权来源。Java 转换为 SSE `complete` 时保留最终来源，与 `pendingAction` 一起交给 Web。同步 JSON `sources` 使用同一筛选规则，已完成历史只保存最终来源。旧客户端忽略新增 complete 字段仍能读取回答，更新后的客户端必须以 complete 来源覆盖 metadata 的空数组。
@@ -62,9 +64,9 @@ V2-05 不改变 Python Chat HTTP schema，也不让 Python 接收或决定 Tool 
 
 V2-06 仍不改变 Python Chat HTTP schema。Approval 五态、Idempotency Key、执行前权限复核与 Audit Event 全部位于 Java/Core API；Python 继续只生成不可信 `toolProposal`，不接收或回传可信 approval、actor、risk、idempotency 或 audit 字段。
 
-V2-07 新增 `POST /internal/v1/agent/resume`，仅供 Core API 使用并继续要求 `X-AgentForge-Internal-Token`。请求包含 `projectId`、`userId`、`actorAdmin`、`conversationId`、`actionId`、`decision`（`APPROVE | REJECT`）、`idempotencyKey` 与 `requestId`。Agent Service 使用配置中的 tenant/workspace 与请求 project/user/thread 组成完整 Namespace，从 PostgreSQL checkpoint 恢复动态 interrupt。
+V2-07 新增 `POST /internal/v1/agent/resume`，仅供 Core API 使用并继续要求 `X-AgentForge-Internal-Token`。当前请求包含 `projectId`、`userId`、`actorAdmin`、`conversationId`、`actionWorkflowId`、`actionId`、`decision`（`APPROVE | REJECT`）、`idempotencyKey` 与 `requestId`。Agent Service 使用配置中的 tenant/workspace 与请求 project/user/thread 组成完整 Namespace，从 PostgreSQL checkpoint 恢复动态 interrupt。既有 workflow v1 Action 恢复时允许省略 `actionWorkflowId`；新 workflow v2 必须提供并精确匹配。
 
-成功返回同一 conversation/action/decision、`status=RESUMED` 和 requestId；相同 action/decision/key replay 返回相同事实。Thread 不存在、仍无 interrupt、Namespace 或 action 不匹配、不同 key/decision、state schema version 不支持均失败关闭，不创建替代 Thread。Resume 只证明 Agent workflow 已恢复，不执行或授权 Task 写入。
+成功返回同一 conversation/workflow/action/decision、`status=RESUMED` 和 requestId；相同 workflow/action/decision/key replay 返回相同事实。Thread 不存在、仍无 interrupt、Namespace/workflow/action 不匹配、不同 key/decision、state schema version 不支持均失败关闭，不创建替代 Thread。Resume 只证明 Agent workflow 已恢复，不执行或授权 Task 写入。
 
 最终模型输入受 `AGENTFORGE_AGENT_CONTEXT_TOKEN_BUDGET` 限制；最近轮数、摘要预算和最大 session 数分别由 `AGENTFORGE_AGENT_CONTEXT_RECENT_TURNS`、`AGENTFORGE_AGENT_CONTEXT_SUMMARY_TOKEN_BUDGET`、`AGENTFORGE_AGENT_CONTEXT_MAX_SESSIONS` 控制。预算只影响 Python 内部 Prompt，不改变响应字段、Java 授权、配额或 Tool confirmation 契约。
 

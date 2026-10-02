@@ -251,6 +251,8 @@ V2-06 的 action status 枚举为 `PENDING / APPROVED / REJECTED / EXECUTED / FA
 
 V2-07 目标语义中，confirm 先在短事务提交 `APPROVED`，再在事务外调用 Agent Service Resume，成功后由第二个短事务锁定 action、重新授权并执行。Agent Service 暂时不可用时返回 503，但已提交的 APPROVED 不回滚；相同 Idempotency Key 重试继续 Resume/Execute。相同 key 的 `EXECUTED`/`FAILED` replay 保持 V2-06 语义。升级前已存在且没有 checkpoint 的 V2-06 Action 由内部 workflow version 标记识别，继续使用旧 Java 决策链路；该标记不加入响应。
 
+新建 Chat Action 使用内部 workflow version 2：Python proposal 提供本轮 `actionWorkflowId`，Java 以该 ID 幂等复用唯一 Approval，并在 Resume 时原样带回。workflow ID、Action ID、conversation/project/user scope、decision 与决策幂等键必须共同匹配当前 checkpoint；旧 Action 决策不能消费新一轮等待点。既有 version 1 Action 继续兼容无 workflow ID 的恢复，MCP Action 仍不绑定 checkpoint。内部 workflow ID 不加入公共 Action 响应。
+
 reject 先提交 `REJECTED` 再恢复 Agent wait。相同 key 可重试恢复；相反 decision 或不同 key 返回 409。Python Resume 不能自行批准或执行业务 Tool，Java 仍是 Approval、Audit 与 Task 的唯一写入边界。
 
 若 Python 明确返回 workflow 不存在或状态冲突，Core 将内部 404/409 收敛为公共 409 且不暴露下游正文；网络、超时或 5xx 仍返回 503。
