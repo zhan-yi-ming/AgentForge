@@ -24,4 +24,4 @@ V3-05 为每份 Wiki/Task 中显式提到的 Service/API/Issue 创建来源作�
 
 ## 验收与限制
 
-通过真实 Graph HTTP 与 PostgreSQL/Neo4j 验证项目隔离、同名异物不自动合并、不同名同物可人工关联、alias 污染隔离、来源更新/删除后失效、CAS 冲突、重复确认和撤销恢复；Python 端验证内部鉴权、候选白名单、低置信度 abstain、模型故障降级与输出边界，并做 Java↔Python 契约 smoke。锚点来源更新后必须由人工逐一重新确认成员；来源已失效的成员读取会隐藏，撤销入口因找不到当前图实体返回 404，历史行保留用于审计。候选扫描最多 500 个图节点，向 Python 送最多 20 个候选，当前 Hash embedding 可能漏掉弱相似实体。当前节点不改 `/wiki/graph`，不在 GraphRAG 回答中消费规范映射；V3-07 才建立混合检索与引用链。
+通过真实 Graph HTTP 与 PostgreSQL/Neo4j 验证项目隔离、同名异物不自动合并、不同名同物可人工关联、alias 污染隔离、来源更新/删除后失效、CAS 冲突、重复确认和撤销恢复；Python 端验证内部鉴权、候选白名单、低置信度 abstain、模型故障降级与输出边界，并做 Java↔Python 契约 smoke。启用模型的真实 HTTP 路径必须消费 FastAPI 注入的同一 responder，不能绕过 dependency override 或另建不受统一生命周期管理的 provider。锚点来源更新后必须由人工逐一重新确认成员；来源已失效的成员读取会隐藏，撤销入口因找不到当前图实体返回 404，历史行保留用于审计。候选扫描最多 500 个图节点，向 Python 送最多 20 个候选，当前 Hash embedding 可能漏掉弱相似实体。当前节点不改 `/wiki/graph`，不在 GraphRAG 回答中消费规范映射；V3-07 才建立混合检索与引用链。

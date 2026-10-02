@@ -104,7 +104,7 @@ flowchart TB
 - ✅ V3-06：同项目同类型实体的候选建议、人工确认、规范映射与可撤销审计已实现；[契约与限制](docs/03-features/entity-resolution.md)。
 - ✅ V3-07：有证据约束的 GraphRAG 混合检索已实现；[设计、测试与限制](docs/03-features/graphrag.md)。
 - ✅ V3-08：可选 Git Repository Context；[只读边界与范围](docs/03-features/repository-context.md)。
-- ✅ V3-09：完整 Integration / V3 Release Gate 已通过当前机器全量回归、条件式跨进程契约与独立 Milestone Review；`v3-stable` 仅在本提交推送并核验后创建。
+- ✅ V3-09：完整 Integration / V3 Release Gate 已通过当前机器全量回归、条件式跨进程契约与独立 Milestone Review；`v3-stable` 已创建并核验。
 
 每个节点的实现、失败测试、最终验证和独立 Review 都记录在[变更记录](docs/07-changes/README.md)与[审核记录](docs/08-reviews/README.md)。
 
@@ -136,7 +136,7 @@ docs/                       架构、功能、ADR、变更与测试证据
 - [GitHub 推送失败恢复手册](docs/06-operations/github-push-proxy-troubleshooting.md)
 - [V2/V3 Node Roadmap](docs/01-product/v2-v3-node-roadmap.md)
 - [测试策略](docs/05-development/testing-strategy.md)
-- [当前变更：V3-09](docs/07-changes/2026-10-02-v3-09-integration-release.md)
+- [当前变更：V3 合并至 main](docs/07-changes/2026-10-02-v3-main-integration.md)
 - [公开仓库安全](docs/00-governance/public-repository-security.md)
 
 ## 生产边界

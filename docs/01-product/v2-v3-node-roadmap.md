@@ -2,7 +2,7 @@
 
 - 状态：Accepted（路线已确认；各功能在实现前均为 Planned）
 - 当前状态：V1 completed；V2-01 至 V2-09 completed；V2 Release Gate passed
-- Current Node：V3 已完成；V3-09 Integration / V3 Release Gate 已推送并由 `v3-stable` 标记；独立的 V3 全量跨功能影响审计已 PASS，不新增 V3-10。
+- Current Node：V3 已完成；V3-09 Integration / V3 Release Gate 已推送并由 `v3-stable` 标记；独立全量影响审计已 PASS。当前仅执行 V3 合并 `main` 的发布门禁，不新增 V3-10。
 - 开发协议：`../00-governance/v2-v3-node-development-protocol.md`
 
 本文是 V2/V3 开发顺序与 Node Scope 的唯一来源，同时规定验收标准、DeepSeek Pi Review 重点和 GitHub 展示重点。每次只完成一个 Node，禁止跨节点开发；完成后必须停止并等待用户明确授权下一 Node。

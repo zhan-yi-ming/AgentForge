@@ -29,6 +29,51 @@ def test_resolution_returns_only_bounded_candidate_ids_for_review():
     assert 0 <= result["confidence"] <= 1
     assert set(c["entityId"] for c in result["candidates"]) == set(c["entityId"] for c in payload["candidates"])
 
+
+def test_enabled_resolution_uses_injected_responder_model(monkeypatch):
+    from types import SimpleNamespace
+
+    import agentforge_agent.entity_resolution as entity_resolution
+    from agentforge_agent.api import get_responder
+
+    payload = {
+        "entityId": str(uuid4()),
+        "displayName": "Billing Core",
+        "entityType": "SERVICE",
+        "candidates": [
+            {"entityId": str(uuid4()), "displayName": "Invoices Gateway"},
+            {"entityId": str(uuid4()), "displayName": "Payments Edge"},
+        ],
+    }
+    recommended_id = payload["candidates"][1]["entityId"]
+    responder = SimpleNamespace(
+        responders={
+            "REVIEW": SimpleNamespace(
+                model=FakeModel(
+                    '{"candidateId":"' + recommended_id + '","confidence":0.93,"reason":"same bounded entity"}'
+                )
+            )
+        }
+    )
+    monkeypatch.setattr(
+        entity_resolution,
+        "get_settings",
+        lambda: SimpleNamespace(llm_provider="deepseek"),
+    )
+    app.dependency_overrides[get_responder] = lambda: responder
+    try:
+        response = client.post(
+            "/internal/v1/graph/resolution/suggest",
+            headers=TOKEN,
+            json=payload,
+        )
+        assert response.status_code == 200
+        assert response.json()["recommendedCandidateId"] == recommended_id
+        assert response.json()["confidence"] == 0.93
+    finally:
+        app.dependency_overrides.pop(get_responder, None)
+
+
 class FakeModel:
     def __init__(self, content):
         self.content = content

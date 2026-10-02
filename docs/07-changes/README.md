@@ -1,5 +1,7 @@
 # 变更记录
 
+- [2026-10-02-v3-main-integration.md](2026-10-02-v3-main-integration.md)：V3 全部提交合并至 `main` 的独立 Release Gate、Pi 审核与远端 fast-forward 核验（In Progress）。
+
 - [2026-10-02-v3-full-impact-audit.md](2026-10-02-v3-full-impact-audit.md)：V3-01 至 V3-09 累计差异的跨功能影响、全量回归与 Pi Milestone 审计（Implemented，PASS）。
 
 - [2026-10-02-v3-09-integration-release.md](2026-10-02-v3-09-integration-release.md)：V3 完整 Release Regression、V3 条件式跨进程契约与公开证据收口（Implemented）。

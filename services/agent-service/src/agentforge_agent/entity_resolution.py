@@ -9,6 +9,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import Field, model_validator
 
 from .embeddings import HashEmbeddingProvider, tokenize
+from .responder_dependency import get_responder
 from .schemas import ApiModel
 from .config import get_settings
 
@@ -32,11 +33,9 @@ class ResolutionRequest(ApiModel):
         return self
 
 
-def resolution_model():
+def resolution_model(responder=Depends(get_responder)):
     if get_settings().llm_provider == "disabled":
         return None
-    from .api import get_responder
-    responder = get_responder()
     review = getattr(responder, "responders", {}).get("REVIEW", responder)
     return getattr(review, "model", None)
 

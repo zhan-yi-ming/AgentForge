@@ -17,8 +17,8 @@ from .action_runtime import (
 from .context import ConversationMemory, MemoryNamespace, TokenCounter
 from .errors import LlmDependencyError, RagDependencyError
 from .graph import build_chat_context_graph, build_chat_graph
-from .llm import build_responder
 from .observability import build_observability
+from .responder_dependency import get_responder
 from .retrieval import DisabledRetrievalService, RetrievalService, cited_sources
 from .schemas import (
     ChatRequest,
@@ -53,17 +53,6 @@ def get_retrieval_service() -> RetrievalService | DisabledRetrievalService:
     if not settings.rag_enabled:
         return DisabledRetrievalService()
     return RetrievalService.from_settings(settings)
-
-
-@lru_cache
-def get_responder():
-    try:
-        return build_responder(get_settings())
-    except LlmDependencyError as exception:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="LLM provider is unavailable.",
-        ) from exception
 
 
 @lru_cache
