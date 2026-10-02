@@ -45,12 +45,13 @@ class GraphResolutionAdvisorContractTest {
     }
     @Test void livePythonProcessAcceptsJavaContract() {
         String base=System.getenv("AGENTFORGE_RESOLUTION_SMOKE_URL");
-        org.junit.jupiter.api.Assumptions.assumeTrue(base!=null && !base.isBlank());
+        String token=System.getenv("AGENTFORGE_AGENT_INTERNAL_TOKEN");
+        org.junit.jupiter.api.Assumptions.assumeTrue(base!=null && !base.isBlank() && token!=null && !token.isBlank());
         var source=UUID.randomUUID(); var candidate=UUID.randomUUID();
         var factory=new org.springframework.http.client.JdkClientHttpRequestFactory(
             java.net.http.HttpClient.newBuilder().version(java.net.http.HttpClient.Version.HTTP_1_1).build());
         var client=RestClient.builder().baseUrl(base).requestFactory(factory)
-            .defaultHeader("X-AgentForge-Internal-Token","test-only-internal-token").build();
+            .defaultHeader("X-AgentForge-Internal-Token",token).build();
         var advice=new GraphResolutionAdvisor(client).suggest(source,"Billing Service","SERVICE",
             List.of(new GraphResolutionAdvisor.Candidate(candidate,"Billing Service")));
         assertThat(advice.recommendedCandidateId()).isEqualTo(candidate);

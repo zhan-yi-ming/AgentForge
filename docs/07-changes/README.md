@@ -1,5 +1,7 @@
 # 变更记录
 
+- [2026-10-02-v3-09-integration-release.md](2026-10-02-v3-09-integration-release.md)：V3 完整 Release Regression、V3 条件式跨进程契约与公开证据收口（Implemented）。
+
 - [2026-09-28-v3-05-graph-extraction.md](2026-09-28-v3-05-graph-extraction.md)：V3-05 Wiki/Task 显式证据抽取、持久来源同步与清理。
 
 - [2026-09-28-github-push-proxy-recovery.md](2026-09-28-github-push-proxy-recovery.md)：沉淀 Windows OpenSSH 通过本机 HTTP 代理恢复 GitHub 推送的方法。

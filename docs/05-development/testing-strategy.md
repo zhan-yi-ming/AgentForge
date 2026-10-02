@@ -79,6 +79,16 @@ mvnw.cmd verify
 - 补测试时继续使用 TDD：一个已确认公共 seam、一个真实红灯、一个最小实现；禁止测试私有实现、复制生产算法计算期望值或用过度 mock 替代 PostgreSQL/跨进程边界。
 - 全部门禁、文档一致性和 Close Gate 通过前，不得创建 `v2-stable` 标签。
 
+## V3-09 Release Regression 门槛
+
+- V3-09 固定为 L3 Release Gate，不按 diff 裁剪。一次最终 runner 必须从当前源码执行 V2 Release Regression 全部阶段，并追加 V3 专项契约；历史 Node 报告和旧缓存不能替代。
+- V3 公共 seam 为 MCP `/mcp`、LiteLLM Gateway/Responder/任务路由、Graph HTTP/Application Service 与真实 PostgreSQL/Neo4j、Java → Python Entity Resolution advisor、GraphRAG Retrieval/Chat citation、Repository provider 与 Java → Python Chat/stream citation，以及既有 Core/Agent/Web/Evaluation/Compose seam。
+- Java `clean verify` 必须覆盖 MCP、图模型/抽取/消歧/GraphRAG 的单元和 Testcontainers 集成测试；Python 全量 pytest 必须覆盖 Gateway、fallback、routing、resolution、GraphRAG、Repository Context 和 Trace；Web test/build 必须覆盖公共来源和现有用户工作流。
+- 默认条件式测试不能以 skip 充当成功。Release runner 必须显式执行真实 Java → Python Chat/Resume 契约、Entity Resolution advisor 契约与 Repository JSON/SSE citation 契约，并验证目标测试数量和零 skip。
+- V2 基线阶段继续验证普通问答、RAG、HITL、权限隔离、Approval/Audit、幂等、restart/resume、Evaluation 与完整 Compose acceptance；V3 runner 复用该入口而不复制生产断言。
+- runner 必须支持计划输出、阶段选择和未知阶段失败关闭；所有子 runner 的非零退出码必须显式转为失败，部分阶段摘要必须标记 `partial`/`PASS_PARTIAL`，不得与完整 Release PASS 混同。日志只输出脱敏阶段摘要；跨进程阶段各自设置并恢复 loopback proxy 与进程环境，使用运行时随机测试凭据；临时进程、仓库、Compose project、网络、volume、报告和 basetemp 在成功或失败后精确清理。
+- 全部机器门禁、文档一致性、敏感扫描、Pi V3 Release Milestone Review 和 Node Close Gate 通过前，不得将 V3-09 标记 Implemented 或创建 `v3-stable` 标签。
+
 ## Day 4 质量门槛
 
 - Codex 执行 Agent Service pytest，覆盖 Chunk、hash Embedding、BM25、RRF、字符预算、来源去重、索引版本替换/删除和跨项目隔离。

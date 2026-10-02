@@ -30,7 +30,7 @@ public class Neo4jGraphStore implements GraphStore {
         if (!enabled) throw new ServiceUnavailableException("Graph service is unavailable.");
         if (driver == null) driver = GraphDatabase.driver(uri, AuthTokens.basic(username,password),
             Config.builder().withConnectionTimeout(2,TimeUnit.SECONDS)
-                .withConnectionAcquisitionTimeout(3,TimeUnit.SECONDS).withMaxTransactionRetryTime(0,TimeUnit.SECONDS).build());
+                .withConnectionAcquisitionTimeout(3,TimeUnit.SECONDS).withMaxTransactionRetryTime(2,TimeUnit.SECONDS).build());
         if (!initialized) {
             try(var session=driver.session()) {
                 session.run("CREATE CONSTRAINT graph_relation_id_v1 IF NOT EXISTS FOR (n:GraphRelation) REQUIRE n.id IS UNIQUE", Map.of(), TX).consume();

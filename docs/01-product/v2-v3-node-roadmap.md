@@ -2,7 +2,7 @@
 
 - 状态：Accepted（路线已确认；各功能在实现前均为 Planned）
 - 当前状态：V1 completed；V2-01 至 V2-09 completed；V2 Release Gate passed
-- Current Node：V3-08 Git Repository Context（Implemented；Milestone Review PASS；等待用户明确启动 V3-09）
+- Current Node：V3-09 Integration / V3 Release Gate（Implemented；Release Gate 与 Milestone Review PASS，待提交推送核验）
 - 开发协议：`../00-governance/v2-v3-node-development-protocol.md`
 
 本文是 V2/V3 开发顺序与 Node Scope 的唯一来源，同时规定验收标准、DeepSeek Pi Review 重点和 GitHub 展示重点。每次只完成一个 Node，禁止跨节点开发；完成后必须停止并等待用户明确授权下一 Node。
@@ -144,6 +144,8 @@ V2 的总目标不是增加花哨功能，而是把“能运行的 Agent”升�
 
 ### V3-06 Entity Resolution
 
+- **状态**：Implemented（2026-09-30；机器验证与 Milestone Review PASS，已提交并核验远端）。
+
 - **目标与 Scope**：管理 `canonical_name`、alias、metadata、confidence、source；执行 Entity → Candidate Retrieval → Rule/Embedding → LLM Disambiguation → Confidence → Low Confidence → Human Confirmation。
 - **边界与验收**：不得因 LLM 判断相同就自动 Merge；处理 false merge/split、alias pollution、重名、merge rollback，并持久化人工确认。
 - **Pi Entity Resolution Review**：候选、置信度、错误合并/拆分、回滚和人工结果复用。
@@ -168,6 +170,8 @@ V2 的总目标不是增加花哨功能，而是把“能运行的 Agent”升�
 - **GitHub**：若真实实现，更新 Architecture/Context Management，突出 Engineering Context，不夸大为“AI 会读代码”。
 
 ### V3-09 Integration / V3 Release Gate
+
+- **状态**：Implemented（2026-10-02；完整 Release Regression 与 Milestone Review PASS，待提交推送核验）。
 
 - **目标与 Scope**：禁止新增功能；完整验收 RAG、GraphRAG、Entity Resolution、HITL、Risk、Approval、Audit、Retry/Resume、Langfuse、Evaluation、MCP、LiteLLM、Fallback、Multi-model Routing，可选 Git Context；全部通过后才可 `tag v3-stable`。
 - **Pi V3 Release Review**：完整架构、安全、数据、恢复、评测、集成与文档真实性审核。

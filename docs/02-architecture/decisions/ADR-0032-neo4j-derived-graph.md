@@ -17,3 +17,7 @@ Reified relation/evidence 节点避免 Community 无关系属性唯一约束，�
 现有 Wiki 链接图不能表达 Service/API/Issue 与业务任务关系。选择 Neo4j Java driver（Boot 管理版本 5.28.13），不引入 Spring Data Neo4j 对业务对象的第二套 ORM。另一方案是在 PostgreSQL 加关系表，但与已确认 Neo4j Node 的目标不符；原生关系直接携带全部 evidence 会使多来源和 CAS 更难独立约束。采用 Community 5.26 容器与命名 v1 约束；升级不依赖隐式 schema 自动更新。
 
 查询必须参数化，使用 driver transaction timeout；会话独立且始终关闭。参考 [Neo4j driver transactions](https://neo4j.com/docs/java-manual/current/transactions/)。未来大吞吐需重新评估项目锁，V3-05 负责生命周期管道，V3-06 负责实体消歧，V3-07 才扩展检索。
+
+## V3-09 发布收口修订（2026-10-02）
+
+V3 Release Regression 稳定复现了项目清理与邻接读取竞争时，Neo4j 可重试瞬时事务失败被零重试配置直接转换为 503；这与既有公共并发契约的 200/404 结果不一致。驱动因此只对 Neo4j 判定可重试的事务失败启用最多 2 秒的有界重试，每次事务的 5 秒 timeout、项目锁、稳定 ID 幂等和最终通用 503 仍保持。非瞬时错误、Java 校验/授权错误及真实依赖不可用不因该配置重试；本修订不引入跨库原子一致性承诺。

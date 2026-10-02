@@ -32,10 +32,11 @@
 以下状态区分已交付能力与后续计划：
 
 - V2-09 Release Gate 已完成；V2-01 至 V2-09 全部收口。Memory Namespace 仅表示 Agent 记忆归属，不代表长期记忆或完整 SaaS 多租户。
-- V3-01 MCP 已实现并通过 Milestone Review；V3-02 Model Gateway 已实现并通过 Milestone Review；V3-03 Multi-model Routing 已实现；V3-04 图领域模型已实现；后续节点仍须分别获得授权。
+- V3-01 至 V3-09 已实现；V3-09 Integration / V3 Release Gate 已完成完整回归与 Milestone Review，不新增业务能力。
 
 - [Graph Domain Model](graph-domain-model.md)：V3-04 Implemented；GraphRAG Retrieval Implemented。
 - [Graph Extraction Pipeline](graph-extraction.md)：V3-05 显式语法抽取、来源生命周期与 evidence provenance；GraphRAG Retrieval Implemented。
 - [Entity Resolution](entity-resolution.md)：V3-06 已实现；候选、人工确认与可撤销规范映射。
 - [GraphRAG Hybrid Retrieval](graphrag.md)：V3-07 Implemented；有界图遍历、文本融合与文档引用。
-- [Git Repository Context](repository-context.md)：V3-08 In Progress；按项目绑定的 HEAD 只读资料与仓库引用。
+- [Git Repository Context](repository-context.md)：V3-08 Implemented；按项目绑定的 HEAD 只读资料与仓库引用。
+- V3-09 Release Gate：Implemented；统一复跑 V1/V2 主链路、V3 专项能力、条件式跨进程契约与公开文档真实性检查，4/4 stages PASS。
