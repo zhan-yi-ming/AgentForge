@@ -7,7 +7,7 @@ from .core_client import CoreApiClient
 from .embeddings import HashEmbeddingProvider
 from .rag_store import RagStore, StoredChunk
 from .ranking import reciprocal_rank_fusion
-from .schemas import ChatSource
+from .schemas import ChatSource, GraphMatch, RagSource
 
 
 @dataclass(frozen=True)
@@ -79,13 +79,21 @@ class RetrievalService:
             query_embedding,
             self.candidate_k,
         )
-        ranked_ids = reciprocal_rank_fusion([vector_ids, lexical_ids], self.top_k)
+        graph_matches = self.core_client.fetch_graph(
+            str(project_id), str(user_id), actor_admin, request_id, query,
+        ) if query.strip() else []
+        graph_chunks = _graph_chunks(project_id, sources, graph_matches)
+        chunks.update({chunk.id: chunk for chunk in graph_chunks})
+        graph_ids = [chunk.id for chunk in graph_chunks]
+        ranked_ids = reciprocal_rank_fusion([vector_ids, lexical_ids, graph_ids], self.top_k)
+        if graph_ids and ranked_ids and not any(chunk_id in graph_ids for chunk_id in ranked_ids):
+            ranked_ids[-1] = graph_ids[0]
         ranked_chunks = [chunks[chunk_id] for chunk_id in ranked_ids if chunk_id in chunks]
         context, included = _build_context(ranked_chunks, self.context_char_budget)
         return RetrievalResult(
             context=context,
             sources=_deduplicate_sources(included),
-            task_targets=_task_targets(included),
+            task_targets=_task_targets([chunk for chunk in included if not chunk.id.startswith("graph:")]),
         )
 
 
@@ -135,13 +143,35 @@ def _deduplicate_sources(chunks: list[StoredChunk]) -> list[ChatSource]:
         if key in seen:
             continue
         seen.add(key)
-        excerpt = " ".join(chunk.content.split())[:240]
+        content = chunk.content.split("\n", 1)[0] if chunk.id.startswith("graph:") else chunk.content
+        excerpt = " ".join(content.split())[:240]
         result.append(ChatSource(
             source_type=chunk.source_type,
             source_id=chunk.source_id,
             title=chunk.title,
             excerpt=excerpt,
         ))
+    return result
+
+
+def _graph_chunks(project_id, sources: list[RagSource], matches: list[GraphMatch]) -> list[StoredChunk]:
+    authorized = {(source.source_type, source.source_id): source for source in sources}
+    result: list[StoredChunk] = []
+    seen: set[str] = set()
+    for match in matches[:40]:
+        evidence = match.evidence
+        source = authorized.get((evidence.source_type, evidence.source_id))
+        if source is None or source.version != evidence.source_version or evidence.excerpt not in source.content:
+            continue
+        identity = f"graph:{match.relation_id}:{evidence.source_id}"
+        if identity in seen:
+            continue
+        seen.add(identity)
+        content = (f"{evidence.excerpt}\nGraph relation: "
+                   f"{match.from_entity.display_name} {match.relation_type} "
+                   f"{match.to_entity.display_name} (hop {match.hop}, confidence {evidence.confidence:.2f}).")
+        result.append(StoredChunk(identity, project_id, source.source_type, source.source_id,
+                                  source.version, 0, source.title, content))
     return result
 
 

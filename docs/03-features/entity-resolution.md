@@ -1,6 +1,6 @@
 # Entity Resolution
 
-- 状态：Implemented（V3-06；GraphRAG Retrieval 仍 Planned）
+- 状态：Implemented（V3-06；V3-07 GraphRAG Retrieval Implemented）
 - 前置：[Graph Domain Model](graph-domain-model.md)、[Graph Extraction Pipeline](graph-extraction.md)
 - ADR：[ADR-0034](../02-architecture/decisions/ADR-0034-reviewable-entity-resolution.md)
 

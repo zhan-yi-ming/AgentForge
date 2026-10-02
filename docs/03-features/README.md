@@ -34,6 +34,7 @@
 - V2-09 Release Gate 已完成；V2-01 至 V2-09 全部收口。Memory Namespace 仅表示 Agent 记忆归属，不代表长期记忆或完整 SaaS 多租户。
 - V3-01 MCP 已实现并通过 Milestone Review；V3-02 Model Gateway 已实现并通过 Milestone Review；V3-03 Multi-model Routing 已实现；V3-04 图领域模型已实现；后续节点仍须分别获得授权。
 
-- [Graph Domain Model](graph-domain-model.md)：V3-04 Implemented；GraphRAG Retrieval Planned。
-- [Graph Extraction Pipeline](graph-extraction.md)：V3-05 显式语法抽取、来源生命周期与 evidence provenance；GraphRAG Retrieval Planned。
+- [Graph Domain Model](graph-domain-model.md)：V3-04 Implemented；GraphRAG Retrieval Implemented。
+- [Graph Extraction Pipeline](graph-extraction.md)：V3-05 显式语法抽取、来源生命周期与 evidence provenance；GraphRAG Retrieval Implemented。
 - [Entity Resolution](entity-resolution.md)：V3-06 已实现；候选、人工确认与可撤销规范映射。
+- [GraphRAG Hybrid Retrieval](graphrag.md)：V3-07 Implemented；有界图遍历、文本融合与文档引用。

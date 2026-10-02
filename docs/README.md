@@ -36,7 +36,7 @@
 - `product-overview.md`：用户问题、产品定位、核心原则和 V1 范围。
 - `roadmap.md`：V1/V2/V3 路线以及 V1 的 7 天节奏。
 - `v2-v3-node-roadmap.md`：V2/V3 的固定 Node 顺序、逐节点 Scope、验收、审核和 GitHub 展示重点。
-- `v3-04-development-plan.md`：V3-04 图领域模型开发计划（Implemented；GraphRAG 仍 Planned）。
+- `v3-04-development-plan.md`：V3-04 图领域模型开发计划（Implemented；V3-07 GraphRAG 已实现）。
 
 ### `02-architecture/`：系统为什么这样组成
 
@@ -51,6 +51,7 @@
 
 - `graph-extraction.md`：V3-05 显式证据抽取与可恢复来源生命周期（Implemented）。
 - `entity-resolution.md`：V3-06 候选、人工确认与可撤销规范映射（Implemented）。
+- `graphrag.md`：V3-07 证据约束的图与文本混合检索（Implemented）。
 
 每个可见功能或关键平台能力必须有独立文档。功能文档描述目标、角色、流程、接口、数据、权限、异常、测试和已知限制。当前从 `user-and-project.md` 开始。
 

@@ -157,6 +157,143 @@ class GraphApiIntegrationTest {
             .content(json.writeValueAsString(body))).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
     }
     @Test
+    void internalGraphRetrievalReturnsCurrentEvidenceForRelationQuestion() throws Exception {
+        var relation = relationFixture();
+        putRelation(relation, relation.relation(relation.evidence(0.8, 0)));
+        mvc.perform(post("/internal/v1/graph/retrieval")
+                .header("X-AgentForge-Core-Internal-Token", "test-only-core-token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(Map.of(
+                    "projectId", relation.f().project(), "userId", relation.f().actor().userId(),
+                    "actorAdmin", false, "requestId", "graph-request", "query", "Core API impact"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.projectId").value(relation.f().project().toString()))
+            .andExpect(jsonPath("$.requestId").value("graph-request"))
+            .andExpect(jsonPath("$.matches[0].relationType").value("EXPOSES"))
+            .andExpect(jsonPath("$.matches[0].evidence.sourceId").value(relation.source().toString()))
+            .andExpect(jsonPath("$.matches[0].evidence.excerpt").value("Core exposes /tasks"));
+    }
+    @Test
+    void internalGraphRetrievalEnforcesActorScopeAndHidesExpiredEvidence() throws Exception {
+        var relation = relationFixture();
+        putRelation(relation, relation.relation(relation.evidence(0.8, 0)));
+        var outsider = fixture();
+        var body = json.writeValueAsString(Map.of(
+            "projectId", relation.f().project(), "userId", relation.f().actor().userId(),
+            "actorAdmin", false, "requestId", "graph-scope", "query", "Core impact"));
+        mvc.perform(post("/internal/v1/graph/retrieval").contentType(MediaType.APPLICATION_JSON)
+                .content(body)).andExpect(status().isUnauthorized());
+        mvc.perform(post("/internal/v1/graph/retrieval")
+                .header("X-AgentForge-Core-Internal-Token", "wrong-token")
+                .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isUnauthorized());
+        var foreignBody = json.writeValueAsString(Map.of(
+            "projectId", relation.f().project(), "userId", outsider.actor().userId(),
+            "actorAdmin", false, "requestId", "graph-scope", "query", "Core impact"));
+        mvc.perform(post("/internal/v1/graph/retrieval")
+                .header("X-AgentForge-Core-Internal-Token", "test-only-core-token")
+                .contentType(MediaType.APPLICATION_JSON).content(foreignBody)).andExpect(status().isForbidden());
+        var page = wiki.get(relation.f().project(), relation.source(), relation.f().actor());
+        wiki.update(relation.f().project(), relation.source(), relation.f().actor(),
+            page.title(), "The relation was removed.", page.version());
+        mvc.perform(post("/internal/v1/graph/retrieval")
+                .header("X-AgentForge-Core-Internal-Token", "test-only-core-token")
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.matches").isEmpty());
+    }
+    @Test
+    void internalGraphRetrievalFindsBoundedTwoHopImpactPath() throws Exception {
+        var relation = relationFixture();
+        putRelation(relation, relation.relation(relation.evidence(0.8, 0)));
+        var task = tasks.create(relation.f().project(), relation.f().actor(), "Deploy Core",
+            "Deploy changes Core", TaskStatus.TODO, TaskPriority.MEDIUM);
+        var source = Map.of("type", "TASK", "id", task.id(), "version", task.version());
+        var taskEntity = json.readTree(putEntity(relation.f(), Map.of(
+            "type", "TASK", "externalId", task.id().toString(), "displayName", "Deploy Core",
+            "source", source, "expectedVersion", 0)));
+        mvc.perform(put(relation.f().path()+"/relations").with(relation.f().token())
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                    "type", "MODIFIES", "fromId", taskEntity.get("id").asText(), "toId", relation.service(),
+                    "evidence", Map.of("source", source, "start", 0, "end", 19,
+                        "excerpt", "Deploy changes Core", "confidence", 0.9, "expectedVersion", 0)))))
+            .andExpect(status().isOk());
+        var response = mvc.perform(post("/internal/v1/graph/retrieval")
+                .header("X-AgentForge-Core-Internal-Token", "test-only-core-token")
+                .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(Map.of(
+                    "projectId", relation.f().project(), "userId", relation.f().actor().userId(),
+                    "actorAdmin", false, "requestId", "two-hop", "query", "Tasks API impact"))))
+            .andExpect(status().isOk()).andReturn();
+        var matches = json.readTree(response.getResponse().getContentAsString()).get("matches");
+        assertThat(matches.size()).isLessThanOrEqualTo(40);
+        assertThat(java.util.stream.StreamSupport.stream(matches.spliterator(), false)
+            .anyMatch(match -> match.get("relationType").asText().equals("MODIFIES")
+                && match.get("hop").asInt() == 2
+                && match.at("/evidence/sourceId").asText().equals(task.id().toString()))).isTrue();
+    }
+    @Test
+    void graphRetrievalUsesOnlyCurrentHumanConfirmedAlias() throws Exception {
+        var relation = relationFixture();
+        putRelation(relation, relation.relation(relation.evidence(0.8, 0)));
+        var anchorSource = wiki.create(relation.f().project(), relation.f().actor(), "Second", "Secondary service.");
+        var anchor = json.readTree(putEntity(relation.f(), Map.of(
+            "type", "SERVICE", "externalId", "secondary", "displayName", "Secondary",
+            "source", Map.of("type", "WIKI", "id", anchorSource.id(), "version", anchorSource.version()),
+            "expectedVersion", 0)));
+        var confirmation = Map.of(
+            "canonicalEntityId", anchor.get("id").asText(), "canonicalName", "Shared Service",
+            "aliases", java.util.List.of("UnifiedGateway"), "metadata", Map.of(),
+            "confidence", 0.9, "expectedVersion", 0,
+            "sourceVersion", relation.sourceVersion(), "canonicalSourceVersion", anchorSource.version());
+        mvc.perform(put(relation.f().path()+"/resolution/decisions/"+relation.service())
+                .with(relation.f().token()).contentType(MediaType.APPLICATION_JSON)
+                .content(json.writeValueAsString(confirmation))).andExpect(status().isOk());
+        var request = json.writeValueAsString(Map.of(
+            "projectId", relation.f().project(), "userId", relation.f().actor().userId(),
+            "actorAdmin", false, "requestId", "alias-query", "query", "UnifiedGateway impact"));
+        mvc.perform(post("/internal/v1/graph/retrieval")
+                .header("X-AgentForge-Core-Internal-Token", "test-only-core-token")
+                .contentType(MediaType.APPLICATION_JSON).content(request))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.matches[0].from.displayName").value("Shared Service"))
+            .andExpect(jsonPath("$.matches[0].from.canonicalEntityId").value(anchor.get("id").asText()));
+        wiki.update(relation.f().project(), anchorSource.id(), relation.f().actor(),
+            anchorSource.title(), "Updated anchor source.", anchorSource.version());
+        mvc.perform(post("/internal/v1/graph/retrieval")
+                .header("X-AgentForge-Core-Internal-Token", "test-only-core-token")
+                .contentType(MediaType.APPLICATION_JSON).content(request))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.matches").isEmpty());
+    }
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named="agentforge.graph.crossprocess", matches="true")
+    void livePythonProcessConsumesGraphRetrievalContract() throws Exception {
+        var relation = relationFixture();
+        putRelation(relation, relation.relation(relation.evidence(0.8, 0)));
+        var coreDirectory = java.nio.file.Path.of("").toAbsolutePath();
+        var agentDirectory = coreDirectory.resolve("../agent-service").normalize();
+        var python = System.getProperty("agentforge.graph.python",
+            agentDirectory.resolve(".venv/Scripts/python.exe").toString());
+        String code = """
+            import sys
+            from agentforge_agent.core_client import CoreApiClient
+            rows = CoreApiClient(sys.argv[1], 'test-only-core-token', 10).fetch_graph(
+                sys.argv[2], sys.argv[3], False, 'live-graph-contract', 'Core impact')
+            assert rows and str(rows[0].evidence.source_id) == sys.argv[4]
+            print('graph-contract-ok')
+            """;
+        var process = new ProcessBuilder(python, "-c", code, "http://127.0.0.1:"+port,
+            relation.f().project().toString(), relation.f().actor().userId().toString(),
+            relation.source().toString()).redirectErrorStream(true);
+        process.environment().put("PYTHONPATH", agentDirectory.resolve("src").toString());
+        process.environment().put("NO_PROXY", "127.0.0.1,localhost,::1");
+        var child = process.start();
+        if(!child.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)) {
+            child.destroyForcibly();
+            throw new AssertionError("Python graph contract smoke timed out.");
+        }
+        var output = new String(child.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(child.exitValue()).withFailMessage(output).isZero();
+        assertThat(output).contains("graph-contract-ok");
+    }
+    @Test
     void relationRetainsIndependentEvidenceAndRetriesDoNotDuplicate() throws Exception {
         var r=relationFixture();
         var first=json.readTree(putRelation(r,r.relation(r.evidence(0.8,0))));

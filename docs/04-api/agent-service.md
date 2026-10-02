@@ -122,3 +122,9 @@ HTTP fields and auth semantics are unchanged. Optional deployment configuration 
 ## V3-06 内部实体消歧建议（已实现）
 
 `POST /internal/v1/graph/resolution/suggest` 仅接受 Java 配置的 `X-AgentForge-Internal-Token`；请求包含本项目 Java 已验证的来源实体 `{entityId,entityType,displayName}` 和有界同类型候选 `{entityId,displayName}`，不携带凭据、完整 Wiki/Task 正文或数据库连接。响应只能选择请求候选中的 ID 或明确 abstain，返回 0..1 confidence 与有界理由。Python 可组合确定性名称规则、已有 embedding provider 与配置的模型网关；模型故障降级为 abstain/人工审阅，不产生数据库副作用。Java 对所有响应字段重新校验并独立执行权限、来源重验、人工确认与持久化。
+
+## V3-07 GraphRAG 查询（Implemented）
+
+Python 在已有来源回调之后调用 Core API `POST /internal/v1/graph/retrieval`，携带同一 `X-AgentForge-Core-Internal-Token`、`X-Request-Id`，body 为 `{projectId,userId,actorAdmin,requestId,query}`；query 非空且至多 1000 字符。Java 再次验证服务 token、当前用户和项目访问，再执行有界图读取。成功响应为 `{projectId,requestId,matches:[...]}`，每个 match 含 `hop`（1 或 2）、`relationId`、`relationType`、`from`/`to`（`entityId`,`entityType`,`displayName`,`canonicalEntityId` 可空）及 `evidence`（`sourceType`,`sourceId`,`sourceVersion`,`excerpt`,`confidence`）。每项 evidence 的来源版本与原文在 Java 读取时有效；无有效 evidence 的边不返回。结果不含凭据、Cypher 或完整业务正文。
+
+公开 Chat JSON/SSE 字段不变；Python 将图证据与原有 Vector/BM25 结果融合，统一来源编号及 Context 预算。图关闭、超时或 503 时仅文本检索继续；401/403/404、其他非成功状态和响应关联不匹配均使请求失败，不把越权当作空结果。最终 `sources` 仍只由回答显式 `【来源N】` 引用的当前项目 Wiki/Task 文档生成。

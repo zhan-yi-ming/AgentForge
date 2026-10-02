@@ -1,6 +1,6 @@
 # Graph Extraction Pipeline
 
-- 状态：Implemented（V3-05；显式语法抽取，GraphRAG Retrieval 仍 Planned）
+- 状态：Implemented（V3-05；显式语法抽取，V3-07 GraphRAG Retrieval Implemented）
 - 前置：[Graph Domain Model](graph-domain-model.md)
 - ADR：[ADR-0033](../02-architecture/decisions/ADR-0033-durable-graph-source-sync.md)
 

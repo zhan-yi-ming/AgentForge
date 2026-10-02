@@ -2,7 +2,7 @@
 
 - 状态：Accepted（路线已确认；各功能在实现前均为 Planned）
 - 当前状态：V1 completed；V2-01 至 V2-09 completed；V2 Release Gate passed
-- Current Node：V3-06 Entity Resolution（Implemented；等待用户授权 V3-07）
+- Current Node：V3-07 GraphRAG Hybrid Retrieval（Implemented；Milestone Review 待收口）
 - 开发协议：`../00-governance/v2-v3-node-development-protocol.md`
 
 本文是 V2/V3 开发顺序与 Node Scope 的唯一来源，同时规定验收标准、DeepSeek Pi Review 重点和 GitHub 展示重点。每次只完成一个 Node，禁止跨节点开发；完成后必须停止并等待用户明确授权下一 Node。
@@ -150,6 +150,8 @@ V2 的总目标不是增加花哨功能，而是把“能运行的 Agent”升�
 - **GitHub**：建立 Entity Resolution 文档，说明 Entity Resolution ≠ NER；核心问题是不同表述是否属于同一真实实体。
 
 ### V3-07 GraphRAG Hybrid Retrieval
+
+- **状态**：Implemented（2026-10-02；Start Gate 已确认、机器验证完成，Milestone Review 待收口）。
 
 - **目标与 Scope**：到此 Node 才正式实现 GraphRAG。检索链为 Query Understanding → Entity Candidate → Graph Traversal → Vector/BM25 Retrieval → Merge/Rerank → Context → LLM；结合 Graph Evidence、Text Evidence 和现有 Hybrid RAG。
 - **验收**：结果尽量包含 entity、relation、source、evidence、confidence、document citation，可回答跨模块影响类关系问题。

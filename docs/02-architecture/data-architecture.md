@@ -186,3 +186,6 @@ Flyway V12 建 `graph_source_sync(project_id, source_type, source_id, updated_at
 ## V3-06 人工实体消歧事实（已实现）
 
 新增 Flyway 迁移保存项目内规范实体（锚点图实体 ID、类型、canonical_name、受限 metadata、CAS version）、来源作用域的 alias/成员映射（成员图实体 ID、规范 ID、确认时成员来源类型/ID/version、规范锚点来源版本、confidence、确认人、CAS version）及追加式确认/撤销审计事件。唯一约束保证一个项目成员同一时刻最多属于一个规范实体；所有查询按 project_id 范围执行。原始 Neo4j 节点、关系与证据维持 V3-04/V3-05 结构，规范映射仅作为可撤销覆盖层。模型建议不作为事实写入；来源失效由 Java 读时重验并隐藏；锚点来源更新需人工确认触发 CAS 刷新，旧成员仍因记录的锚点版本不匹配而保持隐藏，直至逐一重确认。V13 使用 `graph_canonical_entity`、`graph_resolution_member`（含 REVERTED tombstone）与 `graph_resolution_event` 与规范实体名称/metadata 更新审计 `graph_canonical_event`；实体/成员主键均含 project_id，规范锚点/成员指向 Neo4j 稳定 ID，事件只追加。具体约束和索引见 V13 迁移，详见 ../03-features/entity-resolution.md 和 decisions/ADR-0034-reviewable-entity-resolution.md。
+## V3-07 GraphRAG 只读数据路径（Implemented）
+
+本节点不新增持久化表。Neo4j 的 GraphEntity/GraphRelation/GraphEvidence 仍是可重建投影，PostgreSQL 的 Wiki/Task 为引用事实，V3-06 人工规范映射保存在 PostgreSQL。GraphRAG 读取时重验项目、实体来源、映射状态与 evidence 原文/版本，向 Agent Service 只返回有界 DTO。跨库无原子快照承诺；来源竞争时关系可被隐藏，不能以旧图证据作为当前事实。参见 [ADR-0035](decisions/ADR-0035-evidence-bounded-graphrag.md)。

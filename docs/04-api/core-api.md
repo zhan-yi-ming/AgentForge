@@ -333,3 +333,7 @@ Chat 和 Chat stream 请求新增可选 taskType：FORMAT、REWRITE、PLAN、REV
 - `DELETE /decisions/{entityId}?expectedVersion=N`：在 CAS 验证后撤销该成员映射，保留追加式审计，204；原始图和 evidence 不变。
 
 格式错误 400；未认证 401；无项目访问权限 403；候选/成员不存在或当前来源失效 404；来源或决策版本变化 409；图不可用 503。接口不接受任意 Cypher、模型生成的新目标 ID 或自动 merge。详见 ../03-features/entity-resolution.md。
+
+## V3-07 内部 GraphRAG 只读入口（Implemented）
+
+`POST /internal/v1/graph/retrieval` 只供 Agent Service 使用，沿用来源接口的独立 `X-AgentForge-Core-Internal-Token`；浏览器 JWT 不能替代。请求 `{projectId,userId,actorAdmin,requestId,query}`，其中 query 为 1–1000 字符；Java 先验证 token、用户和项目访问，再读取图。响应包含关联的 projectId/requestId 和有界 `matches`；每项给出跳数、实体、关系及当前有效 evidence 的 Wiki/Task 来源身份、版本、摘录和 confidence。详细字段和故障语义见 [Agent Service API](agent-service.md)。没有可信关系返回空数组；图关闭或故障返回通用 503，内部鉴权/项目错误保持 401/403/404，输入错误 400。

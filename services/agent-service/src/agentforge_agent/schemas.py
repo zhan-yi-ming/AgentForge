@@ -81,6 +81,36 @@ class RagSourcesResponse(ApiModel):
     request_id: str
 
 
+class GraphEntity(ApiModel):
+    entity_id: UUID
+    entity_type: Literal["PROJECT", "SERVICE", "API", "WIKI", "TASK", "ISSUE"]
+    display_name: str = Field(min_length=1, max_length=200)
+    canonical_entity_id: UUID | None = None
+
+
+class GraphEvidence(ApiModel):
+    source_type: Literal["WIKI", "TASK"]
+    source_id: UUID
+    source_version: int = Field(ge=0)
+    excerpt: str = Field(min_length=1, max_length=2000)
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+
+
+class GraphMatch(ApiModel):
+    hop: int = Field(ge=1, le=2)
+    relation_id: UUID
+    relation_type: Literal["CONTAINS", "EXPOSES", "DESCRIBES", "MODIFIES", "AFFECTS"]
+    from_entity: GraphEntity = Field(alias="from")
+    to_entity: GraphEntity = Field(alias="to")
+    evidence: GraphEvidence
+
+
+class GraphRetrievalResponse(ApiModel):
+    project_id: UUID
+    request_id: str
+    matches: list[GraphMatch] = Field(max_length=40)
+
+
 class HealthResponse(ApiModel):
     status: str
     service: str

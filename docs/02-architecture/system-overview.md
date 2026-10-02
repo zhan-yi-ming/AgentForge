@@ -80,3 +80,7 @@ V1.2 在不新增公网端口的前提下增加 SSE/NDJSON 流式链路，并提
 这些参考提供结构原则，不意味着复制其所有工具或框架。V1 只引入当前闭环必需的组件。
 
 V3-03（Implemented）在 Responder 上方增加确定性任务模型路由，复用 Gateway 与凭据槽；详见 ADR-0031 和 Model Routing。HTTP 与 Java 写入边界不变。
+
+## V3-07 GraphRAG 读取边界（Implemented）
+
+Agent Service 在既有 Hybrid RAG 来源回调后，以独立内部 token 请求 Java 的只读图检索。Java 重新校验用户和项目权限，并通过 GraphService 重验 Neo4j 实体、关系及 PostgreSQL Wiki/Task evidence。只有有限两跳、当前有效且可引用的结果进入 Python；Python 完成融合排序和 Context 预算。图不可用时文本 RAG 可继续，权限错误必须失败关闭。GraphRAG 不改变 Java 对业务写入和审批的最终控制权。参见 [GraphRAG](../03-features/graphrag.md) 与 [ADR-0035](decisions/ADR-0035-evidence-bounded-graphrag.md)。

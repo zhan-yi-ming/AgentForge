@@ -1,6 +1,6 @@
 # Graph Domain Model
 
-- 状态：Implemented（V3-04 Graph Domain Model；GraphRAG Retrieval Planned）
+- 状态：Implemented（V3-04 Graph Domain Model；V3-07 GraphRAG Retrieval Implemented）
 - ADR：../02-architecture/decisions/ADR-0032-neo4j-derived-graph.md
 
 ## 模型与边界
@@ -23,5 +23,5 @@ Evidence ID 为关系/sourceType/sourceId/version/chunk/start/end 的稳定 hash
 
 ## 验收与非目标
 
-实际 HTTP + PostgreSQL/Neo4j Testcontainers 覆盖授权、非法输入/方向、来源/项目/版本、幂等并发、多证据、CAS、有限查询和依赖隔离。V3-05 显式语法抽取与生命周期见 graph-extraction.md；V3-06 merge、V3-07 检索/回答仍未实现，也不改现有 /wiki/graph。
+实际 HTTP + PostgreSQL/Neo4j Testcontainers 覆盖授权、非法输入/方向、来源/项目/版本、幂等并发、多证据、CAS、有限查询和依赖隔离。V3-05 显式语法抽取与生命周期见 graph-extraction.md；V3-06 人工规范映射见 entity-resolution.md；V3-07 图文混合检索见 graphrag.md，现有 /wiki/graph 不变。
 V3-05 已实现的自动来源生命周期见 [Graph Extraction Pipeline](graph-extraction.md)；V3-04 手工 Graph API 保留，自动投影以独立 origin 标识并只按其来源替换。

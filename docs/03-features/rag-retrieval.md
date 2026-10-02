@@ -12,7 +12,7 @@
 
 Day 4 包含 Wiki/Task Chunk、384 维 Embedding、BM25、RRF、Retrieved Context 和结构化来源。V1 当前只保留无密钥 `hash` Embedding，用于本地可重复运行；真实生成式回答由独立的国内 LLM provider adapter 提供。
 
-不包含生成式 LLM、对话记忆、Tool Calling、写回、HITL、GraphRAG、完整 Trace 或离线评测平台。
+本节描述 Day 4 基线；后续生成、记忆、Tool、Trace 与评测见各自功能文档。V3-07 的图与文本融合及来源约束见 [GraphRAG Hybrid Retrieval](graphrag.md)。
 
 ## 关键流程
 
