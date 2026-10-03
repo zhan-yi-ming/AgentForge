@@ -14,6 +14,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 import com.agentforge.core.agent.domain.AgentActionStatus;
 import com.agentforge.core.agent.domain.AgentActionType;
@@ -21,6 +22,43 @@ import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.shared.error.ServiceUnavailableException;
 
 class AgentActionWorkflowServiceTest {
+
+    @Test
+    void flushOptimisticConflictIsPersistedAfterTheExecutionTransactionRollsBack() {
+        AgentActionService actions = mock(AgentActionService.class);
+        AgentServiceClient agentService = mock(AgentServiceClient.class);
+        AgentActionWorkflowService workflow = new AgentActionWorkflowService(actions, agentService);
+        UUID projectId = UUID.randomUUID();
+        UUID actionId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        Instant now = Instant.parse("2026-10-03T00:00:00Z");
+        AgentActionView approved = new AgentActionView(
+                actionId, projectId, null, AgentActionType.UPDATE_TASK,
+                AgentActionStatus.APPROVED, UUID.randomUUID(), 0L, "Losing update", null,
+                "TODO", "HIGH", null, now, now, null);
+        AgentActionView failed = new AgentActionView(
+                actionId, projectId, null, AgentActionType.UPDATE_TASK,
+                AgentActionStatus.FAILED, approved.taskId(), 0L, "Losing update", null,
+                "TODO", "HIGH", null, now, now, null);
+        when(actions.approve(projectId, actionId, actor, "flush-key", "flush-request"))
+                .thenReturn(approved);
+        when(actions.executeApproved(projectId, actionId, actor, "flush-key", "flush-request"))
+                .thenThrow(new OptimisticLockingFailureException("concurrent flush"));
+        when(actions.failApprovedAfterOptimisticConflict(
+                projectId, actionId, actor, "flush-key", "flush-request"))
+                .thenReturn(failed);
+
+        AgentActionView result = workflow.confirm(
+                projectId, actionId, actor, "flush-key", "flush-request");
+
+        assertThat(result.status()).isEqualTo(AgentActionStatus.FAILED);
+        verifyNoInteractions(agentService);
+        InOrder order = inOrder(actions);
+        order.verify(actions).approve(projectId, actionId, actor, "flush-key", "flush-request");
+        order.verify(actions).executeApproved(projectId, actionId, actor, "flush-key", "flush-request");
+        order.verify(actions).failApprovedAfterOptimisticConflict(
+                projectId, actionId, actor, "flush-key", "flush-request");
+    }
 
     @Test
     void adminConfirmationResumesTheRequestersCheckpointAndExecutesAsTheAdmin() {

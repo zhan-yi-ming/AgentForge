@@ -428,6 +428,27 @@ class AgentActionServiceTest {
     }
 
     @Test
+    void optimisticConflictCompensationPersistsFailedInItsOwnTransactionBoundary() {
+        UUID projectId = UUID.randomUUID();
+        var actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        AgentTaskAction action = AgentTaskAction.pending(
+                projectId, actor.userId(), UUID.randomUUID(), UUID.randomUUID(),
+                AgentActionType.UPDATE_TASK, UUID.randomUUID(), "Losing update", null,
+                TaskStatus.DONE, TaskPriority.HIGH, 0L, Instant.now(clock));
+        action.approve("flush-key", Instant.now(clock));
+        when(actions.findByProjectIdAndIdForUpdate(projectId, action.getId())).thenReturn(Optional.of(action));
+
+        AgentActionView failed = service.failApprovedAfterOptimisticConflict(
+                projectId, action.getId(), actor, "flush-key", "flush-request");
+
+        assertThat(failed.status()).isEqualTo(AgentActionStatus.FAILED);
+        verify(actions).save(action);
+        verify(auditEvents).save(org.mockito.ArgumentMatchers.argThat(event ->
+                event.getEventType() == AgentAuditEventType.FAILED
+                        && event.getRequestId().equals("flush-request")));
+    }
+
+    @Test
     void missingUpdateTargetMarksTheApprovedActionFailedAndReplaysTheTerminalFact() {
         UUID projectId = UUID.randomUUID();
         UUID taskId = UUID.randomUUID();

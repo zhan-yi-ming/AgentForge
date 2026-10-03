@@ -2,6 +2,8 @@ package com.agentforge.core;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 
 import java.time.Instant;
 import java.time.Clock;
@@ -18,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.junit.jupiter.Container;
@@ -25,6 +28,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import com.agentforge.core.project.application.ProjectService;
 import com.agentforge.core.agent.application.AgentActionService;
+import com.agentforge.core.agent.application.AgentActionWorkflowService;
 import com.agentforge.core.agent.application.AgentActionView;
 import com.agentforge.core.agent.application.ToolProposal;
 import com.agentforge.core.agent.application.AiUsageQuota;
@@ -32,6 +36,8 @@ import com.agentforge.core.shared.error.RateLimitExceededException;
 import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.security.application.AuthenticationService;
 import com.agentforge.core.task.application.TaskService;
+import com.agentforge.core.task.domain.TaskItem;
+import com.agentforge.core.task.domain.TaskItemRepository;
 import com.agentforge.core.wiki.application.WikiPageService;
 import com.agentforge.core.wiki.domain.WikiPage;
 import com.agentforge.core.conversation.application.ConversationHistoryService;
@@ -68,6 +74,12 @@ class PersistenceIntegrationTest {
 
     @Autowired
     private AgentActionService agentActionService;
+
+    @Autowired
+    private AgentActionWorkflowService agentActionWorkflowService;
+
+    @MockitoSpyBean
+    private TaskItemRepository taskItems;
 
     @Autowired
     private AiUsageQuota aiUsageQuota;
@@ -355,6 +367,70 @@ class PersistenceIntegrationTest {
 
         conversationHistoryService.delete(project.id(), conversationId, actor);
         assertThat(conversationHistoryService.list(project.id(), actor)).isEmpty();
+    }
+
+    @Test
+    void flushOptimisticConflictPersistsFailedAfterTheExecutionTransactionRollsBack() throws Exception {
+        var authentication = authenticationService.register(
+                "agent-action-flush-conflict@example.com", "Flush Conflict", "integration-password");
+        var actor = new AuthenticatedActor(authentication.user().id(), false);
+        var project = projectService.createProject(actor, "Flush Conflict Project", null);
+        var task = taskService.create(project.id(), actor, "Original", null, null, null);
+        var proposal = new ToolProposal(
+                "UPDATE_TASK", task.id(), task.version(), "Losing action update", null, null, null, null);
+        var pending = agentActionService.createPendingMcp(
+                project.id(), actor, proposal, "flush-proposal-key", "flush-requested")
+                .orElseThrow();
+        var actionAtFlush = new CountDownLatch(1);
+        var winnerCommitted = new CountDownLatch(1);
+        var actionThread = new java.util.concurrent.atomic.AtomicReference<Thread>();
+
+        doAnswer(invocation -> {
+            TaskItem candidate = invocation.getArgument(0);
+            if (candidate.getId().equals(task.id())
+                    && Thread.currentThread() == actionThread.get()) {
+                actionAtFlush.countDown();
+                if (!winnerCommitted.await(10, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Concurrent Task update did not commit in time.");
+                }
+            }
+            return invocation.callRealMethod();
+        }).when(taskItems).save(any(TaskItem.class));
+
+        AgentActionView failed;
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var actionFuture = executor.submit(() -> {
+                actionThread.set(Thread.currentThread());
+                return agentActionWorkflowService.confirm(
+                        project.id(), pending.id(), actor, "flush-decision-key", "flush-confirm");
+            });
+            assertThat(actionAtFlush.await(10, TimeUnit.SECONDS)).isTrue();
+            taskService.update(
+                    project.id(), task.id(), actor, "Winning concurrent update", null,
+                    task.status(), task.priority(), task.version());
+            winnerCommitted.countDown();
+            failed = actionFuture.get(20, TimeUnit.SECONDS);
+        }
+
+        var persistedTask = taskService.get(project.id(), task.id(), actor);
+        var replayed = agentActionWorkflowService.confirm(
+                project.id(), pending.id(), actor, "flush-decision-key", "flush-replay");
+
+        assertThat(failed.status()).isEqualTo(com.agentforge.core.agent.domain.AgentActionStatus.FAILED);
+        assertThat(replayed.status()).isEqualTo(com.agentforge.core.agent.domain.AgentActionStatus.FAILED);
+        assertThat(persistedTask.title()).isEqualTo("Winning concurrent update");
+        assertThat(persistedTask.version()).isEqualTo(1L);
+        assertThat(jdbcTemplate.queryForObject(
+                "select status from agent_task_action where id = ?", String.class, pending.id()))
+                .isEqualTo("FAILED");
+        assertThat(jdbcTemplate.queryForList(
+                "select event_type from agent_action_audit_event where approval_id = ? order by created_at, id",
+                String.class, pending.id()))
+                .containsExactlyInAnyOrder("REQUESTED", "APPROVED", "FAILED")
+                .doesNotContain("EXECUTED");
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from graph_source_sync where project_id = ? and source_type = 'TASK' and source_id = ?",
+                Integer.class, project.id(), task.id())).isEqualTo(1);
     }
 
     @Test

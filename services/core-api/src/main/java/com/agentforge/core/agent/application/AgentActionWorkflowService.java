@@ -3,6 +3,7 @@ package com.agentforge.core.agent.application;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 import com.agentforge.core.agent.domain.AgentActionStatus;
 import com.agentforge.core.security.AuthenticatedActor;
@@ -66,8 +67,17 @@ public class AgentActionWorkflowService {
             requireMatchingResume(
                     resumed, approved.conversationId(), approved.actionWorkflowId(), actionId, "APPROVE");
         }
-        return actions.executeApproved(
-                projectId, actionId, actor, idempotencyKey, requestId);
+        try {
+            return actions.executeApproved(
+                    projectId, actionId, actor, idempotencyKey, requestId);
+        }
+        catch (OptimisticLockingFailureException exception) {
+            if (approved.actionType() != com.agentforge.core.agent.domain.AgentActionType.UPDATE_TASK) {
+                throw exception;
+            }
+            return actions.failApprovedAfterOptimisticConflict(
+                    projectId, actionId, actor, idempotencyKey, requestId);
+        }
     }
 
     public AgentActionView reject(

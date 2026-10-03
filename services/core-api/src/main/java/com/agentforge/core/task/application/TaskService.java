@@ -102,14 +102,9 @@ public class TaskService {
                 status,
                 priority,
                 Instant.now(clock));
-        try {
-            var updated = TaskView.from(tasks.save(task));
-            if (graphSync != null) graphSync.mark(projectId, SourceType.TASK, taskId);
-            return updated;
-        }
-        catch (OptimisticLockingFailureException exception) {
-            throw new ConflictException("The Task was changed by another request.");
-        }
+        var updated = TaskView.from(tasks.save(task));
+        if (graphSync != null) graphSync.mark(projectId, SourceType.TASK, taskId);
+        return updated;
     }
 
     @Transactional

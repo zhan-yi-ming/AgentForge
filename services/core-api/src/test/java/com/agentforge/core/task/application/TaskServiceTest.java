@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.security.AuthenticatedActor;
@@ -86,6 +87,22 @@ class TaskServiceTest {
                 1))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("stale");
+    }
+
+    @Test
+    void updateLetsAFlushOptimisticConflictEscapeForTransactionRollback() {
+        UUID projectId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        var actor = new AuthenticatedActor(UUID.randomUUID(), true);
+        TaskItem task = TaskItem.create(
+                projectId, "Task", null, TaskStatus.TODO, TaskPriority.MEDIUM, NOW);
+        when(tasks.findByProjectIdAndId(projectId, taskId)).thenReturn(Optional.of(task));
+        when(tasks.save(task)).thenThrow(new OptimisticLockingFailureException("concurrent flush"));
+
+        assertThatThrownBy(() -> service.update(
+                projectId, taskId, actor, "Updated", null,
+                TaskStatus.DONE, TaskPriority.HIGH, 0))
+                .isInstanceOf(OptimisticLockingFailureException.class);
     }
 
     @Test

@@ -315,6 +315,37 @@ public class AgentActionService {
         return executed;
     }
 
+    @Transactional
+    public AgentActionView failApprovedAfterOptimisticConflict(
+            UUID projectId,
+            UUID actionId,
+            AuthenticatedActor actor,
+            String idempotencyKey,
+            String requestId) {
+        projectAccess.requireAccess(projectId, actor);
+        AgentTaskAction action = findForDecision(projectId, actionId, actor);
+        riskEngine.authorize(operationFor(action), projectId, actor);
+        if (action.getStatus() == AgentActionStatus.EXECUTED) {
+            requireMatchingKey(action, idempotencyKey);
+            return AgentActionView.from(action, replayResult(projectId, action, actor));
+        }
+        if (action.getStatus() == AgentActionStatus.FAILED) {
+            requireMatchingKey(action, idempotencyKey);
+            return AgentActionView.from(action, null);
+        }
+        if (action.getStatus() != AgentActionStatus.APPROVED
+                || action.getActionType() != AgentActionType.UPDATE_TASK) {
+            throw new ConflictException("The Agent action cannot record an update conflict.");
+        }
+        requireMatchingKey(action, idempotencyKey);
+        action.markFailed(Instant.now(clock));
+        AgentActionView failed = AgentActionView.from(actions.save(action), null);
+        auditEvents.save(AgentAuditEvent.record(
+                action, actor.userId(), AgentAuditEventType.FAILED,
+                requestId, idempotencyKey, Instant.now(clock)));
+        return failed;
+    }
+
     private void requireMatchingKey(AgentTaskAction action, String idempotencyKey) {
         if (!StringUtils.hasText(idempotencyKey) || !action.hasIdempotencyKey(idempotencyKey)) {
             throw new ConflictException("The approval was already decided with another idempotency key.");

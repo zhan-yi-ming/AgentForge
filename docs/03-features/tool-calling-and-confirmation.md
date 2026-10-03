@@ -30,7 +30,7 @@
 - Python 提供的枚举、长度、组合和 UUID 由 Java 再校验，不可信字段返回普通 Chat 且不保存 action，或在公共 action API 返回 400/409。
 - action 必须用 `projectId + actionId` 查询；普通用户还必须匹配 `requestedByUserId`，ADMIN 可代审批。代审批的授权、审计和批准后执行使用当前管理员 actor；Chat checkpoint 恢复仍使用不可由客户端覆盖的原 `requestedByUserId`。
 - 同一 action 并发/重复确认最多执行一次；同一 key 在响应丢失后返回既有结果，不同 key replay 返回 409。
-- proposal 创建时已 stale 返回 409 且不保存；批准后发生的版本冲突或目标 Task 已删除属于确定性业务失败，记录为 `FAILED` 且不改变 Task。数据库、网络等未知基础设施异常不转为 FAILED，保留 APPROVED 供相同 key 重试。
+- proposal 创建时已 stale 返回 409 且不保存；批准后发生的版本冲突或目标 Task 已删除属于确定性业务失败，记录为 `FAILED` 且不改变 Task。若冲突直到 Hibernate flush 才出现，业务执行事务先完整回滚，再由事务外 Workflow 以短事务提交 FAILED 与审计；数据库、网络等未知基础设施异常不转为 FAILED，保留 APPROVED 供相同 key 重试。
 
 ## 测试边界
 

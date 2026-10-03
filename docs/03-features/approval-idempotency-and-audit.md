@@ -14,9 +14,9 @@
 
 状态只允许：`PENDING → APPROVED → EXECUTED | FAILED`，或 `PENDING → REJECTED`。`REJECTED`、`EXECUTED` 与 `FAILED` 均为终态；终态 replay 只能返回既有事实或明确冲突，不能再次执行业务写入。
 
-V2-06 中 `APPROVED` 是单次 confirm 事务内的逻辑过程态：同一事务继续执行并最终提交 `EXECUTED`/`FAILED`，未知基础设施异常则整体回滚到此前的 `PENDING`。跨重启持久化 `APPROVED` 并恢复执行属于 V2-07，不在本节点提前实现。
+V2-06 中 `APPROVED` 曾是单次 confirm 事务内的逻辑过程态；V2-07 已演进为先在短事务提交 `APPROVED`，再 Resume Python，并由第二个短事务执行 Java 业务写入。未知基础设施异常使执行事务回滚并保留既有 `APPROVED`，供相同 key 重试。
 
-确认开始前已经可见的 Task version 冲突属于确定性业务前置条件失败，提交为 `FAILED` 并追加审计；确认事务读取之后才发生的数据库 flush 期乐观锁竞态会安全回滚为 `PENDING` 并返回 409，允许客户端用同一 key 重试，不伪造未提交的 APPROVED/FAILED 事实。
+执行开始前已经可见的 Task version 冲突、目标删除，以及读取后在数据库 flush 期才暴露的乐观锁竞态，都属于确定性业务失败。前两类可在执行事务内提交 `FAILED`；flush 期冲突直接退出并回滚整个 Task/Graph sync/EXECUTED 事务，再由事务外 Workflow 以独立短事务把仍为 `APPROVED` 的 Action 收敛为 `FAILED` 并追加审计。未知异常不得走该终态补偿。
 
 ## 幂等边界
 
