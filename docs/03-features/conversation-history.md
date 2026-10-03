@@ -15,7 +15,7 @@ Core API/PostgreSQL 保存完成的 user/assistant exchange，提供项目内会
 ## 关键流程
 
 1. Core 在 Chat 开始前完成 JWT、ProjectAccess 和配额校验。
-2. 同步 Chat 成功后一次事务保存 user/assistant exchange；SSE 只在收到完整 `complete` 后保存。
+2. 同步 Chat 成功后一次事务保存 user/assistant exchange；Java 收到内部流的完整 `complete` 后，先提交展示历史，再向浏览器发送公共 SSE `complete`。提交失败只允许发送 `error`，不得把未落库交换报告为成功。
 3. 列表从认证 actor 和路径 projectId 推导作用域，不接受 userId。
 4. 详情以 projectId、actor userId、conversationId 联合查询；不匹配返回 404/403 且不泄露正文。
 5. Web 选择记录后按消息角色顺序恢复可配对的问答并复用 conversationId；遗留的不完整 USER 记录不会让后续完整 AI 回答被整组跳过。
@@ -29,7 +29,7 @@ Core API/PostgreSQL 保存完成的 user/assistant exchange，提供项目内会
 
 ## 数据
 
-`agent_conversation` 以 conversation UUID 为业务标识，并保存 project、user、preview、message_count、created_at、updated_at；`agent_message` 保存 conversation、sequence、role、content、sources JSON 与 created_at。数据库唯一约束保护 conversation 作用域和 sequence，索引支持按 project/user/updated_at 列表。
+`agent_conversation` 以 conversation UUID 为业务标识，并保存 project、user、preview、message_count、created_at、updated_at；`agent_message` 保存 conversation、requestId、sequence、role、content、sources JSON 与 created_at。新写入以 `(conversation_id, request_id, role)` 唯一约束保护同一完成 exchange 的幂等重试，遗留消息的 requestId 可空；既有 sequence 唯一约束继续保护稳定顺序，索引支持按 project/user/updated_at 列表。
 
 ## 权限与安全
 
@@ -37,7 +37,7 @@ Core API/PostgreSQL 保存完成的 user/assistant exchange，提供项目内会
 
 ## 测试与验收
 
-通过公共 HTTP seam 验证列表、详情、选择恢复、跨 Project/User/Thread 负向矩阵、同步成功、流完成、流失败不提交和稳定排序；通过真实 PostgreSQL 验证迁移、约束和 JPA validate。
+通过公共 HTTP seam 验证列表、详情、选择恢复、跨 Project/User/Thread 负向矩阵、同步成功、流完成、流失败不提交、历史提交先于公共 `complete` 和稳定排序；通过真实 PostgreSQL 验证迁移、约束、相同 requestId 去重和 JPA validate。
 
 ## P3-02 单会话删除
 

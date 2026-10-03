@@ -24,7 +24,7 @@ event: complete
 data: {"pendingAction":null}
 ```
 
-`metadata` 到达不表示回答完成；客户端拼接全部 `delta`。`complete.pendingAction` 只能是 Java 已验证并持久化的待确认操作；没有操作时其值为 `null`，客户端也应兼容 JSON 序列化器省略该可空字段。所有事件禁止包含模型 key、内部 token 或上游原始错误正文。
+`metadata` 到达不表示回答完成；客户端拼接全部 `delta`。`complete.pendingAction` 只能是 Java 已验证并持久化的待确认操作；Java 还必须先按 requestId 幂等提交完整展示历史，才发送公共 `complete`。历史提交失败以通用 `error` 终止，不得先发送成功；若发送 `complete` 时客户端断线，已经提交的历史不回滚。没有操作时 pendingAction 为 `null`，客户端也应兼容 JSON 序列化器省略该可空字段。所有事件禁止包含模型 key、内部 token 或上游原始错误正文。
 
 长文本生成客户端（包括 Web 的“AI 整理并预览”）优先使用该 SSE 入口，使模型在完整回答完成前交付 delta，避免同步 Chat 必须等待全部生成结果。整理调用不携带项目 Chat conversationId；客户端只消费回答文本，并忽略整理语境下意外出现的 pending action。该客户端选择不改变配额、鉴权、项目隔离或同步 JSON 入口的兼容契约。
 

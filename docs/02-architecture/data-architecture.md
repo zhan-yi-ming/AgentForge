@@ -157,13 +157,14 @@ P3-02 删除历史时先检查同一 project/user/conversation 下没有 `PENDIN
 | --- | --- | --- | --- |
 | `id` | UUID | 主键 | 消息 ID |
 | `conversation_id` | UUID | 外键、非空 | 所属会话 |
+| `request_id` | VARCHAR(100) | 新记录非空；遗留记录可空 | 完成 exchange 的幂等身份，同一 request 的 USER/ASSISTANT 共用 |
 | `sequence` | BIGINT | 非空、非负 | 会话内稳定顺序 |
 | `role` | VARCHAR(16) | `USER` / `ASSISTANT` | 展示角色 |
 | `content` | TEXT | 非空 | 完整消息正文 |
 | `sources_json` | TEXT | 非空 | assistant 的公开来源 JSON；user 为 `[]` |
 | `created_at` | TIMESTAMPTZ | 非空 | 创建时间 |
 
-`(conversation_id, sequence)` 唯一。一次完成 exchange 在同一事务追加 USER 与 ASSISTANT；错误或未收到 SSE complete 时不写半截 assistant。
+`(conversation_id, sequence)` 唯一；非空 requestId 还要求 `(conversation_id, request_id, role)` 唯一。一次完成 exchange 在同一事务追加 USER 与 ASSISTANT；同 requestId 重试直接复用已提交事实，不增加 message_count。错误或未收到内部流 complete 时不写半截 assistant，公共 SSE complete 只在事务提交后发送。
 
 ## 迁移规则
 

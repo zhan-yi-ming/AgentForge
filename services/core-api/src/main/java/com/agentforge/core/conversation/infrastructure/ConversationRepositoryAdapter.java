@@ -41,11 +41,15 @@ class MessageRepositoryAdapter implements AgentMessageRepository {
     MessageRepositoryAdapter(SpringMessageRepository repository) { this.repository = repository; }
     public List<AgentMessage> saveAll(Iterable<AgentMessage> messages) { return repository.saveAll(messages); }
     public List<AgentMessage> findAllByConversationId(UUID conversationId) { return repository.findAllByConversationIdOrderBySequenceAsc(conversationId); }
+    public List<AgentMessage> findAllByConversationIdAndRequestId(UUID conversationId, String requestId) {
+        return repository.findAllByConversationIdAndRequestIdOrderBySequenceAsc(conversationId, requestId);
+    }
     public void deleteAllByConversationId(UUID conversationId) { repository.deleteAllByConversationId(conversationId); }
 }
 
 interface SpringMessageRepository extends JpaRepository<AgentMessage, UUID> {
     List<AgentMessage> findAllByConversationIdOrderBySequenceAsc(UUID conversationId);
+    List<AgentMessage> findAllByConversationIdAndRequestIdOrderBySequenceAsc(UUID conversationId, String requestId);
     @Modifying
     @Query("delete from AgentMessage m where m.conversationId = :conversationId")
     void deleteAllByConversationId(@Param("conversationId") UUID conversationId);

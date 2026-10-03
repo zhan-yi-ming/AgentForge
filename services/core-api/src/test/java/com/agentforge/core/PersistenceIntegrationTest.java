@@ -102,7 +102,8 @@ class PersistenceIntegrationTest {
         var conversationId = java.util.UUID.randomUUID();
 
         conversationHistoryService.appendCompletedExchange(
-                project.id(), actor, conversationId, "What changed?", "RBAC changed.", java.util.List.of());
+                project.id(), actor, conversationId, "What changed?", "RBAC changed.", java.util.List.of(),
+                "history-integration");
 
         assertThat(conversationHistoryService.list(project.id(), actor)).hasSize(1);
         var detail = conversationHistoryService.get(project.id(), conversationId, actor);
@@ -114,6 +115,32 @@ class PersistenceIntegrationTest {
     }
 
     @Test
+    void conversationHistoryRetriesAreIdempotentByRequestId() {
+        var authentication = authenticationService.register(
+                "history-retry@example.com", "History Retry", "integration-password");
+        var actor = new AuthenticatedActor(authentication.user().id(), false);
+        var project = projectService.createProject(actor, "History Retry Project", null);
+        var conversationId = java.util.UUID.randomUUID();
+
+        conversationHistoryService.appendCompletedExchange(project.id(), actor, conversationId,
+                "Question", "First answer", java.util.List.of(), "history-retry-1");
+        conversationHistoryService.appendCompletedExchange(project.id(), actor, conversationId,
+                "Question", "First answer", java.util.List.of(), "history-retry-1");
+        conversationHistoryService.appendCompletedExchange(project.id(), actor, conversationId,
+                "Next question", "Second answer", java.util.List.of(), "history-retry-2");
+
+        var detail = conversationHistoryService.get(project.id(), conversationId, actor);
+        assertThat(detail.messages()).extracting(message -> message.content())
+                .containsExactly("Question", "First answer", "Next question", "Second answer");
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from agent_message where conversation_id = ?", Integer.class, conversationId))
+                .isEqualTo(4);
+        assertThat(jdbcTemplate.queryForObject(
+                "select message_count from agent_conversation where id = ?", Integer.class, conversationId))
+                .isEqualTo(4);
+    }
+
+    @Test
     void recoverableActionsIncludeChatAndMcpButConversationScopeReturnsOnlyItsChatAction() {
         var authentication = authenticationService.register(
                 "recoverable-actions@example.com", "Recovery Integration", "integration-password");
@@ -121,7 +148,8 @@ class PersistenceIntegrationTest {
         var project = projectService.createProject(actor, "Recovery Project", null);
         var conversationId = java.util.UUID.randomUUID();
         conversationHistoryService.appendCompletedExchange(
-                project.id(), actor, conversationId, "Create a task", "Review this proposal.", java.util.List.of());
+                project.id(), actor, conversationId, "Create a task", "Review this proposal.", java.util.List.of(),
+                "recovery-integration");
         var chat = agentActionService.createPending(
                 project.id(), actor, conversationId,
                 new ToolProposal("CREATE_TASK", null, null, "Chat task", null,
@@ -163,7 +191,7 @@ class PersistenceIntegrationTest {
         var project = projectService.createProject(actor, "History Delete Project", null);
         var conversationId = java.util.UUID.randomUUID();
         conversationHistoryService.appendCompletedExchange(project.id(), actor, conversationId,
-                "Private question", "Private answer", java.util.List.of());
+                "Private question", "Private answer", java.util.List.of(), "history-delete");
 
         conversationHistoryService.delete(project.id(), conversationId, actor);
 
@@ -180,7 +208,7 @@ class PersistenceIntegrationTest {
                 "select deleted_at from agent_conversation where id = ?", java.time.OffsetDateTime.class, conversationId))
                 .isNotNull();
         assertThatThrownBy(() -> conversationHistoryService.appendCompletedExchange(project.id(), actor,
-                conversationId, "Again", "Answer", java.util.List.of()))
+                conversationId, "Again", "Answer", java.util.List.of(), "history-delete-retry"))
                 .isInstanceOf(com.agentforge.core.shared.error.ConflictException.class);
     }
 
@@ -377,7 +405,8 @@ class PersistenceIntegrationTest {
         var task = taskService.create(project.id(), actor, "Delete before execute", null, null, null);
         var conversationId = java.util.UUID.randomUUID();
         conversationHistoryService.appendCompletedExchange(
-                project.id(), actor, conversationId, "Update the task", "Awaiting approval", java.util.List.of());
+                project.id(), actor, conversationId, "Update the task", "Awaiting approval", java.util.List.of(),
+                "missing-target-history");
         var proposal = new ToolProposal(
                 "UPDATE_TASK", task.id(), task.version(), "Will not be written", null, null, null,
                 java.util.UUID.randomUUID());

@@ -99,7 +99,7 @@ class AgentChatServiceTest {
         service.chat(projectId, actor, "question", null, "request-history");
 
         verify(history).appendCompletedExchange(
-                projectId, actor, conversationId, "question", "answer", List.of());
+                projectId, actor, conversationId, "question", "answer", List.of(), "request-history");
     }
 
     @Test
@@ -123,11 +123,11 @@ class AgentChatServiceTest {
                 service.stream(new AgentChatCommand(projectId, actor, "question", null, "request"), event -> { }))
                 .isInstanceOf(IllegalStateException.class);
 
-        verify(history, never()).appendCompletedExchange(any(), any(), any(), any(), any(), any());
+        verify(history, never()).appendCompletedExchange(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
-    void historyWriteFailureDoesNotSuppressTheCompletedStreamEvent() {
+    void historyWriteFailurePreventsTheCompletedStreamEvent() {
         ProjectAccess projects = org.mockito.Mockito.mock(ProjectAccess.class);
         AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
         AgentActionService actions = org.mockito.Mockito.mock(AgentActionService.class);
@@ -138,7 +138,7 @@ class AgentChatServiceTest {
         UUID conversationId = UUID.randomUUID();
         AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
         org.mockito.Mockito.doThrow(new IllegalStateException("database unavailable"))
-                .when(history).appendCompletedExchange(any(), any(), any(), any(), any(), any());
+                .when(history).appendCompletedExchange(any(), any(), any(), any(), any(), any(), any());
         org.mockito.Mockito.doAnswer(invocation -> {
             java.util.function.Consumer<AgentStreamEvent> sink = invocation.getArgument(6);
             sink.accept(AgentStreamEvent.metadata(conversationId, "request-history-failure", List.of()));
@@ -148,10 +148,45 @@ class AgentChatServiceTest {
         }).when(client).stream(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), any(), any(), any(), any());
         List<AgentStreamEvent> events = new ArrayList<>();
 
-        service.stream(new AgentChatCommand(projectId, actor, "question", null, "request-history-failure"), events::add);
+        assertThatThrownBy(() -> service.stream(
+                new AgentChatCommand(projectId, actor, "question", null, "request-history-failure"), events::add))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("database unavailable");
 
         assertThat(events).extracting(AgentStreamEvent::type)
-                .containsExactly("metadata", "delta", "complete");
+                .containsExactly("metadata", "delta");
+    }
+
+    @Test
+    void completedStreamIsPersistedBeforeACompleteSinkFailure() {
+        ProjectAccess projects = org.mockito.Mockito.mock(ProjectAccess.class);
+        AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
+        AgentActionService actions = org.mockito.Mockito.mock(AgentActionService.class);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+        ConversationHistoryService history = org.mockito.Mockito.mock(ConversationHistoryService.class);
+        AgentChatService service = new AgentChatService(projects, client, actions, quota, history);
+        UUID projectId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            java.util.function.Consumer<AgentStreamEvent> sink = invocation.getArgument(6);
+            sink.accept(AgentStreamEvent.metadata(conversationId, "request-disconnect", List.of()));
+            sink.accept(AgentStreamEvent.delta("complete answer"));
+            sink.accept(AgentStreamEvent.complete(null));
+            return null;
+        }).when(client).stream(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), any(), any(), any(), any());
+
+        assertThatThrownBy(() -> service.stream(
+                new AgentChatCommand(projectId, actor, "question", null, "request-disconnect"), event -> {
+                    if ("complete".equals(event.type())) {
+                        throw new IllegalStateException("client disconnected");
+                    }
+                }))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("client disconnected");
+
+        verify(history).appendCompletedExchange(projectId, actor, conversationId,
+                "question", "complete answer", List.of(), "request-disconnect");
     }
 
     @Test
@@ -194,7 +229,8 @@ class AgentChatServiceTest {
         order.verify(client).stream(eq(projectId), eq(userId), eq(false), eq("hello"), any(UUID.class),
                 eq("request-stream"), any());
         verify(history).appendCompletedExchange(
-                projectId, actor, conversationId, "hello", "第一段，第二段", List.of(citedSource));
+                projectId, actor, conversationId, "hello", "第一段，第二段", List.of(citedSource),
+                "request-stream");
     }
 
     @Test
@@ -415,7 +451,7 @@ class AgentChatServiceTest {
 
         verify(client).abort(
                 projectId, userId, false, conversationId, workflowId, "request-stale");
-        verify(history, never()).appendCompletedExchange(any(), any(), any(), any(), any(), any());
+        verify(history, never()).appendCompletedExchange(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -449,7 +485,7 @@ class AgentChatServiceTest {
 
         verify(client).abort(
                 projectId, userId, false, conversationId, workflowId, "request-db-failure");
-        verify(history, never()).appendCompletedExchange(any(), any(), any(), any(), any(), any());
+        verify(history, never()).appendCompletedExchange(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

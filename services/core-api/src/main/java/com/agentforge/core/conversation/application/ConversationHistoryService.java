@@ -47,8 +47,12 @@ public class ConversationHistoryService {
 
     @Transactional
     public void appendCompletedExchange(UUID projectId, AuthenticatedActor actor, UUID conversationId,
-            String question, String answer, List<AgentSource> sources) {
+            String question, String answer, List<AgentSource> sources, String requestId) {
         projectAccess.requireAccess(projectId, actor);
+        if (requestId == null || requestId.isBlank() || requestId.length() > 100) {
+            throw new IllegalArgumentException(
+                    "requestId is required and must not exceed 100 characters for completed conversation history.");
+        }
         Instant now = Instant.now(clock);
         AgentConversation conversation = conversations.findByIdForUpdate(conversationId).orElse(null);
         if (conversation == null) {
@@ -61,12 +65,30 @@ public class ConversationHistoryService {
         if (conversation.isDeleted()) {
             throw new ConflictException("The conversation history was deleted.");
         }
+        String sourcesJson = writeSources(sources);
+        List<AgentMessage> existing = messages.findAllByConversationIdAndRequestId(conversationId, requestId);
+        if (!existing.isEmpty()) {
+            if (matchesExchange(existing, question, answer, sourcesJson)) {
+                return;
+            }
+            throw new ConflictException("The requestId is already bound to another completed exchange.");
+        }
         long sequence = conversation.nextSequence();
         messages.saveAll(List.of(
-                new AgentMessage(conversationId, sequence, AgentMessageRole.USER, question, "[]", now),
-                new AgentMessage(conversationId, sequence + 1, AgentMessageRole.ASSISTANT, answer,
-                        writeSources(sources), now)));
+                new AgentMessage(conversationId, requestId, sequence, AgentMessageRole.USER, question, "[]", now),
+                new AgentMessage(conversationId, requestId, sequence + 1, AgentMessageRole.ASSISTANT, answer,
+                        sourcesJson, now)));
         conversation.appendedExchange(now);
+    }
+
+    private boolean matchesExchange(List<AgentMessage> existing, String question, String answer, String sourcesJson) {
+        return existing.size() == 2
+                && existing.get(0).getRole() == AgentMessageRole.USER
+                && existing.get(0).getContent().equals(question)
+                && existing.get(0).getSourcesJson().equals("[]")
+                && existing.get(1).getRole() == AgentMessageRole.ASSISTANT
+                && existing.get(1).getContent().equals(answer)
+                && existing.get(1).getSourcesJson().equals(sourcesJson);
     }
 
     @Transactional

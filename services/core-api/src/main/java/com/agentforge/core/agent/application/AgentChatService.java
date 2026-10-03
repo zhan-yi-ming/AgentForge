@@ -10,8 +10,6 @@ import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.agentforge.core.conversation.application.ConversationHistoryService;
 import com.agentforge.core.project.ProjectAccess;
@@ -19,8 +17,6 @@ import com.agentforge.core.security.AuthenticatedActor;
 
 @Service
 public class AgentChatService {
-    private static final Logger LOGGER = LoggerFactory.getLogger(AgentChatService.class);
-
     private final ProjectAccess projectAccess;
     private final AgentServiceClient agentServiceClient;
     private final AgentActionService agentActionService;
@@ -118,17 +114,11 @@ public class AgentChatService {
                         sources.set(event.sources());
                     }
                     AgentStreamEvent finalized = finalizeEvent(command, effectiveConversationId.get(), event);
-                    sink.accept(finalized);
                     if ("complete".equals(finalized.type())) {
-                        try {
-                            persist(command, new AgentChatResult(effectiveConversationId.get(), answer.toString(),
-                                    command.requestId(), sources.get()));
-                        }
-                        catch (RuntimeException exception) {
-                            LOGGER.warn("Unable to persist completed Agent exchange; requestId={}, cause={}",
-                                    command.requestId(), exception.getClass().getSimpleName());
-                        }
+                        persist(command, new AgentChatResult(effectiveConversationId.get(), answer.toString(),
+                                command.requestId(), sources.get()));
                     }
+                    sink.accept(finalized);
                 });
     }
 
@@ -157,7 +147,7 @@ public class AgentChatService {
 
     private void persist(AgentChatCommand command, AgentChatResult result) {
         conversationHistory.appendCompletedExchange(command.projectId(), command.actor(),
-                result.conversationId(), command.message(), result.answer(), result.sources());
+                result.conversationId(), command.message(), result.answer(), result.sources(), command.requestId());
     }
 
     private AgentStreamEvent finalizeEvent(

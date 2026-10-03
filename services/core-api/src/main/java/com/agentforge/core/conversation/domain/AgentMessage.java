@@ -15,6 +15,7 @@ import jakarta.persistence.Table;
 public class AgentMessage {
     @Id private UUID id;
     @Column(name = "conversation_id", nullable = false) private UUID conversationId;
+    @Column(name = "request_id", length = 100) private String requestId;
     @Column(name = "sequence_number", nullable = false) private long sequence;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 16) private AgentMessageRole role;
     @Column(nullable = false) private String content;
@@ -23,10 +24,11 @@ public class AgentMessage {
 
     protected AgentMessage() { }
 
-    public AgentMessage(UUID conversationId, long sequence, AgentMessageRole role,
+    public AgentMessage(UUID conversationId, String requestId, long sequence, AgentMessageRole role,
             String content, String sourcesJson, Instant createdAt) {
         this.id = UUID.randomUUID();
         this.conversationId = conversationId;
+        this.requestId = requestId;
         this.sequence = sequence;
         this.role = role;
         this.content = content;
@@ -36,6 +38,7 @@ public class AgentMessage {
 
     public UUID getId() { return id; }
     public UUID getConversationId() { return conversationId; }
+    public String getRequestId() { return requestId; }
     public long getSequence() { return sequence; }
     public AgentMessageRole getRole() { return role; }
     public String getContent() { return content; }

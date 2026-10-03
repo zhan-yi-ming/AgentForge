@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.times;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -22,7 +23,9 @@ import com.agentforge.core.agent.domain.AgentTaskActionRepository;
 import com.agentforge.core.agent.domain.AgentActionStatus;
 import com.agentforge.core.conversation.domain.AgentConversation;
 import com.agentforge.core.conversation.domain.AgentConversationRepository;
+import com.agentforge.core.conversation.domain.AgentMessage;
 import com.agentforge.core.conversation.domain.AgentMessageRepository;
+import com.agentforge.core.conversation.domain.AgentMessageRole;
 import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.shared.error.ForbiddenException;
@@ -31,6 +34,77 @@ import com.agentforge.core.shared.error.ResourceNotFoundException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 class ConversationHistoryServiceTest {
+
+    @Test
+    void completedExchangeRejectsARequestIdLongerThanThePersistenceBoundary() {
+        AgentConversationRepository conversations = mock(AgentConversationRepository.class);
+        AgentMessageRepository messages = mock(AgentMessageRepository.class);
+        ConversationHistoryService service = service(conversations, messages, mock(ProjectAccess.class));
+
+        assertThatThrownBy(() -> service.appendCompletedExchange(
+                UUID.randomUUID(), new AuthenticatedActor(UUID.randomUUID(), false), UUID.randomUUID(),
+                "Question", "Answer", List.of(), "x".repeat(101)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("100");
+
+        verifyNoInteractions(conversations, messages);
+    }
+
+    @Test
+    void completedExchangeRetryWithTheSameRequestIdDoesNotAppendDuplicateMessages() {
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(userId, false);
+        AgentConversation conversation = AgentConversation.start(
+                conversationId, projectId, userId, "Question", Instant.EPOCH);
+        AgentConversationRepository conversations = mock(AgentConversationRepository.class);
+        AgentMessageRepository messages = mock(AgentMessageRepository.class);
+        ProjectAccess projects = mock(ProjectAccess.class);
+        when(conversations.findByIdForUpdate(conversationId)).thenReturn(Optional.of(conversation));
+        when(messages.findAllByConversationIdAndRequestId(conversationId, "request-retry"))
+                .thenReturn(List.of())
+                .thenReturn(List.of(
+                        new AgentMessage(conversationId, "request-retry", 0, AgentMessageRole.USER,
+                                "Question", "[]", Instant.EPOCH),
+                        new AgentMessage(conversationId, "request-retry", 1, AgentMessageRole.ASSISTANT,
+                                "Answer", "[]", Instant.EPOCH)));
+        when(messages.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        ConversationHistoryService service = service(conversations, messages, projects);
+
+        service.appendCompletedExchange(projectId, actor, conversationId,
+                "Question", "Answer", List.of(), "request-retry");
+        service.appendCompletedExchange(projectId, actor, conversationId,
+                "Question", "Answer", List.of(), "request-retry");
+
+        verify(messages, times(1)).saveAll(any());
+        assertThat(conversation.getMessageCount()).isEqualTo(2);
+    }
+
+    @Test
+    void requestIdCannotBeReusedForADifferentCompletedExchange() {
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(userId, false);
+        AgentConversation conversation = AgentConversation.start(
+                conversationId, projectId, userId, "Original question", Instant.EPOCH);
+        AgentConversationRepository conversations = mock(AgentConversationRepository.class);
+        AgentMessageRepository messages = mock(AgentMessageRepository.class);
+        when(conversations.findByIdForUpdate(conversationId)).thenReturn(Optional.of(conversation));
+        when(messages.findAllByConversationIdAndRequestId(conversationId, "request-conflict"))
+                .thenReturn(List.of(
+                        new AgentMessage(conversationId, "request-conflict", 0, AgentMessageRole.USER,
+                                "Original question", "[]", Instant.EPOCH),
+                        new AgentMessage(conversationId, "request-conflict", 1, AgentMessageRole.ASSISTANT,
+                                "Original answer", "[]", Instant.EPOCH)));
+        ConversationHistoryService service = service(conversations, messages, mock(ProjectAccess.class));
+
+        assertThatThrownBy(() -> service.appendCompletedExchange(projectId, actor, conversationId,
+                "Different question", "Different answer", List.of(), "request-conflict"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("requestId");
+    }
 
     @Test
     void completedExchangeCanBeReadBackInsideItsProjectAndUserScope() {
@@ -50,7 +124,7 @@ class ConversationHistoryServiceTest {
 
         service.appendCompletedExchange(
                 projectId, actor, conversationId, "What changed?", "RBAC changed.",
-                List.of(new AgentSource("WIKI", UUID.randomUUID(), "Security", "excerpt")));
+                List.of(new AgentSource("WIKI", UUID.randomUUID(), "Security", "excerpt")), "request-readback");
 
         verify(projects).requireAccess(projectId, actor);
         verify(conversations).save(any(AgentConversation.class));
@@ -70,7 +144,8 @@ class ConversationHistoryServiceTest {
         ConversationHistoryService service = service(conversations, messages, projects);
 
         assertThatThrownBy(() -> service.appendCompletedExchange(projectId,
-                new AuthenticatedActor(userId, false), conversationId, "Question", "Answer", List.of()))
+                new AuthenticatedActor(userId, false), conversationId, "Question", "Answer", List.of(),
+                "request-rebind"))
                 .isInstanceOf(ForbiddenException.class);
 
         verifyNoInteractions(messages);
@@ -115,7 +190,7 @@ class ConversationHistoryServiceTest {
         assertThat(conversation.isDeleted()).isTrue();
         assertThat(conversation.getPreview()).isEmpty();
         assertThatThrownBy(() -> service.appendCompletedExchange(projectId, actor, conversationId,
-                "Again", "Answer", List.of())).isInstanceOf(ConflictException.class);
+                "Again", "Answer", List.of(), "request-deleted")).isInstanceOf(ConflictException.class);
     }
 
     @Test
