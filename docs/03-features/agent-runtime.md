@@ -62,7 +62,7 @@ V2-07 之前已持久化的 V2-06 Action 没有 checkpoint。V8 以可空 `actio
 - checkpoint schema version 不受支持：失败关闭并保留原 checkpoint，等待显式迁移策略。
 - Python Resume 暂时失败：公共决定返回依赖不可用；Java 已提交的 Approval 决定不回滚。
 - Java 未形成 Approval：Core 精确 Abort 当前 WAITING；Abort 失败显式返回依赖不可用，不伪装成普通回答。
-- Tool 业务冲突：Java 提交 FAILED；未知基础设施异常保持可安全重试的既有状态。
+- Tool 的版本冲突或目标资源已删除：Java 提交 FAILED；数据库、网络等未知基础设施异常不永久封死 Action，事务回滚后保持可安全重试的既有 APPROVED 状态。
 
 ## 测试边界
 

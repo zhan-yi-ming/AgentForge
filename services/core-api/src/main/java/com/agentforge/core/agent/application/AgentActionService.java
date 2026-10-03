@@ -295,7 +295,11 @@ public class AgentActionService {
                     ? executeCreate(projectId, actor, action)
                     : executeUpdate(projectId, actor, action);
         }
-        catch (ConflictException exception) {
+        catch (ConflictException | ResourceNotFoundException exception) {
+            if (exception instanceof ResourceNotFoundException
+                    && action.getActionType() != AgentActionType.UPDATE_TASK) {
+                throw exception;
+            }
             action.markFailed(Instant.now(clock));
             AgentActionView failed = AgentActionView.from(actions.save(action), null);
             auditEvents.save(AgentAuditEvent.record(

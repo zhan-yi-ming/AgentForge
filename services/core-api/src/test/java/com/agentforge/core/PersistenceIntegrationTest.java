@@ -315,6 +315,49 @@ class PersistenceIntegrationTest {
     }
 
     @Test
+    void approvedUpdatePersistsFailedWhenItsTargetIsDeletedAndReleasesConversationDeletion() {
+        var authentication = authenticationService.register(
+                "agent-action-missing-target@example.com", "Missing Target", "integration-password");
+        var actor = new AuthenticatedActor(authentication.user().id(), false);
+        var project = projectService.createProject(actor, "Missing Target Project", null);
+        var task = taskService.create(project.id(), actor, "Delete before execute", null, null, null);
+        var conversationId = java.util.UUID.randomUUID();
+        conversationHistoryService.appendCompletedExchange(
+                project.id(), actor, conversationId, "Update the task", "Awaiting approval", java.util.List.of());
+        var proposal = new ToolProposal(
+                "UPDATE_TASK", task.id(), task.version(), "Will not be written", null, null, null,
+                java.util.UUID.randomUUID());
+        var pending = agentActionService.createPending(
+                project.id(), actor, conversationId, proposal, "missing-target-requested")
+                .orElseThrow();
+        var approved = agentActionService.approve(
+                project.id(), pending.id(), actor, "missing-target-key", "missing-target-approved");
+        var deletingAdmin = new AuthenticatedActor(java.util.UUID.randomUUID(), true);
+        taskService.delete(project.id(), task.id(), deletingAdmin, task.version());
+
+        var failed = agentActionService.executeApproved(
+                project.id(), pending.id(), actor, "missing-target-key", "missing-target-execute");
+        var replayed = confirmDirectly(
+                project.id(), pending.id(), actor, "missing-target-key", "missing-target-replay");
+
+        assertThat(approved.status()).isEqualTo(com.agentforge.core.agent.domain.AgentActionStatus.APPROVED);
+        assertThat(failed.status()).isEqualTo(com.agentforge.core.agent.domain.AgentActionStatus.FAILED);
+        assertThat(replayed.status()).isEqualTo(com.agentforge.core.agent.domain.AgentActionStatus.FAILED);
+        assertThatThrownBy(() -> taskService.get(project.id(), task.id(), actor))
+                .isInstanceOf(com.agentforge.core.shared.error.ResourceNotFoundException.class);
+        assertThat(jdbcTemplate.queryForObject(
+                "select status from agent_task_action where id = ?", String.class, pending.id()))
+                .isEqualTo("FAILED");
+        assertThat(jdbcTemplate.queryForList(
+                "select event_type from agent_action_audit_event where approval_id = ? order by created_at, id",
+                String.class, pending.id()))
+                .containsExactlyInAnyOrder("REQUESTED", "APPROVED", "FAILED");
+
+        conversationHistoryService.delete(project.id(), conversationId, actor);
+        assertThat(conversationHistoryService.list(project.id(), actor)).isEmpty();
+    }
+
+    @Test
     void concurrentConfirmationCreatesOneTaskAndOneExecutionAuditEvent() throws Exception {
         var authentication = authenticationService.register(
                 "agent-action-concurrent@example.com", "Concurrent Approval", "integration-password");

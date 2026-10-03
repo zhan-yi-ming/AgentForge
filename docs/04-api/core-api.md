@@ -241,7 +241,7 @@ V1.1 在转发给 Agent Service 前原子消费一次用户 UTC 日配额；达�
 
 ### `POST /api/v1/projects/{projectId}/agent/actions/{actionId}/confirm`
 
-无 body；必须发送 1–100 字符的 `Idempotency-Key`，字符限于字母、数字、点、下划线、冒号和连字符。重新校验 JWT、project、action 发起者、服务端 Tool Policy 和目标 Task version。状态按 `PENDING → APPROVED → EXECUTED | FAILED` 变化。相同 key 重放返回既有结果且不重复写入；不同 key replay、已拒绝 action 返回 409；路径不匹配返回 404；其他用户返回 403。确认前已可见的业务版本冲突返回 `status=FAILED`、`resultTask=null`；flush 期并发乐观锁冲突回滚为 `PENDING` 并返回 409。若已执行结果 Task 后续被删除，同 key replay 仍返回 `status=EXECUTED`，但 `resultTask=null`。
+无 body；必须发送 1–100 字符的 `Idempotency-Key`，字符限于字母、数字、点、下划线、冒号和连字符。重新校验 JWT、project、action 发起者、服务端 Tool Policy 和目标 Task version。状态按 `PENDING → APPROVED → EXECUTED | FAILED` 变化。相同 key 重放返回既有结果且不重复写入；不同 key replay、已拒绝 action 返回 409；路径不匹配返回 404；其他用户返回 403。已审批 UPDATE_TASK 在执行时发现目标已删除或业务版本冲突，返回 `status=FAILED`、`resultTask=null` 并持久化失败审计；未知基础设施异常不标记 FAILED，保留 APPROVED 供相同 key 重试。flush 期并发乐观锁冲突的事务语义由独立审查项处理。若已执行结果 Task 后续被删除，同 key replay 仍返回 `status=EXECUTED`，但 `resultTask=null`。
 
 ### `POST /api/v1/projects/{projectId}/agent/actions/{actionId}/reject`
 

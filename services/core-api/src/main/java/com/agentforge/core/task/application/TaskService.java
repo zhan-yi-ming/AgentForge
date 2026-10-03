@@ -68,7 +68,7 @@ public class TaskService {
         return created;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, noRollbackFor = ResourceNotFoundException.class)
     public TaskView get(UUID projectId, UUID taskId, AuthenticatedActor actor) {
         riskEngine.authorize(ToolOperation.GET_TASK, projectId, actor);
         return TaskView.from(find(projectId, taskId));
@@ -83,7 +83,7 @@ public class TaskService {
                 .toList();
     }
 
-    @Transactional(noRollbackFor = ConflictException.class)
+    @Transactional(noRollbackFor = {ConflictException.class, ResourceNotFoundException.class})
     public TaskView update(
             UUID projectId,
             UUID taskId,

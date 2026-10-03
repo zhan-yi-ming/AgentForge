@@ -16,6 +16,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 import com.agentforge.core.agent.domain.AgentActionStatus;
 import com.agentforge.core.agent.domain.AgentActionType;
@@ -195,6 +196,28 @@ class AgentActionServiceTest {
                 projectId, action.getId(), actor, "different-key", "request-3"))
                 .isInstanceOf(ConflictException.class);
         verify(riskEngine, times(4)).authorize(ToolOperation.CREATE_TASK, projectId, actor);
+    }
+
+    @Test
+    void createResourceLookupFailureIsNotReclassifiedAsAnUpdateTargetFailure() {
+        UUID projectId = UUID.randomUUID();
+        var actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        AgentTaskAction action = AgentTaskAction.pending(
+                projectId, actor.userId(), UUID.randomUUID(), UUID.randomUUID(),
+                AgentActionType.CREATE_TASK, null, "Create later", null, TaskStatus.TODO,
+                TaskPriority.HIGH, null, Instant.now(clock));
+        when(actions.findByProjectIdAndIdForUpdate(projectId, action.getId())).thenReturn(Optional.of(action));
+        when(taskService.create(projectId, actor, "Create later", null, TaskStatus.TODO, TaskPriority.HIGH))
+                .thenThrow(new ResourceNotFoundException("Project not found: " + projectId));
+
+        service.approve(projectId, action.getId(), actor, "create-key", "create-approved");
+
+        assertThatThrownBy(() -> service.executeApproved(
+                projectId, action.getId(), actor, "create-key", "create-execute"))
+                .isInstanceOf(ResourceNotFoundException.class);
+        assertThat(action.getStatus()).isEqualTo(AgentActionStatus.APPROVED);
+        verify(auditEvents, never()).save(org.mockito.ArgumentMatchers.argThat(event ->
+                event.getEventType() == AgentAuditEventType.FAILED));
     }
 
     @Test
@@ -402,6 +425,55 @@ class AgentActionServiceTest {
                         && event.getRequestId().equals("failed-request")));
         verify(taskService).update(
                 projectId, taskId, actor, "Existing title", "JWT", TaskStatus.DONE, TaskPriority.HIGH, 2);
+    }
+
+    @Test
+    void missingUpdateTargetMarksTheApprovedActionFailedAndReplaysTheTerminalFact() {
+        UUID projectId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        var actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        AgentTaskAction action = AgentTaskAction.pending(
+                projectId, actor.userId(), UUID.randomUUID(), UUID.randomUUID(),
+                AgentActionType.UPDATE_TASK,
+                taskId, "Deleted target", null, null, null, 2L, Instant.now(clock));
+        when(actions.findByProjectIdAndIdForUpdate(projectId, action.getId())).thenReturn(Optional.of(action));
+        when(taskService.get(projectId, taskId, actor))
+                .thenThrow(new ResourceNotFoundException("Task not found: " + taskId));
+
+        AgentActionView failed = confirmDirectly(
+                projectId, action.getId(), actor, "missing-target-key", "missing-target-request");
+        AgentActionView replayed = confirmDirectly(
+                projectId, action.getId(), actor, "missing-target-key", "missing-target-replay");
+
+        assertThat(failed.status()).isEqualTo(AgentActionStatus.FAILED);
+        assertThat(replayed.status()).isEqualTo(AgentActionStatus.FAILED);
+        assertThat(action.getStatus()).isEqualTo(AgentActionStatus.FAILED);
+        verify(auditEvents).save(org.mockito.ArgumentMatchers.argThat(event ->
+                event.getEventType() == AgentAuditEventType.FAILED
+                        && event.getRequestId().equals("missing-target-request")));
+        verify(taskService, never()).update(any(), any(), any(), any(), any(), any(), any(), any(Long.class));
+    }
+
+    @Test
+    void transientTaskLookupFailureKeepsTheApprovedActionRetryable() {
+        UUID projectId = UUID.randomUUID();
+        UUID taskId = UUID.randomUUID();
+        var actor = new AuthenticatedActor(UUID.randomUUID(), false);
+        AgentTaskAction action = AgentTaskAction.pending(
+                projectId, actor.userId(), UUID.randomUUID(), UUID.randomUUID(),
+                AgentActionType.UPDATE_TASK,
+                taskId, "Retry later", null, null, null, 2L, Instant.now(clock));
+        when(actions.findByProjectIdAndIdForUpdate(projectId, action.getId())).thenReturn(Optional.of(action));
+        when(taskService.get(projectId, taskId, actor))
+                .thenThrow(new DataAccessResourceFailureException("temporary database outage"));
+
+        assertThatThrownBy(() -> confirmDirectly(
+                projectId, action.getId(), actor, "retryable-key", "retryable-request"))
+                .isInstanceOf(DataAccessResourceFailureException.class);
+
+        assertThat(action.getStatus()).isEqualTo(AgentActionStatus.APPROVED);
+        verify(auditEvents, never()).save(org.mockito.ArgumentMatchers.argThat(event ->
+                event.getEventType() == AgentAuditEventType.FAILED));
     }
 
     @Test
