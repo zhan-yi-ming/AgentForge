@@ -2,6 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 import { createApiClient } from "../src/api";
 
 describe("API client", () => {
+  it("requests recoverable actions with an optional conversation scope", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("[]", {
+      status: 200, headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createApiClient(() => "token-123").listRecoverableActions("project-1", "conversation 1");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/projects/project-1/agent/actions/recoverable?conversationId=conversation%201",
+      expect.objectContaining({ headers: expect.any(Headers) }),
+    );
+  });
   it("uploads voice PCM through the scoped authenticated API", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);

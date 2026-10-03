@@ -78,6 +78,19 @@ class AgentTaskActionRepositoryAdapter implements AgentTaskActionRepository {
     }
 
     @Override
+    public List<AgentTaskAction> findRecoverable(
+            UUID projectId, UUID userId, UUID conversationId) {
+        List<AgentActionStatus> statuses = List.of(
+                AgentActionStatus.PENDING, AgentActionStatus.APPROVED);
+        if (conversationId == null) {
+            return repository.findAllByProjectIdAndRequestedByUserIdAndStatusInOrderByCreatedAtAsc(
+                    projectId, userId, statuses);
+        }
+        return repository.findAllByProjectIdAndRequestedByUserIdAndConversationIdAndStatusInOrderByCreatedAtAsc(
+                projectId, userId, conversationId, statuses);
+    }
+
+    @Override
     public boolean existsByConversationAndStatusIn(UUID projectId, UUID userId, UUID conversationId,
             List<AgentActionStatus> statuses) {
         return repository.existsByProjectIdAndRequestedByUserIdAndConversationIdAndStatusIn(
@@ -102,6 +115,13 @@ interface SpringDataAgentTaskActionRepository extends JpaRepository<AgentTaskAct
             AgentActionSource source,
             UUID conversationId,
             UUID actionWorkflowId);
+
+    List<AgentTaskAction> findAllByProjectIdAndRequestedByUserIdAndStatusInOrderByCreatedAtAsc(
+            UUID projectId, UUID userId, List<AgentActionStatus> statuses);
+
+    List<AgentTaskAction> findAllByProjectIdAndRequestedByUserIdAndConversationIdAndStatusInOrderByCreatedAtAsc(
+            UUID projectId, UUID userId, UUID conversationId, List<AgentActionStatus> statuses);
+
     boolean existsByProjectIdAndRequestedByUserIdAndConversationIdAndStatusIn(
             UUID projectId, UUID userId, UUID conversationId, List<AgentActionStatus> statuses);
 }

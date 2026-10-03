@@ -5,11 +5,14 @@ export type WikiPage = { id: string; projectId: string; title: string; content: 
 export type Task = { id: string; projectId: string; title: string; description?: string; status: "TODO" | "IN_PROGRESS" | "DONE"; priority: "LOW" | "MEDIUM" | "HIGH"; version: number; createdAt: string; updatedAt: string };
 export type AgentSource = { sourceType: string; sourceId: string; title: string; excerpt: string };
 export type AgentAction = {
-  id: string; projectId: string; conversationId: string; actionType: "CREATE_TASK" | "UPDATE_TASK";
+  id: string; projectId: string; conversationId?: string; actionType: "CREATE_TASK" | "UPDATE_TASK";
+  source?: "CHAT" | "MCP";
+  recovered?: boolean;
   status: "PENDING" | "APPROVED" | "EXECUTED" | "REJECTED" | "FAILED"; taskId?: string; expectedVersion?: number;
   title?: string; description?: string; taskStatus?: string; priority?: string;
   resultTask?: Task; createdAt: string; decidedAt?: string;
 };
+export type RecoverableAgentAction = { action: AgentAction; source: "CHAT" | "MCP"; decisionKey?: string | null };
 export type AgentChat = { conversationId: string; answer: string; requestId: string; sources: AgentSource[]; pendingAction?: AgentAction };
 export type VoiceSnapshot = { sessionId: string; text: string; finished: boolean };
 export type ConversationSummary = { conversationId: string; preview: string; messageCount: number; createdAt: string; updatedAt: string };
@@ -44,6 +47,7 @@ export interface ApiClient {
   listConversations(projectId: string): Promise<ConversationSummary[]>;
   getConversation(projectId: string, conversationId: string): Promise<ConversationDetail>;
   deleteConversation(projectId: string, conversationId: string): Promise<void>;
+  listRecoverableActions(projectId: string, conversationId?: string): Promise<RecoverableAgentAction[]>;
   chat(projectId: string, message: string, conversationId?: string, taskType?: AgentTaskType): Promise<AgentChat>;
   chatStream(projectId: string, message: string, conversationId: string | undefined, callbacks: AgentStreamCallbacks, signal?: AbortSignal, taskType?: AgentTaskType): Promise<AgentChat>;
   startVoice(projectId: string): Promise<{ sessionId: string }>;
@@ -171,6 +175,8 @@ export function createApiClient(getToken: () => string | null): ApiClient {
     listConversations: (projectId) => request(`/api/v1/projects/${projectId}/agent/conversations`),
     getConversation: (projectId, conversationId) => request(`/api/v1/projects/${projectId}/agent/conversations/${conversationId}`),
     deleteConversation: (projectId, conversationId) => request(`/api/v1/projects/${projectId}/agent/conversations/${conversationId}`, { method: "DELETE" }),
+    listRecoverableActions: (projectId, conversationId) => request(
+      `/api/v1/projects/${projectId}/agent/actions/recoverable${conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : ""}`),
     chat: (projectId, message, conversationId, taskType = "ANSWER") => request(`/api/v1/projects/${projectId}/agent/chat`, { method: "POST", body: JSON.stringify({ message, conversationId, taskType }) }),
     chatStream,
     startVoice: (projectId) => request(`/api/v1/projects/${projectId}/agent/asr/sessions`, { method: "POST" }),

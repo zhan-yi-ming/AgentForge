@@ -2,6 +2,7 @@ package com.agentforge.core.agent.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -70,6 +71,22 @@ public class AgentActionService {
             UUID conversationId,
             ToolProposal proposal) {
         return createPending(projectId, actor, conversationId, proposal, "internal");
+    }
+
+    @Transactional(readOnly = true)
+    public List<RecoverableAgentActionView> listRecoverable(
+            UUID projectId,
+            AuthenticatedActor actor,
+            UUID conversationId) {
+        projectAccess.requireAccess(projectId, actor);
+        return actions.findRecoverable(projectId, actor.userId(), conversationId).stream()
+                .map(action -> new RecoverableAgentActionView(
+                        AgentActionView.from(action, null),
+                        action.getSource(),
+                        action.getStatus() == AgentActionStatus.APPROVED
+                                ? action.getIdempotencyKey()
+                                : null))
+                .toList();
     }
 
     @Transactional

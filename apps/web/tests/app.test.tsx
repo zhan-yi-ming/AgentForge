@@ -25,6 +25,7 @@ function api(overrides: Partial<ApiClient> = {}): ApiClient {
     createWikiPage: vi.fn(), updateWikiPage: vi.fn(),
     listTasks: vi.fn().mockResolvedValue([task]),
     listConversations: vi.fn().mockResolvedValue([]), getConversation: vi.fn(), deleteConversation: vi.fn().mockResolvedValue(undefined),
+    listRecoverableActions: vi.fn().mockResolvedValue([]),
     chat: vi.fn(), chatStream: vi.fn(), confirmAction: vi.fn(), autoConfirmAction: vi.fn(), rejectAction: vi.fn(),
     startVoice: vi.fn(), appendVoiceAudio: vi.fn(), getVoice: vi.fn(), finishVoice: vi.fn(), cancelVoice: vi.fn(),
     ...overrides,
@@ -243,6 +244,124 @@ describe("App", () => {
     render(<App api={mockApi} />);
     expect(await screen.findByText("Direct answer")).toBeInTheDocument();
     expect(mockApi.getConversation).toHaveBeenCalledWith(project.id, "conversation-direct");
+    sessionStorage.removeItem("agentforge.accessToken");
+  });
+  it("recovers an approved action after a direct history refresh and reuses its original key", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    sessionStorage.setItem("agentforge.accessToken", "token");
+    window.history.replaceState({}, "", "/chat/conversation-recovery");
+    const approved: AgentAction = {
+      id: "action-approved", projectId: project.id, conversationId: "conversation-recovery",
+      actionType: "CREATE_TASK", status: "APPROVED", title: "Recovered task", taskStatus: "TODO",
+      priority: "HIGH", createdAt: "2026-10-03T00:00:00Z",
+    };
+    const mockApi = api({
+      getConversation: vi.fn().mockResolvedValue({ conversationId: "conversation-recovery", preview: "Recover",
+        messageCount: 2, createdAt: "2026-10-03T00:00:00Z", updatedAt: "2026-10-03T00:01:00Z",
+        messages: [
+          { role: "USER", content: "Recover", sources: [], createdAt: "2026-10-03T00:00:00Z" },
+          { role: "ASSISTANT", content: "Review it", sources: [], createdAt: "2026-10-03T00:01:00Z" },
+        ] }),
+      listRecoverableActions: vi.fn()
+        .mockResolvedValueOnce([{ action: approved, source: "CHAT", decisionKey: "original-key" }])
+        .mockResolvedValue([]),
+      confirmAction: vi.fn().mockResolvedValue({ ...approved, status: "EXECUTED" }),
+    });
+
+    render(<App api={mockApi} />);
+    const dialog = await screen.findByRole("dialog", { name: "继续执行已批准操作" });
+    expect(within(dialog).queryByRole("button", { name: "拒绝" })).not.toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole("button", { name: "继续执行" }));
+    await waitFor(() => expect(mockApi.confirmAction)
+      .toHaveBeenCalledWith(project.id, "action-approved", "original-key"));
+    sessionStorage.removeItem("agentforge.accessToken");
+  });
+  it("keeps history usable when approval recovery is unavailable", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    sessionStorage.setItem("agentforge.accessToken", "token");
+    window.history.replaceState({}, "", "/chat/conversation-recovery-failure");
+    const mockApi = api({
+      getConversation: vi.fn().mockResolvedValue({ conversationId: "conversation-recovery-failure", preview: "Recover",
+        messageCount: 2, createdAt: "2026-10-03T00:00:00Z", updatedAt: "2026-10-03T00:01:00Z",
+        messages: [
+          { role: "USER", content: "Still visible", sources: [], createdAt: "2026-10-03T00:00:00Z" },
+          { role: "ASSISTANT", content: "History survives", sources: [], createdAt: "2026-10-03T00:01:00Z" },
+        ] }),
+      listRecoverableActions: vi.fn().mockRejectedValue(new Error("Recovery unavailable")),
+    });
+
+    render(<App api={mockApi} />);
+
+    expect(await screen.findByText("History survives")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Recovery unavailable");
+    sessionStorage.removeItem("agentforge.accessToken");
+  });
+  it("does not automatically reapprove a recovered pending Chat create", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    sessionStorage.setItem("agentforge.accessToken", "token");
+    window.history.replaceState({}, "", "/chat");
+    const recovered: AgentAction = {
+      id: "action-chat-pending", projectId: project.id, actionType: "CREATE_TASK", status: "PENDING",
+      title: "Old pending task", createdAt: "2026-10-01T00:00:00Z",
+    };
+    const mockApi = api({
+      listRecoverableActions: vi.fn().mockResolvedValue([{ action: recovered, source: "CHAT" }]),
+    });
+
+    render(<App api={mockApi} />);
+
+    const dialog = await screen.findByRole("dialog", { name: "待确认操作" });
+    expect(within(dialog).getByRole("timer")).toHaveTextContent("仍需手动确认");
+    expect(mockApi.autoConfirmAction).not.toHaveBeenCalled();
+    sessionStorage.removeItem("agentforge.accessToken");
+  });
+  it("shows a project-level MCP pending action after opening a fresh chat route", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    sessionStorage.setItem("agentforge.accessToken", "token");
+    window.history.replaceState({}, "", "/chat");
+    const mcpAction: AgentAction = {
+      id: "action-mcp", projectId: project.id, actionType: "CREATE_TASK", status: "PENDING",
+      title: "MCP recovered task",
+      createdAt: "2026-10-03T00:00:00Z",
+    };
+    const mockApi = api({
+      listRecoverableActions: vi.fn().mockResolvedValue([{ action: mcpAction, source: "MCP" }]),
+    });
+
+    render(<App api={mockApi} />);
+
+    const dialog = await screen.findByRole("dialog", { name: "待确认操作" });
+    expect(within(dialog).getByText("MCP recovered task")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("timer")).toHaveTextContent("仍需手动确认");
+    expect(mockApi.listRecoverableActions).toHaveBeenCalledWith(project.id);
+    sessionStorage.removeItem("agentforge.accessToken");
+  });
+  it("advances to the next recoverable action after a decision", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    sessionStorage.setItem("agentforge.accessToken", "token");
+    window.history.replaceState({}, "", "/chat");
+    const first: AgentAction = {
+      id: "recover-first", projectId: project.id, actionType: "UPDATE_TASK", status: "PENDING",
+      taskId: task.id, expectedVersion: 0, title: "First recovery", createdAt: "2026-10-03T00:00:00Z",
+    };
+    const second: AgentAction = {
+      id: "recover-second", projectId: project.id, actionType: "CREATE_TASK", status: "PENDING",
+      title: "Second recovery", createdAt: "2026-10-03T00:01:00Z",
+    };
+    const listRecoverableActions = vi.fn()
+      .mockResolvedValueOnce([{ action: first, source: "MCP" }])
+      .mockResolvedValueOnce([{ action: second, source: "CHAT" }]);
+    const mockApi = api({
+      listRecoverableActions,
+      rejectAction: vi.fn().mockResolvedValue({ ...first, status: "REJECTED" }),
+    });
+
+    render(<App api={mockApi} />);
+    await screen.findByText("First recovery");
+    await userEvent.click(screen.getByRole("button", { name: "拒绝" }));
+
+    expect(await screen.findByText("Second recovery")).toBeInTheDocument();
+    expect(listRecoverableActions).toHaveBeenNthCalledWith(2, project.id, undefined);
     sessionStorage.removeItem("agentforge.accessToken");
   });
   it("does not reopen a conversation after leaving its route while detail is loading", async () => {

@@ -23,6 +23,7 @@
 4. 用户调用 confirm 或 reject。Java 再校验 actor/project/action 归属。
 5. confirm 携带 `Idempotency-Key`，锁定 action、重新执行 Tool Policy/RBAC 后进入 `APPROVED`，再复用 `TaskService` 创建或更新；update 同时校验 Task 当前 version。
 6. 成功返回 `EXECUTED` 和 resultTask；业务冲突返回稳定 `FAILED`；reject 返回 `REJECTED` 且不写 Task。每次状态变化均追加结构化审计。
+7. Web 可读取当前用户在项目内仍为 `PENDING` / `APPROVED` 的可恢复 Action；历史会话按 conversationId 恢复 Chat Action，项目级读取同时覆盖 MCP Action。恢复的 Action 一律回到人工处理，不重新启动自动确认计时；`APPROVED` 恢复只提供原决定键继续 confirm，不允许改用新键或重新 reject。处理完成后 Web 重新读取并推进下一条。
 
 ## 安全与并发
 
@@ -30,6 +31,7 @@
 - Python 提供的枚举、长度、组合和 UUID 由 Java 再校验，不可信字段返回普通 Chat 且不保存 action，或在公共 action API 返回 400/409。
 - action 必须用 `projectId + actionId` 查询；普通用户还必须匹配 `requestedByUserId`，ADMIN 可代审批。代审批的授权、审计和批准后执行使用当前管理员 actor；Chat checkpoint 恢复仍使用不可由客户端覆盖的原 `requestedByUserId`。
 - 同一 action 并发/重复确认最多执行一次；同一 key 在响应丢失后返回既有结果，不同 key replay 返回 409。
+- 可恢复 Action 查询仍受 JWT、项目访问和 `requestedByUserId` 隔离；普通用户与管理员都只读取自己发起的恢复队列，避免查询接口泄露其他用户的提案或决定键。
 - proposal 创建时已 stale 返回 409 且不保存；批准后发生的版本冲突或目标 Task 已删除属于确定性业务失败，记录为 `FAILED` 且不改变 Task。若冲突直到 Hibernate flush 才出现，业务执行事务先完整回滚，再由事务外 Workflow 以短事务提交 FAILED 与审计；数据库、网络等未知基础设施异常不转为 FAILED，保留 APPROVED 供相同 key 重试。
 
 ## 测试边界

@@ -21,6 +21,10 @@ public interface AgentTaskActionRepository {
             UUID projectId,
             UUID userId,
             String proposalIdempotencyKey);
+
+    List<AgentTaskAction> findRecoverable(
+            UUID projectId, UUID userId, UUID conversationId);
+
     boolean existsByConversationAndStatusIn(UUID projectId, UUID userId, UUID conversationId,
             List<AgentActionStatus> statuses);
 }

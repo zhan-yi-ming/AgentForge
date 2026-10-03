@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -58,6 +59,35 @@ class AgentActionServiceTest {
         service = new AgentActionService(actions, auditEvents, projectAccess, riskEngine, taskService, clock, conversations);
         when(actions.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(auditEvents.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    @Test
+    void recoverableActionsReturnOnlyRepositoryScopedRowsAndExposeTheApprovedDecisionKey() {
+        UUID projectId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(UUID.randomUUID(), true);
+        AgentTaskAction pending = AgentTaskAction.pending(
+                projectId, actor.userId(), conversationId, UUID.randomUUID(),
+                AgentActionType.CREATE_TASK, null, "Pending", null, TaskStatus.TODO,
+                TaskPriority.MEDIUM, null, Instant.now(clock));
+        AgentTaskAction approved = AgentTaskAction.pendingMcp(
+                projectId, actor.userId(), "mcp-proposal", AgentActionType.CREATE_TASK,
+                null, "Approved", null, TaskStatus.TODO, TaskPriority.HIGH, null,
+                Instant.now(clock).plusSeconds(1));
+        approved.approve("original-decision-key", Instant.now(clock).plusSeconds(2));
+        when(actions.findRecoverable(projectId, actor.userId(), null))
+                .thenReturn(List.of(pending, approved));
+
+        List<RecoverableAgentActionView> result = service.listRecoverable(projectId, actor, null);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).decisionKey()).isNull();
+        assertThat(result.get(0).source()).isEqualTo(com.agentforge.core.agent.domain.AgentActionSource.CHAT);
+        assertThat(result.get(1).action().status()).isEqualTo(AgentActionStatus.APPROVED);
+        assertThat(result.get(1).source()).isEqualTo(com.agentforge.core.agent.domain.AgentActionSource.MCP);
+        assertThat(result.get(1).decisionKey()).isEqualTo("original-decision-key");
+        verify(projectAccess).requireAccess(projectId, actor);
+        verify(actions).findRecoverable(projectId, actor.userId(), null);
     }
 
     @Test

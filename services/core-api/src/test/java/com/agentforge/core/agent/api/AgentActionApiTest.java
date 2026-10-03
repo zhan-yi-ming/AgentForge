@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -23,8 +24,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.agentforge.core.agent.application.AgentActionWorkflowService;
+import com.agentforge.core.agent.application.AgentActionService;
 import com.agentforge.core.agent.application.AgentActionView;
+import com.agentforge.core.agent.application.RecoverableAgentActionView;
 import com.agentforge.core.agent.domain.AgentActionStatus;
+import com.agentforge.core.agent.domain.AgentActionSource;
 import com.agentforge.core.agent.domain.AgentActionType;
 import com.agentforge.core.security.SecurityConfiguration;
 import com.agentforge.core.security.SecurityProblemWriter;
@@ -45,6 +49,37 @@ class AgentActionApiTest {
 
     @Autowired MockMvc mockMvc;
     @MockitoBean AgentActionWorkflowService workflowService;
+    @MockitoBean AgentActionService actionService;
+
+    @Test
+    void recoverableActionsAreReadForTheAuthenticatedUserAndIncludeApprovedRetryKey() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        UUID actionId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Instant now = Instant.parse("2026-10-03T10:00:00Z");
+        AgentActionView action = new AgentActionView(
+                actionId, projectId, conversationId, AgentActionType.CREATE_TASK,
+                AgentActionStatus.APPROVED, null, null, "Recover", null,
+                "TODO", "HIGH", null, now, null);
+        when(actionService.listRecoverable(
+                org.mockito.ArgumentMatchers.eq(projectId), any(),
+                org.mockito.ArgumentMatchers.eq(conversationId)))
+                .thenReturn(List.of(new RecoverableAgentActionView(action, AgentActionSource.CHAT, "original-key")));
+
+        mockMvc.perform(get("/api/v1/projects/{projectId}/agent/actions/recoverable", projectId)
+                        .queryParam("conversationId", conversationId.toString())
+                        .with(jwt().jwt(token -> token.subject(userId.toString()).claim("roles", List.of("USER")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].action.id").value(actionId.toString()))
+                .andExpect(jsonPath("$[0].action.status").value("APPROVED"))
+                .andExpect(jsonPath("$[0].source").value("CHAT"))
+                .andExpect(jsonPath("$[0].decisionKey").value("original-key"));
+        verify(actionService).listRecoverable(
+                org.mockito.ArgumentMatchers.eq(projectId),
+                org.mockito.ArgumentMatchers.argThat(actor -> actor.userId().equals(userId)),
+                org.mockito.ArgumentMatchers.eq(conversationId));
+    }
 
     @Test
     void confirmReturnsExecutedActionAndTask() throws Exception {

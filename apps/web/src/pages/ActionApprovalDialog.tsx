@@ -16,7 +16,8 @@ export function ActionApprovalDialog({ action, busy, onClose, onDecision, onAuto
   const deadline = useRef(Date.now() + 60_000);
   const autoSent = useRef(false);
   const [remaining, setRemaining] = useState(60);
-  const autoEligible = action.actionType === "CREATE_TASK";
+  const approved = action.status === "APPROVED";
+  const autoEligible = !action.recovered && !approved && action.source !== "MCP" && action.actionType === "CREATE_TASK";
 
   useEffect(() => {
     const tick = () => {
@@ -58,11 +59,13 @@ export function ActionApprovalDialog({ action, busy, onClose, onDecision, onAuto
   return createPortal(<div className="approval-backdrop">
     <section className="approval-dialog" role="dialog" aria-modal="true" aria-labelledby="approval-dialog-title" ref={dialogRef}>
       <span className="eyebrow">ACTION REVIEW</span>
-      <h2 id="approval-dialog-title">待确认操作</h2>
-      <p className="approval-intro">{autoEligible
+      <h2 id="approval-dialog-title">{approved ? "继续执行已批准操作" : "待确认操作"}</h2>
+      <p className="approval-intro">{approved
+        ? "此操作已经批准。请使用原审批凭据继续执行，不可重新拒绝或更换决定。"
+        : autoEligible
         ? "请核对以下提案。60 秒后将请求自动确认，Java 会再次校验权限与风险。"
         : "请核对以下提案。此操作必须手动确认，Java 才会再次校验并尝试写入。"}</p>
-      <p className="approval-countdown" role="timer" aria-live="off">{remaining} 秒{autoEligible ? "后自动确认" : "后仍需手动确认"}</p>
+      {!approved && <p className="approval-countdown" role="timer" aria-live="off">{remaining} 秒{autoEligible ? "后自动确认" : "后仍需手动确认"}</p>}
       <dl className="approval-fields">
         <div><dt>操作</dt><dd>{action.actionType === "CREATE_TASK" ? "新建任务" : "更新任务"}</dd></div>
         <div><dt>标题</dt><dd>{action.title || "未提供"}</dd></div>
@@ -74,8 +77,8 @@ export function ActionApprovalDialog({ action, busy, onClose, onDecision, onAuto
       </dl>
       <div className="approval-actions">
         <button type="button" className="ghost" onClick={onClose} ref={laterRef}>稍后处理</button>
-        <button type="button" className="danger" onClick={() => onDecision("reject")} disabled={busy}>拒绝</button>
-        <button type="button" onClick={() => onDecision("confirm")} disabled={busy}>确认执行</button>
+        {!approved && <button type="button" className="danger" onClick={() => onDecision("reject")} disabled={busy}>拒绝</button>}
+        <button type="button" onClick={() => onDecision("confirm")} disabled={busy}>{approved ? "继续执行" : "确认执行"}</button>
       </div>
     </section>
   </div>, document.body);

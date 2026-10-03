@@ -1,5 +1,5 @@
 import { FormEvent, PointerEvent as ReactPointerEvent, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ApiProblem, createApiClient, type AgentAction, type ApiClient, type ConversationSummary, type Project, type Task, type WikiPage } from "./api";
+import { ApiProblem, createApiClient, type AgentAction, type ApiClient, type ConversationSummary, type Project, type RecoverableAgentAction, type Task, type WikiPage } from "./api";
 import { normalizeMarkdownContent } from "./markdown";
 import { parseRoute, useAppRoute } from "./route";
 import type { ChatHistoryItem } from "./pages/ChatPage";
@@ -209,6 +209,14 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setWikiVersion(page?.version ?? 0);
   }, []);
 
+  const showFirstRecoverable = useCallback((recoverableActions: RecoverableAgentAction[]) => {
+    const recovered = recoverableActions[0];
+    setPendingAction(recovered
+      ? { ...recovered.action, source: recovered.source, recovered: true }
+      : undefined);
+    if (recovered?.decisionKey) decisionKeys.current.set(recovered.action.id, recovered.decisionKey);
+  }, []);
+
   useEffect(() => {
     if (!authenticated) return;
     let active = true;
@@ -234,6 +242,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setChatHistory([]);
     setExpandedChatIds(new Set());
     setPendingAction(undefined);
+    decisionKeys.current.clear();
     setConversationSummaries([]);
     setHistoryOpen(false);
     setConversationToDelete(undefined);
@@ -247,10 +256,20 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         setWikiPages(pages);
         setTasks(loadedTasks);
         setConversationSummaries(loadedConversations);
+        const currentRoute = parseRoute(window.location.pathname);
+        if (currentRoute.page !== "chat" || !currentRoute.conversationId) {
+          api.listRecoverableActions(projectId).then((recoverableActions) => {
+            const latestRoute = parseRoute(window.location.pathname);
+            if (active && activeProjectId.current === projectId &&
+                (latestRoute.page !== "chat" || !latestRoute.conversationId)) {
+              showFirstRecoverable(recoverableActions);
+            }
+          }).catch((cause) => { if (active) report(cause); });
+        }
         selectWiki(pages[0]);
       }).catch(report);
     return () => { active = false; streamAbort.current?.abort(); formatAbort.current?.abort(); };
-  }, [api, projectId, report, selectWiki]);
+  }, [api, projectId, report, selectWiki, showFirstRecoverable]);
 
   async function openConversation(selectedConversationId: string) {
     if (!projectId) return;
@@ -287,12 +306,19 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
       setConversationId(detail.conversationId);
       setChatHistory(items);
       setExpandedChatIds(new Set(items.map((item) => item.id)));
-      setPendingAction(undefined);
       setHistoryOpen(false);
       setChatMode(true);
       chatModeRef.current = true;
       setChatExpanded(false);
       navigate(`/chat/${encodeURIComponent(detail.conversationId)}`);
+      try {
+        const recoverableActions = await api.listRecoverableActions(requestedProjectId, selectedConversationId);
+        if (activeProjectId.current === requestedProjectId && activeConversationLoad.current === load) {
+          showFirstRecoverable(recoverableActions);
+        }
+      } catch (cause) {
+        if (activeProjectId.current === requestedProjectId && activeConversationLoad.current === load) report(cause);
+      }
     } catch (cause) {
       if (activeProjectId.current === requestedProjectId && activeConversationLoad.current === load) report(cause);
     } finally {
@@ -304,6 +330,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   }
 
   function newChat() {
+    const requestedProjectId = projectId;
     activeConversationLoad.current += 1;
     loadingConversationId.current = undefined;
     streamAbort.current?.abort();
@@ -321,6 +348,15 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     chatModeRef.current = true;
     setChatExpanded(false);
     navigate("/chat");
+    if (requestedProjectId) {
+      api.listRecoverableActions(requestedProjectId).then((recoverableActions) => {
+        const currentRoute = parseRoute(window.location.pathname);
+        if (activeProjectId.current === requestedProjectId && currentRoute.page === "chat" &&
+            !currentRoute.conversationId) {
+          showFirstRecoverable(recoverableActions);
+        }
+      }).catch(report);
+    }
   }
 
   async function deleteSelectedConversation() {
@@ -371,12 +407,19 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         loadingConversationId.current !== route.conversationId) {
         void openConversation(route.conversationId);
       } else if (!route.conversationId && routeChanged && (loadingConversationId.current || conversationId)) {
-        activeConversationLoad.current += 1;
+        const load = ++activeConversationLoad.current;
         loadingConversationId.current = undefined;
         streamAbort.current?.abort();
         setConversationId(undefined);
         setChatHistory([]);
         setPendingAction(undefined);
+        api.listRecoverableActions(projectId).then((recoverableActions) => {
+          const latestRoute = parseRoute(window.location.pathname);
+          if (activeProjectId.current === projectId && activeConversationLoad.current === load &&
+              latestRoute.page === "chat" && !latestRoute.conversationId) {
+            showFirstRecoverable(recoverableActions);
+          }
+        }).catch(report);
       }
     } else if (route.page === "wiki" || route.page === "wiki-graph") {
       setChatMode(false);
@@ -586,12 +629,24 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
           decisionKeys.current.delete(actionId);
           setPendingAction(undefined);
           setError("审批已记录，但执行失败。请刷新目标后重新发起。");
+          const currentRoute = parseRoute(window.location.pathname);
+          const selectedConversationId = currentRoute.page === "chat" ? currentRoute.conversationId : undefined;
+          try {
+            const recoverableActions = await api.listRecoverableActions(projectId, selectedConversationId);
+            if (activeProjectId.current === projectId) showFirstRecoverable(recoverableActions);
+          } catch (cause) { report(cause); }
           return;
         }
         await loadTasks(projectId);
       } else await api.rejectAction(projectId, actionId, idempotencyKey);
       decisionKeys.current.delete(actionId);
       setPendingAction(undefined);
+      const currentRoute = parseRoute(window.location.pathname);
+      const selectedConversationId = currentRoute.page === "chat" ? currentRoute.conversationId : undefined;
+      try {
+        const recoverableActions = await api.listRecoverableActions(projectId, selectedConversationId);
+        if (activeProjectId.current === projectId) showFirstRecoverable(recoverableActions);
+      } catch (cause) { report(cause); }
     } catch (cause) { report(cause); } finally { setBusy(false); }
   }
 

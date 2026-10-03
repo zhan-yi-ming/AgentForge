@@ -114,6 +114,48 @@ class PersistenceIntegrationTest {
     }
 
     @Test
+    void recoverableActionsIncludeChatAndMcpButConversationScopeReturnsOnlyItsChatAction() {
+        var authentication = authenticationService.register(
+                "recoverable-actions@example.com", "Recovery Integration", "integration-password");
+        var actor = new AuthenticatedActor(authentication.user().id(), false);
+        var project = projectService.createProject(actor, "Recovery Project", null);
+        var conversationId = java.util.UUID.randomUUID();
+        conversationHistoryService.appendCompletedExchange(
+                project.id(), actor, conversationId, "Create a task", "Review this proposal.", java.util.List.of());
+        var chat = agentActionService.createPending(
+                project.id(), actor, conversationId,
+                new ToolProposal("CREATE_TASK", null, null, "Chat task", null,
+                        "TODO", "MEDIUM", java.util.UUID.randomUUID()),
+                "recover-chat").orElseThrow();
+        var mcp = agentActionService.createPendingMcp(
+                project.id(), actor,
+                new ToolProposal("CREATE_TASK", null, null, "MCP task", null,
+                        "TODO", "HIGH", null),
+                "recover-mcp-proposal", "recover-mcp").orElseThrow();
+        agentActionService.approve(project.id(), mcp.id(), actor, "original-mcp-key", "approve-mcp");
+
+        var projectActions = agentActionService.listRecoverable(project.id(), actor, null);
+        var conversationActions = agentActionService.listRecoverable(project.id(), actor, conversationId);
+
+        assertThat(projectActions).extracting(item -> item.action().id())
+                .containsExactly(chat.id(), mcp.id());
+        assertThat(projectActions.get(0).decisionKey()).isNull();
+        assertThat(projectActions.get(1).decisionKey()).isEqualTo("original-mcp-key");
+        assertThat(conversationActions).extracting(item -> item.action().id())
+                .containsExactly(chat.id());
+
+        var otherAuthentication = authenticationService.register(
+                "recoverable-actions-admin@example.com", "Recovery Admin", "integration-password");
+        var otherAdmin = new AuthenticatedActor(otherAuthentication.user().id(), true);
+        assertThat(agentActionService.listRecoverable(project.id(), otherAdmin, null)).isEmpty();
+
+        agentActionService.reject(project.id(), chat.id(), actor, "reject-chat", "reject-chat-request");
+        agentActionService.executeApproved(
+                project.id(), mcp.id(), actor, "original-mcp-key", "execute-mcp-request");
+        assertThat(agentActionService.listRecoverable(project.id(), actor, null)).isEmpty();
+    }
+
+    @Test
     void deletedConversationKeepsItsIdButErasesCompletedMessages() {
         var authentication = authenticationService.register(
                 "history-delete-integration@example.com", "History Delete", "integration-password");

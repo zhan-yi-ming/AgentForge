@@ -1,5 +1,6 @@
 package com.agentforge.core.agent.api;
 
+import java.util.List;
 import java.util.UUID;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -9,13 +10,16 @@ import jakarta.validation.constraints.Size;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.validation.annotation.Validated;
 
 import com.agentforge.core.agent.application.AgentActionWorkflowService;
+import com.agentforge.core.agent.application.AgentActionService;
 import com.agentforge.core.security.AuthenticatedActor;
 import com.agentforge.core.shared.web.RequestIdFilter;
 
@@ -25,9 +29,21 @@ import com.agentforge.core.shared.web.RequestIdFilter;
 public class AgentActionController {
 
     private final AgentActionWorkflowService actionWorkflow;
+    private final AgentActionService actions;
 
-    public AgentActionController(AgentActionWorkflowService actionWorkflow) {
+    public AgentActionController(AgentActionWorkflowService actionWorkflow, AgentActionService actions) {
         this.actionWorkflow = actionWorkflow;
+        this.actions = actions;
+    }
+
+    @GetMapping("/recoverable")
+    List<RecoverableAgentActionResponse> recoverable(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID projectId,
+            @RequestParam(required = false) UUID conversationId) {
+        return actions.listRecoverable(projectId, AuthenticatedActor.from(jwt), conversationId).stream()
+                .map(RecoverableAgentActionResponse::from)
+                .toList();
     }
 
     @PostMapping("/{actionId}/confirm")

@@ -239,6 +239,12 @@ title 1–200；description 可空且最大 10,000。status 可省略，默认 `
 
 V1.1 在转发给 Agent Service 前原子消费一次用户 UTC 日配额；达到 `AGENTFORGE_AI_DAILY_LIMIT` 后返回 429。限制为 0 只表示本地开发关闭配额。
 
+### `GET /api/v1/projects/{projectId}/agent/actions/recoverable?conversationId={uuid}`
+
+返回当前认证用户在该项目中仍可处理的 Action 数组，按创建时间升序排列，仅包含 `PENDING` 与 `APPROVED`。`conversationId` 可选；提供时仅返回该历史会话的 Chat Action，不提供时同时覆盖 Chat 与 MCP Action。接口重新校验 JWT 与项目访问权，并始终按 Action 的 `requestedByUserId` 隔离；ADMIN 也不会通过该列表读取其他用户的提案。
+
+每项为 `{ "action": AgentActionResponse, "source": "CHAT" | "MCP", "decisionKey": string | null }`。`PENDING` 的 `decisionKey` 为空或省略，客户端在首次 confirm/reject 时生成键；`APPROVED` 返回已经持久化的原键，仅用于继续 confirm。终态 `EXECUTED / REJECTED / FAILED` 不返回。客户端不得为恢复的 `APPROVED` 生成新键或发起 reject；恢复的 MCP Action 始终保留手动确认要求。
+
 ### `POST /api/v1/projects/{projectId}/agent/actions/{actionId}/confirm`
 
 无 body；必须发送 1–100 字符的 `Idempotency-Key`，字符限于字母、数字、点、下划线、冒号和连字符。重新校验 JWT、project、action 发起者、服务端 Tool Policy 和目标 Task version。状态按 `PENDING → APPROVED → EXECUTED | FAILED` 变化。相同 key 重放返回既有结果且不重复写入；不同 key replay、已拒绝 action 返回 409；路径不匹配返回 404；其他用户返回 403。已审批 UPDATE_TASK 在执行时发现目标已删除、业务版本冲突或 flush 期真实乐观锁冲突，返回 `status=FAILED`、`resultTask=null` 并持久化失败审计；flush 冲突先回滚整个 Task/Graph sync/EXECUTED 事务，再以独立短事务收敛仍为 APPROVED 的 Action。未知基础设施异常不标记 FAILED，保留 APPROVED 供相同 key 重试。若已执行结果 Task 后续被删除，同 key replay 仍返回 `status=EXECUTED`，但 `resultTask=null`。
