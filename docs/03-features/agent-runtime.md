@@ -2,7 +2,7 @@
 
 - 状态：Implemented
 - 所属阶段：V2-07
-- 相关 ADR：ADR-0009、ADR-0011、ADR-0021、ADR-0022
+- 相关 ADR：ADR-0009、ADR-0011、ADR-0021、ADR-0022、ADR-0037、ADR-0038、ADR-0039
 
 ## 用户价值
 
@@ -26,8 +26,8 @@ stateDiagram-v2
 1. Python 完成 Context、Retrieval、Tool planning 和回答生成。
 2. 仅当存在有效 Tool proposal 时，Action workflow 以完整 Memory Namespace 派生的稳定物理 thread key 写入 checkpoint 并动态 interrupt；每次新等待轮次生成不可复用的内部 `workflowId`，对外 Thread 标识仍是 `conversationId`。
 3. Python 在内部 proposal 中返回本轮 `workflowId`；Java 校验 proposal、以该 ID 幂等持久化唯一 PENDING Approval，并把不含 workflow ID 的公共 pending action 返回用户。
-4. 用户 confirm/reject 后，Java 重新验证 Project、actor 和服务端 Tool Policy，并先持久化决定。
-5. Java 使用内部凭据把 workflow、action、decision 和 Idempotency Key 发送给 Python Resume 接口。
+4. 用户 confirm/reject 后，Java 重新验证 Project、当前决策 actor 和服务端 Tool Policy，并先以当前 actor 追加审计、持久化决定；ADMIN 可代替 Action 原请求人决策。
+5. Java 使用持久化的 Action 原请求人作为 checkpoint owner，把其 user ID、当前 actor 的管理员标记、workflow、action、decision 和 Idempotency Key 发送给 Python Resume 接口。
 6. Python 从 PostgreSQL 恢复相同 Thread，并要求 workflow ID 精确匹配当前等待轮次；批准恢复成功后 Java 再锁定 Approval、再次复核权限并执行 Tool。
 7. 任一网络响应丢失时，相同 key 重试返回已提交事实；不同 key 或相反 decision 冲突。
 
@@ -38,6 +38,8 @@ stateDiagram-v2
 checkpoint 只保存恢复所需的受限状态：schema version、tenant/workspace/project/user/thread、不可复用 workflow ID、proposal 指纹、等待/恢复/补偿状态、action ID、decision、Idempotency Key 和 request ID。不得保存 JWT、服务间 token、密码、完整 Prompt、回答正文或检索正文。
 
 Thread 恢复必须同时匹配完整 Memory Namespace 和本轮 workflow ID。仅知道 conversation ID 或旧 Action ID 不能跨 Project/User/轮次恢复。等待期间只有相同 request 与相同 proposal 的重试返回原 workflow；不同 request 即使 proposal 内容相同也冲突。恢复完成后的新 proposal 建立新的 workflow ID，同时保留 LangGraph checkpoint 历史。
+
+checkpoint owner 与审批执行者是不同身份：owner 固定为 Action 创建时由 Java 保存的 `requestedByUserId`，用于定位 Python Namespace；审批授权、审计和业务执行使用当前认证 actor。普通用户只能决定自己的 Action，ADMIN 可代审批，但管理员 user ID 不替换 owner，也不作为恢复 Namespace。
 
 ## 一致性与重试
 

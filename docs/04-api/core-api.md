@@ -249,7 +249,7 @@ V1.1 在转发给 Agent Service 前原子消费一次用户 UTC 日配额；达�
 
 V2-06 的 action status 枚举为 `PENDING / APPROVED / REJECTED / EXECUTED / FAILED`。每次请求、批准、拒绝、执行成功或业务失败由 Java 在同一事务中追加审计事实；HTTP 不接受 actor、状态、risk、result 或审计字段。
 
-V2-07 目标语义中，confirm 先在短事务提交 `APPROVED`，再在事务外调用 Agent Service Resume，成功后由第二个短事务锁定 action、重新授权并执行。Agent Service 暂时不可用时返回 503，但已提交的 APPROVED 不回滚；相同 Idempotency Key 重试继续 Resume/Execute。相同 key 的 `EXECUTED`/`FAILED` replay 保持 V2-06 语义。升级前已存在且没有 checkpoint 的 V2-06 Action 由内部 workflow version 标记识别，继续使用旧 Java 决策链路；该标记不加入响应。
+V2-07 目标语义中，confirm 先在短事务提交 `APPROVED`，再在事务外调用 Agent Service Resume，成功后由第二个短事务锁定 action、重新授权并执行。普通用户只能决定自己发起的 Action；ADMIN 可代审批。授权、审计和批准后执行始终使用当前认证 actor，而 Resume 的 Namespace user 使用 Action 创建时由 Java 持久化的原 `requestedByUserId`，客户端不能指定该 owner。Agent Service 暂时不可用时返回 503，但已提交的 APPROVED 不回滚；相同 Idempotency Key 重试继续 Resume/Execute。相同 key 的 `EXECUTED`/`FAILED` replay 保持 V2-06 语义。升级前已存在且没有 checkpoint 的 V2-06 Action 由内部 workflow version 标记识别，继续使用旧 Java 决策链路；该标记不加入响应。
 
 新建 Chat Action 使用内部 workflow version 2：Python proposal 提供本轮 `actionWorkflowId`，Java 以该 ID 幂等复用唯一 Approval，并在 Resume 时原样带回。workflow ID、Action ID、conversation/project/user scope、decision 与决策幂等键必须共同匹配当前 checkpoint；旧 Action 决策不能消费新一轮等待点。既有 version 1 Action 继续兼容无 workflow ID 的恢复，MCP Action 仍不绑定 checkpoint。内部 workflow ID 不加入公共 Action 响应。
 

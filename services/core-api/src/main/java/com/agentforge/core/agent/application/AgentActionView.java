@@ -24,7 +24,8 @@ public record AgentActionView(
         Instant createdAt,
         Instant decidedAt,
         Integer actionWorkflowVersion,
-        UUID actionWorkflowId) {
+        UUID actionWorkflowId,
+        UUID requestedByUserId) {
 
     public AgentActionView(
             UUID id,
@@ -44,7 +45,7 @@ public record AgentActionView(
         this(
                 id, projectId, conversationId, actionType, status, taskId,
                 expectedVersion, title, description, taskStatus, priority,
-                resultTask, createdAt, decidedAt, null, null);
+                resultTask, createdAt, decidedAt, null, null, null);
     }
 
     public AgentActionView(
@@ -66,7 +67,30 @@ public record AgentActionView(
         this(
                 id, projectId, conversationId, actionType, status, taskId,
                 expectedVersion, title, description, taskStatus, priority,
-                resultTask, createdAt, decidedAt, actionWorkflowVersion, null);
+                resultTask, createdAt, decidedAt, actionWorkflowVersion, null, null);
+    }
+
+    public AgentActionView(
+            UUID id,
+            UUID projectId,
+            UUID conversationId,
+            AgentActionType actionType,
+            AgentActionStatus status,
+            UUID taskId,
+            Long expectedVersion,
+            String title,
+            String description,
+            String taskStatus,
+            String priority,
+            TaskView resultTask,
+            Instant createdAt,
+            Instant decidedAt,
+            Integer actionWorkflowVersion,
+            UUID actionWorkflowId) {
+        this(
+                id, projectId, conversationId, actionType, status, taskId,
+                expectedVersion, title, description, taskStatus, priority,
+                resultTask, createdAt, decidedAt, actionWorkflowVersion, actionWorkflowId, null);
     }
 
     static AgentActionView from(AgentTaskAction action, TaskView resultTask) {
@@ -86,6 +110,7 @@ public record AgentActionView(
                 action.getCreatedAt(),
                 action.getDecidedAt(),
                 action.getActionWorkflowVersion(),
-                action.getActionWorkflowId());
+                action.getActionWorkflowId(),
+                action.getRequestedByUserId());
     }
 }

@@ -234,6 +234,37 @@ class AgentActionServiceTest {
     }
 
     @Test
+    void adminDecisionKeepsTheRequesterAsCheckpointOwnerAndAuditsTheAdmin() {
+        UUID projectId = UUID.randomUUID();
+        UUID requesterId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        var admin = new AuthenticatedActor(adminId, true);
+        AgentTaskAction action = AgentTaskAction.pending(
+                projectId,
+                requesterId,
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                AgentActionType.CREATE_TASK,
+                null,
+                "Admin decision",
+                null,
+                TaskStatus.TODO,
+                TaskPriority.HIGH,
+                null,
+                Instant.now(clock));
+        when(actions.findByProjectIdAndIdForUpdate(projectId, action.getId())).thenReturn(Optional.of(action));
+
+        AgentActionView approved = service.approve(
+                projectId, action.getId(), admin, "admin-decision-key", "admin-decision-request");
+
+        assertThat(approved.requestedByUserId()).isEqualTo(requesterId);
+        verify(auditEvents).save(org.mockito.ArgumentMatchers.argThat(event ->
+                event.getEventType() == AgentAuditEventType.APPROVED
+                        && event.getActorUserId().equals(adminId)
+                        && event.getApprovalId().equals(action.getId())));
+    }
+
+    @Test
     void rejectingActionNeverWritesAndCannotThenBeConfirmed() {
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();

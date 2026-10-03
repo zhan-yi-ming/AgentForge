@@ -88,7 +88,7 @@ class AgentServiceHttpContractIntegrationTest {
     }
 
     @Test
-    void javaClientResumesARealInterruptedPythonWorkflow() {
+    void javaClientResumesTheCheckpointOwnerWhenTheDecisionActorIsAdmin() {
         HttpAgentServiceClient client = new HttpAgentServiceClient(restClient, objectMapper);
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
@@ -106,7 +106,7 @@ class AgentServiceHttpContractIntegrationTest {
         var resumed = client.resume(
                 projectId,
                 userId,
-                false,
+                true,
                 conversationId,
                 workflowId,
                 actionId,

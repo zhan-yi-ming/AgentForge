@@ -66,7 +66,7 @@ V2-05 不改变 Python Chat HTTP schema，也不让 Python 接收或决定 Tool 
 
 V2-06 仍不改变 Python Chat HTTP schema。Approval 五态、Idempotency Key、执行前权限复核与 Audit Event 全部位于 Java/Core API；Python 继续只生成不可信 `toolProposal`，不接收或回传可信 approval、actor、risk、idempotency 或 audit 字段。
 
-V2-07 新增 `POST /internal/v1/agent/resume`，仅供 Core API 使用并继续要求 `X-AgentForge-Internal-Token`。当前请求包含 `projectId`、`userId`、`actorAdmin`、`conversationId`、`actionWorkflowId`、`actionId`、`decision`（`APPROVE | REJECT`）、`idempotencyKey` 与 `requestId`。Agent Service 使用配置中的 tenant/workspace 与请求 project/user/thread 组成完整 Namespace，从 PostgreSQL checkpoint 恢复动态 interrupt。既有 workflow v1 Action 恢复时允许省略 `actionWorkflowId`；新 workflow v2 必须提供并精确匹配。
+V2-07 新增 `POST /internal/v1/agent/resume`，仅供 Core API 使用并继续要求 `X-AgentForge-Internal-Token`。当前请求包含 `projectId`、`userId`、`actorAdmin`、`conversationId`、`actionWorkflowId`、`actionId`、`decision`（`APPROVE | REJECT`）、`idempotencyKey` 与 `requestId`。其中 `userId` 是 Java 从已持久化 Action 取得的 checkpoint owner（原请求人），不是可由客户端指定的当前审批人；`actorAdmin` 描述当前决策 actor 的管理员角色。Agent Service 使用配置中的 tenant/workspace 与请求 project/owner/thread 组成完整 Namespace，从 PostgreSQL checkpoint 恢复动态 interrupt，但不据这些字段授权审批。既有 workflow v1 Action 恢复时允许省略 `actionWorkflowId`；新 workflow v2 必须提供并精确匹配。
 
 成功返回同一 conversation/workflow/action/decision、`status=RESUMED` 和 requestId；相同 workflow/action/decision/key replay 返回相同事实。Thread 不存在、仍无 interrupt、Namespace/workflow/action 不匹配、不同 key/decision、state schema version 不支持均失败关闭，不创建替代 Thread。Resume 只证明 Agent workflow 已恢复，不执行或授权 Task 写入。
 

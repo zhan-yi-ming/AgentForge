@@ -36,3 +36,4 @@ ADR 保存影响长期结构的决定。编号只增不减，Accepted 记录不�
 - [ADR-0036-project-scoped-repository-context.md](ADR-0036-project-scoped-repository-context.md)：Repository Context 由部署配置绑定项目，只读取 Git HEAD 的有界白名单资料。
 - [ADR-0037-action-workflow-round-identity.md](ADR-0037-action-workflow-round-identity.md)：每轮 Chat Approval 使用不可复用 workflow ID 绑定 Java Action 与 LangGraph checkpoint。
 - [ADR-0038-action-checkpoint-compensation.md](ADR-0038-action-checkpoint-compensation.md)：未形成 Java Approval 的 WAITING 由精确 Abort 终结，并以稳定请求 Namespace 支持重试。
+- [ADR-0039-checkpoint-owner-and-decision-actor.md](ADR-0039-checkpoint-owner-and-decision-actor.md)：管理员代审批时分离 checkpoint owner 与实际决策 actor，恢复原请求人的 Namespace。

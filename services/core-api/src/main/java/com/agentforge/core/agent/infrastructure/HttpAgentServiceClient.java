@@ -131,7 +131,7 @@ public class HttpAgentServiceClient implements AgentServiceClient {
     @Override
     public AgentResumeResult resume(
             UUID projectId,
-            UUID userId,
+            UUID checkpointUserId,
             boolean actorAdmin,
             UUID conversationId,
             UUID actionWorkflowId,
@@ -145,7 +145,7 @@ public class HttpAgentServiceClient implements AgentServiceClient {
                     .header("X-Request-Id", requestId)
                     .body(new InternalResumeRequest(
                             projectId,
-                            userId,
+                            checkpointUserId,
                             actorAdmin,
                             conversationId,
                             actionWorkflowId,

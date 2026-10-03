@@ -55,7 +55,7 @@ public class AgentActionWorkflowService {
         if (approved.actionWorkflowVersion() != null) {
             AgentResumeResult resumed = agentService.resume(
                     projectId,
-                    actor.userId(),
+                    requireCheckpointOwner(approved),
                     actor.admin(),
                     approved.conversationId(),
                     approved.actionWorkflowId(),
@@ -81,7 +81,7 @@ public class AgentActionWorkflowService {
         if (rejected.actionWorkflowVersion() != null) {
             AgentResumeResult resumed = agentService.resume(
                     projectId,
-                    actor.userId(),
+                    requireCheckpointOwner(rejected),
                     actor.admin(),
                     rejected.conversationId(),
                     rejected.actionWorkflowId(),
@@ -93,6 +93,13 @@ public class AgentActionWorkflowService {
                     resumed, rejected.conversationId(), rejected.actionWorkflowId(), actionId, "REJECT");
         }
         return rejected;
+    }
+
+    private UUID requireCheckpointOwner(AgentActionView action) {
+        if (action.requestedByUserId() == null) {
+            throw new ServiceUnavailableException("Agent action is missing its checkpoint owner.");
+        }
+        return action.requestedByUserId();
     }
 
     private void requireMatchingResume(

@@ -68,6 +68,7 @@ class AgentActionApiTest {
                         .with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString()).claim("roles", List.of("USER")))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("EXECUTED"))
+                .andExpect(jsonPath("$.requestedByUserId").doesNotExist())
                 .andExpect(jsonPath("$.resultTask.id").value(taskId.toString()));
         verify(workflowService).confirm(
                 org.mockito.ArgumentMatchers.eq(projectId), org.mockito.ArgumentMatchers.eq(actionId), any(),

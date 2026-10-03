@@ -36,7 +36,7 @@ public interface AgentServiceClient {
 
     AgentResumeResult resume(
             UUID projectId,
-            UUID userId,
+            UUID checkpointUserId,
             boolean actorAdmin,
             UUID conversationId,
             UUID actionWorkflowId,
@@ -55,7 +55,7 @@ public interface AgentServiceClient {
 
     default AgentResumeResult resume(
             UUID projectId,
-            UUID userId,
+            UUID checkpointUserId,
             boolean actorAdmin,
             UUID conversationId,
             UUID actionId,
@@ -63,7 +63,7 @@ public interface AgentServiceClient {
             String idempotencyKey,
             String requestId) {
         return resume(
-                projectId, userId, actorAdmin, conversationId, null, actionId,
+                projectId, checkpointUserId, actorAdmin, conversationId, null, actionId,
                 decision, idempotencyKey, requestId);
     }
 }
