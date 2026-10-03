@@ -23,6 +23,7 @@ class ChatState(TypedDict, total=False):
 
 Responder = Callable[[ChatState], str]
 ToolPlanner = Callable[[ContextBundle], ToolProposal | None]
+TOOL_CAPABLE_TASK_TYPES = frozenset({"ANSWER", "PLAN"})
 
 
 def deterministic_responder(state: ChatState) -> str:
@@ -150,9 +151,16 @@ def _context_nodes(
     def plan(state: ChatState) -> dict[str, object]:
         def operation() -> dict[str, object]:
             bundle = state["context_bundle"]
+            proposal = None
+            if bundle.working.task_type in TOOL_CAPABLE_TASK_TYPES:
+                proposal = (
+                    tool_planner(bundle)
+                    if tool_planner is not None
+                    else plan_tool(bundle.working.message)
+                )
             return {
                 "context_bundle": ContextManager.with_tool(
-                    bundle, tool_planner(bundle) if tool_planner is not None else plan_tool(bundle.working.message)
+                    bundle, proposal
                 )
             }
 

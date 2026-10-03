@@ -123,7 +123,7 @@ HTTP fields and auth semantics are unchanged. Optional deployment configuration 
 
 ### V3 审核修复：任务模式
 
-内部 Chat 和 Chat stream 请求新增可选 taskType：FORMAT、REWRITE、PLAN、REVIEW、ANSWER，省略或 null 为 ANSWER；未知值拒绝。Java 转发已校验值，Python 在请求边界验证；Tool 意图固定 PLAN。
+内部 Chat 和 Chat stream 请求新增可选 taskType：FORMAT、REWRITE、PLAN、REVIEW、ANSWER，省略或 null 为 ANSWER；未知值拒绝。Java 转发已校验值，Python 在请求边界验证。ANSWER/PLAN 可进入固定 PLAN 路由的 Tool 意图规划；FORMAT/REWRITE/REVIEW 必须返回 `toolProposal=null` 且不创建 WAITING checkpoint。若异常下游仍为受限模式返回 proposal，Java 必须精确 Abort 该轮并禁止创建 Action；同步与流式一致。
 
 ## V3-06 内部实体消歧建议（已实现）
 

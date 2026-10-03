@@ -18,6 +18,8 @@
 
 选择 Java 集中策略。不可变 Metadata 注册 `required_role`、`risk_level`、`need_approval`；Risk Engine 根据认证 actor、可信 Tool 名称和 ProjectAccess 判定。Agent proposal 只携带业务 Intent，客户端提供的策略字段不可信。直接 Java API 在对应应用服务入口调用同一策略。
 
+任务模式增加确定性能力门：ANSWER/PLAN 可携带 Tool Intent，FORMAT/REWRITE/REVIEW 为只读文本模式。Python 在图上游跳过受限模式的 planner/checkpoint，Java 仍以请求边界已校验的 taskType 复核；异常 proposal 必须 Abort 对应等待轮次，不能仅由前端忽略。该能力门先于 Tool Metadata/Risk/Approval，不授予任何额外权限。
+
 ## 结果
 
 权限规则可统一审查和负向测试，Java 保持最终写权限。代价是新增策略注册表和动作映射；任何新增 Tool 必须先注册 Metadata。V2-06 在此决策上增加通用 Approval/Audit/Idempotency。

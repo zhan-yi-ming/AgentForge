@@ -1041,16 +1041,11 @@ describe("App", () => {
     expect(screen.getByText("const answer = 42;").closest("pre")).toBeInTheDocument();
   });
 
-  it("keeps formatting isolated from chat and ignores any proposed action", async () => {
-    const pending: AgentAction = {
-      id: "action-format", projectId: project.id, conversationId: "format-conversation",
-      actionType: "CREATE_TASK", status: "PENDING", title: "Unexpected proposal",
-      createdAt: "2026-09-05T00:00:00Z",
-    };
+  it("keeps formatting isolated from chat without an approval result", async () => {
     const streamMock = vi.fn()
       .mockResolvedValueOnce({ conversationId: "project-conversation", answer: "Chat answer", requestId: "r4", sources: [] })
       .mockResolvedValueOnce({
-        conversationId: "format-conversation", answer: "# Formatted", requestId: "r5", sources: [], pendingAction: pending,
+        conversationId: "format-conversation", answer: "# Formatted", requestId: "r5", sources: [],
       });
     const mockApi = api({ chatStream: streamMock });
     const user = await login(mockApi);
@@ -1063,7 +1058,6 @@ describe("App", () => {
     await waitFor(() => expect(streamMock).toHaveBeenCalledTimes(2));
     expect(streamMock.mock.calls[1]?.[2]).toBeUndefined();
     expect(await screen.findByRole("heading", { name: "Formatted" })).toBeInTheDocument();
-    expect(screen.queryByText("Unexpected proposal")).not.toBeInTheDocument();
     expect(screen.getByText("会话 project-")).toBeInTheDocument();
   });
 

@@ -6,6 +6,10 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 public enum AgentTaskType {
     FORMAT, REWRITE, PLAN, REVIEW, ANSWER;
 
+    public boolean allowsToolProposal() {
+        return this == ANSWER || this == PLAN;
+    }
+
     @JsonCreator
     public static AgentTaskType fromJson(String value) {
         return valueOf(value);

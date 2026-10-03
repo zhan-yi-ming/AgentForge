@@ -28,6 +28,8 @@ flowchart LR
 
 Java 只信任认证 JWT、数据库中的 Project/资源归属和服务端 Tool Policy。Python proposal 只包含动作名与业务参数；额外的 role/risk/approval 字段不能改变策略。执行时仍重新读取真实项目和目标资源。
 
+任务能力同样由服务端确定：ANSWER/PLAN 可以提出 Tool Intent，FORMAT/REWRITE/REVIEW 只能生成文本。Python 先避免为只读模式规划 Tool；Java 仍按受信 taskType 复核，异常 proposal 必须精确 Abort 且不得形成 Action。Prompt 或待处理原文不能把只读模式升级为写能力。
+
 ## 策略矩阵
 
 | Tool / Operation | Risk | Required role | Agent approval |

@@ -1,4 +1,5 @@
 from dataclasses import replace
+import json
 from uuid import UUID, uuid4
 
 import pytest
@@ -11,7 +12,11 @@ from agentforge_agent.api import (
     get_responder,
     get_retrieval_service,
 )
-from agentforge_agent.action_runtime import ActionWorkflowConflict, ActionWorkflowRuntime
+from agentforge_agent.action_runtime import (
+    ActionWorkflowConflict,
+    ActionWorkflowNotFound,
+    ActionWorkflowRuntime,
+)
 from agentforge_agent.config import Settings, get_settings
 from agentforge_agent.context import ConversationMemory, MemoryNamespace, TokenCounter
 from agentforge_agent.errors import LlmDependencyError
@@ -860,6 +865,76 @@ def test_chat_uses_natural_language_planner_to_propose_action() -> None:
 
     assert response.status_code == 200
     assert response.json()["toolProposal"]["title"] == "登录回归清单"
+
+
+@pytest.mark.parametrize("task_type", ["FORMAT", "REWRITE", "REVIEW"])
+@pytest.mark.parametrize("path", ["/internal/v1/chat", "/internal/v1/chat/stream"])
+def test_read_only_task_modes_never_invoke_tool_planner_or_return_a_proposal(
+    task_type: str, path: str
+) -> None:
+    class InjectedPlannerResponder:
+        def __init__(self):
+            self.plan_calls = 0
+
+        def __call__(self, state):
+            return "# Formatted"
+
+        def stream(self, state):
+            yield "# Formatted"
+
+        def plan_tool(self, bundle):
+            self.plan_calls += 1
+            return ToolProposal(action_type="CREATE_TASK", title="Hidden task", status="TODO")
+
+    responder = InjectedPlannerResponder()
+    app.dependency_overrides[get_responder] = lambda: responder
+    try:
+        body = chat_request(message="create task: Hidden task")
+        body["taskType"] = task_type
+        response = client.post(
+            path,
+            headers={"X-AgentForge-Internal-Token": TOKEN},
+            json=body,
+        )
+    finally:
+        app.dependency_overrides.pop(get_responder, None)
+
+    assert response.status_code == 200
+    events = [json.loads(line) for line in response.text.splitlines()] if path.endswith("/stream") else []
+    payload = response.json() if path.endswith("/chat") else events[-1]
+    assert payload["toolProposal"] is None
+    assert responder.plan_calls == 0
+    conversation_id = payload["conversationId"] if path.endswith("/chat") else events[0]["conversationId"]
+    with pytest.raises(ActionWorkflowNotFound):
+        action_runtime.abort(
+            api_namespace(body["projectId"], body["userId"], conversation_id),
+            workflow_id=None,
+            request_id=body["requestId"],
+        )
+
+
+def test_plan_mode_keeps_the_existing_tool_proposal_flow() -> None:
+    class PlanResponder:
+        def __call__(self, state):
+            return "Please review."
+
+        def plan_tool(self, bundle):
+            return ToolProposal(action_type="CREATE_TASK", title="Visible task", status="TODO")
+
+    app.dependency_overrides[get_responder] = lambda: PlanResponder()
+    try:
+        body = chat_request(message="create task: Visible task")
+        body["taskType"] = "PLAN"
+        response = client.post(
+            "/internal/v1/chat",
+            headers={"X-AgentForge-Internal-Token": TOKEN},
+            json=body,
+        )
+    finally:
+        app.dependency_overrides.pop(get_responder, None)
+
+    assert response.status_code == 200
+    assert response.json()["toolProposal"]["title"] == "Visible task"
 
 
 def test_chat_proposes_explicit_task_update() -> None:

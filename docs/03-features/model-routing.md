@@ -31,7 +31,7 @@ V3-02 仅支持部署时选定的主模型及一个静态故障候选，不实�
 
 `AGENTFORGE_AGENT_LLM_ROUTES` 为候选 JSON 数组。字段：name、endpoint（primary/fallback 凭据槽）、model、tasks（FORMAT/REWRITE/PLAN/REVIEW/ANSWER）、json_output、streaming、cost_rank、latency_rank、capability_rank。等级为部署者校准的 1–100 相对值；成本/延迟越低越好，能力越高越好，不是实际账单或在线测量。凭据留在已有 LLM_API_KEY / LLM_FALLBACK_API_KEY，不进入路由 JSON。
 
-请求 taskType 为有限枚举 FORMAT/REWRITE/PLAN/REVIEW/ANSWER，省略或 null 默认为 ANSWER。Java 与 Python 均校验枚举；消息、检索与历史不能覆盖任务模式。Tool 意图入口固定 PLAN。任务模式不提供权限，也不允许客户端指定模型、provider 或 rank。
+请求 taskType 为有限枚举 FORMAT/REWRITE/PLAN/REVIEW/ANSWER，省略或 null 默认为 ANSWER。Java 与 Python 均校验枚举；消息、检索与历史不能覆盖任务模式。ANSWER 与 PLAN 允许进入 Tool 意图规划，规划模型固定使用 PLAN 路由；FORMAT、REWRITE、REVIEW 是只读文本能力，必须在 Python 图上游跳过 Tool planner/checkpoint，并由 Java 对异常 proposal 再次失败关闭。任务模式不提供权限，也不允许客户端指定模型、provider 或 rank。
 
 排序键：FORMAT=(成本,延迟,-能力,名称)，REWRITE=(延迟,成本,-能力,名称)，PLAN/REVIEW/ANSWER=(-能力,成本,延迟,名称)。按 provider/model 去重，取两个不同目标作主备，至多输出前临时失败回退一次；认证错误和无效输出不回退。所有任务须有候选，所有回答候选须支持流式，PLAN 须声明 JSON object；所有声明候选的凭据与目标均预校验；无覆盖或能力不兼容首次请求失败关闭。自然语言计划回答仍是文本；仅 PLAN 的 Tool 意图调用使用 JSON object 加严格 Intent 校验，不使用原生 Tool Calling。
 
@@ -54,7 +54,7 @@ Trace generation 沿用既有计时，新增 task_type、route 和 rank；实际
 
 Web 整理入口显式发送 taskType=FORMAT；格式提示词仅描述输出要求，不控制路由。普通 Chat 默认为 ANSWER。公共和内部 Chat 同步/流式请求新增可选 taskType 字段；未知模式拒绝。
 
-`task_type/route/rank` metadata 只覆盖同步/流式回答 generation；既有 `plan_tool(bundle)` 不接收 observation，Tool 意图仍走 PLAN 路由，但未提供单独的路由/token/cost Trace。`route` 表示初始路由决策，实际成功调用由 provider/model/usage/cost 表示，回退不改写初始决策名。不能将这些数据视作所有模型调用的完整账单；V3-09 集成验收再评估规划观测覆盖。
+`task_type/route/rank` metadata 只覆盖同步/流式回答 generation；ANSWER/PLAN 的 `plan_tool(bundle)` 不接收 observation，Tool 意图仍走 PLAN 路由，但未提供单独的路由/token/cost Trace。FORMAT/REWRITE/REVIEW 不调用该 planner。`route` 表示初始路由决策，实际成功调用由 provider/model/usage/cost 表示，回退不改写初始决策名。不能将这些数据视作所有模型调用的完整账单；V3-09 集成验收再评估规划观测覆盖。
 
 紧急切回确定性模式须同时设置 `LLM_PROVIDER=disabled`、`LLM_ROUTES=[]` 并清空 `LLM_FALLBACK_PROVIDER`（环境变量均带 AGENTFORGE_AGENT_ 前缀）；否则配置失败关闭，返回通用依赖错误。
 

@@ -248,7 +248,7 @@ function Invoke-JavaPythonContracts {
             "com.agentforge.core.agent.infrastructure.AgentServiceHttpContractIntegrationTest",
             "com.agentforge.core.graph.GraphResolutionAdvisorContractTest",
             "com.agentforge.core.graph.GraphApiIntegrationTest"
-        ) -ExpectedTests 12
+        ) -ExpectedTests 13
         $stageSucceeded = $true
     } catch {
         if (Test-Path -LiteralPath $agentErr) { Get-Content -Tail 80 -LiteralPath $agentErr | Out-Host }

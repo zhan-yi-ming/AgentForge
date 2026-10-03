@@ -391,6 +391,105 @@ class AgentChatServiceTest {
     }
 
     @Test
+    void formatChatAbortsAnUnexpectedProposalWithoutCreatingAnAction() {
+        ProjectAccess projects = org.mockito.Mockito.mock(ProjectAccess.class);
+        AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
+        AgentActionService actions = org.mockito.Mockito.mock(AgentActionService.class);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+        ConversationHistoryService history = org.mockito.Mockito.mock(ConversationHistoryService.class);
+        AgentChatService service = new AgentChatService(projects, client, actions, quota, history);
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        UUID workflowId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(userId, false);
+        ToolProposal proposal = new ToolProposal(
+                "CREATE_TASK", null, null, "Hidden task", null, "TODO", "HIGH", workflowId);
+        when(client.chat(projectId, userId, false, "format this", conversationId,
+                "request-format", AgentTaskType.FORMAT))
+                .thenReturn(new AgentChatResult(
+                        conversationId, "# Formatted", "request-format", List.of(), proposal, null));
+        when(client.abort(projectId, userId, false, conversationId, workflowId, "request-format"))
+                .thenReturn(new AgentAbortResult(
+                        conversationId, workflowId, "ABORTED", "request-format"));
+
+        AgentChatResult result = service.chat(projectId, actor, "format this", conversationId,
+                "request-format", AgentTaskType.FORMAT);
+
+        assertThat(result.pendingAction()).isNull();
+        assertThat(result.toolProposal()).isNull();
+        verify(actions, never()).createPending(any(), any(), any(), any(), any());
+        verify(client).abort(projectId, userId, false, conversationId, workflowId, "request-format");
+    }
+
+    @Test
+    void reviewStreamAbortsAnUnexpectedProposalWithoutCreatingAnAction() {
+        ProjectAccess projects = org.mockito.Mockito.mock(ProjectAccess.class);
+        AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
+        AgentActionService actions = org.mockito.Mockito.mock(AgentActionService.class);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+        ConversationHistoryService history = org.mockito.Mockito.mock(ConversationHistoryService.class);
+        AgentChatService service = new AgentChatService(projects, client, actions, quota, history);
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        UUID workflowId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(userId, false);
+        ToolProposal proposal = new ToolProposal(
+                "CREATE_TASK", null, null, "Hidden review task", null, "TODO", "HIGH", workflowId);
+        when(client.abort(projectId, userId, false, conversationId, workflowId, "request-review"))
+                .thenReturn(new AgentAbortResult(
+                        conversationId, workflowId, "ABORTED", "request-review"));
+        org.mockito.Mockito.doAnswer(invocation -> {
+            java.util.function.Consumer<AgentStreamEvent> sink = invocation.getArgument(7);
+            sink.accept(AgentStreamEvent.metadata(conversationId, "request-review", List.of()));
+            sink.accept(AgentStreamEvent.complete(proposal));
+            return null;
+        }).when(client).stream(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), any(), any(), any(),
+                eq(AgentTaskType.REVIEW), any());
+
+        AgentChatCommand command = service.prepareStream(
+                projectId, actor, "review this", conversationId, "request-review", AgentTaskType.REVIEW);
+        List<AgentStreamEvent> events = new ArrayList<>();
+        service.stream(command, events::add);
+
+        assertThat(events.getLast().pendingAction()).isNull();
+        assertThat(events.getLast().toolProposal()).isNull();
+        verify(actions, never()).createPending(any(), any(), any(), any(), any());
+        verify(client).abort(projectId, userId, false, conversationId, workflowId, "request-review");
+    }
+
+    @Test
+    void planModeKeepsTheExistingPendingActionFlow() {
+        ProjectAccess projects = org.mockito.Mockito.mock(ProjectAccess.class);
+        AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);
+        AgentActionService actions = org.mockito.Mockito.mock(AgentActionService.class);
+        AiUsageQuota quota = org.mockito.Mockito.mock(AiUsageQuota.class);
+        ConversationHistoryService history = org.mockito.Mockito.mock(ConversationHistoryService.class);
+        AgentChatService service = new AgentChatService(projects, client, actions, quota, history);
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AuthenticatedActor actor = new AuthenticatedActor(userId, false);
+        ToolProposal proposal = new ToolProposal(
+                "CREATE_TASK", null, null, "Visible plan task", null, "TODO", "HIGH", UUID.randomUUID());
+        AgentActionView pending = org.mockito.Mockito.mock(AgentActionView.class);
+        when(client.chat(projectId, userId, false, "plan this", conversationId,
+                "request-plan", AgentTaskType.PLAN))
+                .thenReturn(new AgentChatResult(
+                        conversationId, "Please review", "request-plan", List.of(), proposal, null));
+        when(actions.createPending(projectId, actor, conversationId, proposal, "request-plan"))
+                .thenReturn(Optional.of(pending));
+
+        AgentChatResult result = service.chat(projectId, actor, "plan this", conversationId,
+                "request-plan", AgentTaskType.PLAN);
+
+        assertThat(result.pendingAction()).isSameAs(pending);
+        verify(actions).createPending(projectId, actor, conversationId, proposal, "request-plan");
+        verify(client, never()).abort(any(), any(), org.mockito.ArgumentMatchers.anyBoolean(), any(), any(), any());
+    }
+
+    @Test
     void chatIgnoresInvalidProposalAndKeepsOrdinaryAnswer() {
         ProjectAccess projectAccess = org.mockito.Mockito.mock(ProjectAccess.class);
         AgentServiceClient client = org.mockito.Mockito.mock(AgentServiceClient.class);

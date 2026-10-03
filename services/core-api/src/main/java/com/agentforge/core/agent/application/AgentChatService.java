@@ -62,10 +62,7 @@ public class AgentChatService {
                 effectiveConversationId,
                 requestId) : agentServiceClient.chat(projectId, actor.userId(), actor.admin(),
                         message.trim(), effectiveConversationId, requestId, taskType);
-        AgentChatResult finalized = result.toolProposal() == null ? result : createPendingOrAbort(
-                projectId, actor, result.conversationId(), result.toolProposal(), requestId)
-                .map(result::withPendingAction)
-                .orElseGet(result::withoutToolProposal);
+        AgentChatResult finalized = finalizeResult(projectId, actor, requestId, taskType, result);
         persist(command(projectId, actor, message, effectiveConversationId, requestId), finalized);
         return finalized;
     }
@@ -157,12 +154,32 @@ public class AgentChatService {
         }
         AgentActionView pendingAction = null;
         if (event.toolProposal() != null) {
-            pendingAction = createPendingOrAbort(
-                    command.projectId(), command.actor(), conversationId,
-                    event.toolProposal(), command.requestId())
-                    .orElse(null);
+            if (command.taskType().allowsToolProposal()) {
+                pendingAction = createPendingOrAbort(
+                        command.projectId(), command.actor(), conversationId,
+                        event.toolProposal(), command.requestId())
+                        .orElse(null);
+            }
+            else {
+                abortWaitingRound(command.projectId(), command.actor(), conversationId,
+                        event.toolProposal(), command.requestId());
+            }
         }
         return AgentStreamEvent.completed(pendingAction, event.sources());
+    }
+
+    private AgentChatResult finalizeResult(UUID projectId, AuthenticatedActor actor, String requestId,
+            AgentTaskType taskType, AgentChatResult result) {
+        if (result.toolProposal() == null) {
+            return result;
+        }
+        if (!taskType.allowsToolProposal()) {
+            abortWaitingRound(projectId, actor, result.conversationId(), result.toolProposal(), requestId);
+            return result.withoutToolProposal();
+        }
+        return createPendingOrAbort(projectId, actor, result.conversationId(), result.toolProposal(), requestId)
+                .map(result::withPendingAction)
+                .orElseGet(result::withoutToolProposal);
     }
 
     private Optional<AgentActionView> createPendingOrAbort(
