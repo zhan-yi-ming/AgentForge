@@ -1,7 +1,7 @@
 from uuid import UUID
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 from pydantic.alias_generators import to_camel
 
 
@@ -31,10 +31,21 @@ class ToolProposal(ApiModel):
     action_workflow_id: UUID | None = None
     task_id: UUID | None = None
     expected_version: int | None = Field(default=None, ge=0)
-    title: str | None = None
-    description: str | None = None
+    title: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
+    ] | None = None
+    description: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)
+    ] | None = None
     status: Literal["TODO", "IN_PROGRESS", "DONE"] | None = None
     priority: Literal["LOW", "MEDIUM", "HIGH"] | None = None
+
+
+def tool_proposal_or_none(**fields: object) -> ToolProposal | None:
+    try:
+        return ToolProposal(**fields)
+    except ValidationError:
+        return None
 
 
 class ChatResponse(ApiModel):
@@ -67,6 +78,22 @@ class ResumeResponse(ApiModel):
     action_id: UUID
     decision: Literal["APPROVE", "REJECT"]
     status: Literal["RESUMED"]
+    request_id: str
+
+
+class AbortRequest(ApiModel):
+    project_id: UUID
+    user_id: UUID
+    actor_admin: bool = False
+    conversation_id: UUID
+    action_workflow_id: UUID | None = None
+    request_id: str = Field(min_length=1, max_length=128)
+
+
+class AbortResponse(ApiModel):
+    conversation_id: UUID
+    action_workflow_id: UUID
+    status: Literal["ABORTED"]
     request_id: str
 
 

@@ -93,6 +93,41 @@ class AgentChatApiTest {
     }
 
     @Test
+    void chatStreamEmitsErrorWhenApplicationStreamFailsAfterMetadata() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AgentChatCommand command = new AgentChatCommand(
+                projectId, new com.agentforge.core.security.AuthenticatedActor(UUID.randomUUID(), false),
+                "create", conversationId, "request-stream-error");
+        java.util.concurrent.CountDownLatch requestReturned = new java.util.concurrent.CountDownLatch(1);
+        when(agentChatService.prepareStream(eq(projectId), any(), eq("create"), eq(conversationId), any()))
+                .thenReturn(command);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            requestReturned.await();
+            java.util.function.Consumer<AgentStreamEvent> sink = invocation.getArgument(1);
+            sink.accept(AgentStreamEvent.metadata(conversationId, "request-stream-error", List.of()));
+            throw new ServiceUnavailableException("abort unavailable");
+        }).when(agentChatService).stream(eq(command), any());
+
+        var result = mockMvc.perform(post("/api/v1/projects/{projectId}/agent/chat/stream", projectId)
+                        .with(jwt().jwt(token -> token.subject(UUID.randomUUID().toString()).claim("roles", List.of("USER"))))
+                        .header("X-Request-Id", "request-stream-error")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"create\",\"conversationId\":\"" + conversationId + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted())
+                .andReturn();
+        requestReturned.countDown();
+
+        mockMvc.perform(asyncDispatch(result))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("event:metadata")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("event:error")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("event:complete"))));
+    }
+
+    @Test
     void chatStreamAcceptsAWholeTenThousandCharacterFormattingInput() throws Exception {
         UUID projectId = UUID.randomUUID();
         String message = "文".repeat(10_000);

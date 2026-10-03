@@ -45,6 +45,14 @@ public interface AgentServiceClient {
             String idempotencyKey,
             String requestId);
 
+    AgentAbortResult abort(
+            UUID projectId,
+            UUID userId,
+            boolean actorAdmin,
+            UUID conversationId,
+            UUID actionWorkflowId,
+            String requestId);
+
     default AgentResumeResult resume(
             UUID projectId,
             UUID userId,

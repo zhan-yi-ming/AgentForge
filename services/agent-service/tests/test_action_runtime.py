@@ -174,6 +174,89 @@ def test_waiting_round_replays_only_the_same_request_and_proposal():
         runtime.interrupt(scope, proposal(), "new-request")
 
 
+def test_aborted_waiting_round_is_replayable_and_allows_a_new_round():
+    runtime = ActionWorkflowRuntime(InMemorySaver())
+    scope = namespace()
+    waiting = runtime.interrupt(scope, proposal(), "request-invalid")
+
+    aborted = runtime.abort(
+        scope,
+        workflow_id=waiting.workflow_id,
+        request_id="request-invalid",
+    )
+    replayed = runtime.abort(
+        scope,
+        workflow_id=waiting.workflow_id,
+        request_id="request-invalid",
+    )
+    next_waiting = runtime.interrupt(scope, proposal(), "request-corrected")
+
+    assert aborted.status == "ABORTED"
+    assert replayed == aborted
+    assert next_waiting.status == "WAITING"
+    assert next_waiting.workflow_id != waiting.workflow_id
+
+
+def test_same_request_retry_after_abort_starts_a_new_waiting_round():
+    runtime = ActionWorkflowRuntime(InMemorySaver())
+    scope = namespace()
+    waiting = runtime.interrupt(scope, proposal(), "same-request")
+    runtime.abort(
+        scope,
+        workflow_id=waiting.workflow_id,
+        request_id="same-request",
+    )
+
+    retried = runtime.interrupt(scope, proposal(), "same-request")
+
+    assert retried.status == "WAITING"
+    assert retried.request_id == "same-request"
+    assert retried.workflow_id != waiting.workflow_id
+
+
+def test_abort_without_workflow_id_still_requires_the_exact_request():
+    runtime = ActionWorkflowRuntime(InMemorySaver())
+    scope = namespace()
+    waiting = runtime.interrupt(scope, proposal(), "request-invalid")
+
+    with pytest.raises(ActionWorkflowConflict):
+        runtime.abort(scope, workflow_id=None, request_id="another-request")
+    with pytest.raises(ActionWorkflowConflict):
+        runtime.abort(scope, workflow_id=uuid4(), request_id="request-invalid")
+
+    replayed_waiting = runtime.interrupt(scope, proposal(), "request-invalid")
+    aborted = runtime.abort(
+        scope,
+        workflow_id=None,
+        request_id="request-invalid",
+    )
+
+    assert replayed_waiting.workflow_id == waiting.workflow_id
+    assert aborted.workflow_id == waiting.workflow_id
+    assert aborted.status == "ABORTED"
+
+
+def test_resumed_round_cannot_be_aborted():
+    runtime = ActionWorkflowRuntime(InMemorySaver())
+    scope = namespace()
+    waiting = runtime.interrupt(scope, proposal(), "request-start")
+    runtime.resume(
+        scope,
+        workflow_id=waiting.workflow_id,
+        action_id=uuid4(),
+        decision="APPROVE",
+        idempotency_key="resume-key",
+        request_id="resume-request",
+    )
+
+    with pytest.raises(ActionWorkflowConflict):
+        runtime.abort(
+            scope,
+            workflow_id=waiting.workflow_id,
+            request_id="resume-request",
+        )
+
+
 def test_postgres_action_workflow_resumes_after_runtime_is_recreated():
     scope = namespace()
     action_id = uuid4()
@@ -202,6 +285,41 @@ def test_postgres_action_workflow_resumes_after_runtime_is_recreated():
 
         assert resumed.status == "RESUMED"
         assert resumed.action_id == action_id
+
+
+def test_postgres_aborted_round_survives_restart_and_allows_the_next_round():
+    scope = namespace()
+    with PostgresContainer("pgvector/pgvector:pg17") as postgres:
+        dsn = postgres.get_connection_url().replace(
+            "postgresql+psycopg2", "postgresql"
+        )
+        import psycopg
+
+        with psycopg.connect(dsn, autocommit=True) as connection:
+            connection.execute("CREATE SCHEMA agent_checkpoint")
+
+        with open_postgres_action_runtime(dsn) as first_runtime:
+            waiting = first_runtime.interrupt(scope, proposal(), "request-invalid")
+            aborted = first_runtime.abort(
+                scope,
+                workflow_id=waiting.workflow_id,
+                request_id="request-invalid",
+            )
+            assert aborted.status == "ABORTED"
+
+        with open_postgres_action_runtime(dsn) as restarted_runtime:
+            replayed = restarted_runtime.abort(
+                scope,
+                workflow_id=waiting.workflow_id,
+                request_id="request-invalid",
+            )
+            next_waiting = restarted_runtime.interrupt(
+                scope, proposal(), "request-corrected"
+            )
+
+        assert replayed == aborted
+        assert next_waiting.status == "WAITING"
+        assert next_waiting.workflow_id != waiting.workflow_id
 
 
 def test_postgres_action_runtime_handles_concurrent_interrupts_and_resumes():

@@ -35,3 +35,4 @@ ADR 保存影响长期结构的决定。编号只增不减，Accepted 记录不�
 - [ADR-0035-evidence-bounded-graphrag.md](ADR-0035-evidence-bounded-graphrag.md)：GraphRAG 只消费当前有效来源证据，并与文本检索在统一预算内融合。
 - [ADR-0036-project-scoped-repository-context.md](ADR-0036-project-scoped-repository-context.md)：Repository Context 由部署配置绑定项目，只读取 Git HEAD 的有界白名单资料。
 - [ADR-0037-action-workflow-round-identity.md](ADR-0037-action-workflow-round-identity.md)：每轮 Chat Approval 使用不可复用 workflow ID 绑定 Java Action 与 LangGraph checkpoint。
+- [ADR-0038-action-checkpoint-compensation.md](ADR-0038-action-checkpoint-compensation.md)：未形成 Java Approval 的 WAITING 由精确 Abort 终结，并以稳定请求 Namespace 支持重试。

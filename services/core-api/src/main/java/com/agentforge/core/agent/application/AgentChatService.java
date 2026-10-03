@@ -1,10 +1,12 @@
 package com.agentforge.core.agent.application;
 
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -55,23 +57,20 @@ public class AgentChatService {
             conversationHistory.requireWritable(projectId, conversationId, actor);
         }
         aiUsageQuota.consume(actor.userId());
+        UUID effectiveConversationId = effectiveConversationId(projectId, actor.userId(), conversationId, requestId);
         AgentChatResult result = taskType == AgentTaskType.ANSWER ? agentServiceClient.chat(
                 projectId,
                 actor.userId(),
                 actor.admin(),
                 message.trim(),
-                conversationId,
+                effectiveConversationId,
                 requestId) : agentServiceClient.chat(projectId, actor.userId(), actor.admin(),
-                        message.trim(), conversationId, requestId, taskType);
-        AgentChatResult finalized = result.toolProposal() == null ? result : agentActionService.createPending(
-                projectId,
-                actor,
-                result.conversationId(),
-                result.toolProposal(),
-                requestId)
+                        message.trim(), effectiveConversationId, requestId, taskType);
+        AgentChatResult finalized = result.toolProposal() == null ? result : createPendingOrAbort(
+                projectId, actor, result.conversationId(), result.toolProposal(), requestId)
                 .map(result::withPendingAction)
                 .orElseGet(result::withoutToolProposal);
-        persist(command(projectId, actor, message, conversationId, requestId), finalized);
+        persist(command(projectId, actor, message, effectiveConversationId, requestId), finalized);
         return finalized;
     }
 
@@ -91,7 +90,8 @@ public class AgentChatService {
             conversationHistory.requireWritable(projectId, conversationId, actor);
         }
         aiUsageQuota.consume(actor.userId());
-        return new AgentChatCommand(projectId, actor, message.trim(), conversationId, requestId, taskType);
+        UUID effectiveConversationId = effectiveConversationId(projectId, actor.userId(), conversationId, requestId);
+        return new AgentChatCommand(projectId, actor, message.trim(), effectiveConversationId, requestId, taskType);
     }
 
     public void stream(AgentChatCommand command, Consumer<AgentStreamEvent> sink) {
@@ -146,6 +146,15 @@ public class AgentChatService {
         return new AgentChatCommand(projectId, actor, message.trim(), conversationId, requestId);
     }
 
+    private UUID effectiveConversationId(
+            UUID projectId, UUID userId, UUID conversationId, String requestId) {
+        if (conversationId != null) {
+            return conversationId;
+        }
+        String seed = "agentforge-chat-v1:" + projectId + ":" + userId + ":" + requestId;
+        return UUID.nameUUIDFromBytes(seed.getBytes(StandardCharsets.UTF_8));
+    }
+
     private void persist(AgentChatCommand command, AgentChatResult result) {
         conversationHistory.appendCompletedExchange(command.projectId(), command.actor(),
                 result.conversationId(), command.message(), result.answer(), result.sources());
@@ -158,14 +167,62 @@ public class AgentChatService {
         }
         AgentActionView pendingAction = null;
         if (event.toolProposal() != null) {
-            pendingAction = agentActionService.createPending(
-                    command.projectId(),
-                    command.actor(),
-                    conversationId,
-                    event.toolProposal(),
-                    command.requestId())
+            pendingAction = createPendingOrAbort(
+                    command.projectId(), command.actor(), conversationId,
+                    event.toolProposal(), command.requestId())
                     .orElse(null);
         }
         return AgentStreamEvent.completed(pendingAction, event.sources());
+    }
+
+    private Optional<AgentActionView> createPendingOrAbort(
+            UUID projectId,
+            AuthenticatedActor actor,
+            UUID conversationId,
+            ToolProposal proposal,
+            String requestId) {
+        Optional<AgentActionView> pending;
+        try {
+            pending = agentActionService.createPending(
+                    projectId, actor, conversationId, proposal, requestId);
+        }
+        catch (RuntimeException failure) {
+            try {
+                abortWaitingRound(projectId, actor, conversationId, proposal, requestId);
+            }
+            catch (RuntimeException compensationFailure) {
+                compensationFailure.addSuppressed(failure);
+                throw compensationFailure;
+            }
+            throw failure;
+        }
+        if (pending.isEmpty()) {
+            abortWaitingRound(projectId, actor, conversationId, proposal, requestId);
+        }
+        return pending;
+    }
+
+    private void abortWaitingRound(
+            UUID projectId,
+            AuthenticatedActor actor,
+            UUID conversationId,
+            ToolProposal proposal,
+            String requestId) {
+        AgentAbortResult aborted = agentServiceClient.abort(
+                projectId,
+                actor.userId(),
+                actor.admin(),
+                conversationId,
+                proposal.actionWorkflowId(),
+                requestId);
+        if (aborted == null
+                || !conversationId.equals(aborted.conversationId())
+                || (proposal.actionWorkflowId() != null
+                    && !proposal.actionWorkflowId().equals(aborted.actionWorkflowId()))
+                || !"ABORTED".equals(aborted.status())
+                || !requestId.equals(aborted.requestId())) {
+            throw new com.agentforge.core.shared.error.ServiceUnavailableException(
+                    "Agent Service returned an invalid abort response.");
+        }
     }
 }

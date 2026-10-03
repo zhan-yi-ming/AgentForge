@@ -37,7 +37,7 @@ class ActionWorkflowState(TypedDict):
     namespace: dict[str, str]
     workflow_id: str | None
     proposal_fingerprint: str
-    status: Literal["WAITING", "RESUMED"]
+    status: Literal["WAITING", "RESUMED", "ABORTED"]
     action_id: str | None
     decision: Decision | None
     idempotency_key: str | None
@@ -48,7 +48,7 @@ class ActionWorkflowState(TypedDict):
 class ActionWorkflowView:
     conversation_id: UUID
     workflow_id: UUID | None
-    status: Literal["WAITING", "RESUMED"]
+    status: Literal["WAITING", "RESUMED", "ABORTED"]
     action_id: UUID | None
     decision: Decision | None
     idempotency_key: str | None
@@ -149,6 +149,38 @@ class ActionWorkflowRuntime:
             )
             return _view(result, namespace.thread_id)
 
+    def abort(
+        self,
+        namespace: MemoryNamespace,
+        *,
+        workflow_id: UUID | None,
+        request_id: str,
+    ) -> ActionWorkflowView:
+        config = _config(namespace)
+        thread_key = config["configurable"]["thread_id"]
+        with self._workflow_lock(thread_key):
+            snapshot = self._graph.get_state(config)
+            if not snapshot.values:
+                raise ActionWorkflowNotFound("action workflow was not found")
+            self._require_supported(snapshot.values, namespace)
+            if snapshot.values.get("schema_version") != ACTION_STATE_SCHEMA_VERSION:
+                raise ActionWorkflowConflict("legacy action workflow cannot be aborted")
+            if snapshot.values.get("request_id") != request_id:
+                raise ActionWorkflowConflict("action workflow request does not match")
+            if workflow_id is not None:
+                self._require_workflow(snapshot.values, workflow_id)
+
+            if snapshot.values.get("status") == "ABORTED":
+                return _view(snapshot.values, namespace.thread_id)
+            if not snapshot.next or snapshot.values.get("status") != "WAITING":
+                raise ActionWorkflowConflict("action workflow is not waiting")
+
+            result = self._graph.invoke(
+                Command(resume={"decision": "ABORT", "request_id": request_id}),
+                config=config,
+            )
+            return _view(result, namespace.thread_id)
+
     @staticmethod
     def _require_supported(values, namespace: MemoryNamespace) -> None:
         if values.get("schema_version") not in (
@@ -227,6 +259,17 @@ def _await_decision(state: ActionWorkflowState) -> dict[str, object]:
     )
     if not isinstance(resumed, dict):
         raise ActionWorkflowConflict("resume payload is invalid")
+    if resumed.get("decision") == "ABORT":
+        request_id = str(resumed.get("request_id", ""))
+        if not request_id:
+            raise ActionWorkflowConflict("abort metadata must not be blank")
+        return {
+            "status": "ABORTED",
+            "action_id": None,
+            "decision": None,
+            "idempotency_key": None,
+            "request_id": request_id,
+        }
     try:
         action_id = str(UUID(str(resumed["action_id"])))
         decision = resumed["decision"]

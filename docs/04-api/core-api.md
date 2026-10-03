@@ -253,6 +253,8 @@ V2-07 目标语义中，confirm 先在短事务提交 `APPROVED`，再在事务�
 
 新建 Chat Action 使用内部 workflow version 2：Python proposal 提供本轮 `actionWorkflowId`，Java 以该 ID 幂等复用唯一 Approval，并在 Resume 时原样带回。workflow ID、Action ID、conversation/project/user scope、decision 与决策幂等键必须共同匹配当前 checkpoint；旧 Action 决策不能消费新一轮等待点。既有 version 1 Action 继续兼容无 workflow ID 的恢复，MCP Action 仍不绑定 checkpoint。内部 workflow ID 不加入公共 Action 响应。
 
+Core 在未传 conversationId 时按 project/user/request ID 稳定派生新 conversation ID，并在调用 Python 前持有该 Namespace。若 Python proposal 后续被 Java 文本校验、Task version 或持久化拒绝，Core 必须精确 Abort 对应 WAITING；同步入口可保持原有无 Action/冲突语义，流式入口在已开始响应后输出 error。Abort 目标不存在、轮次不匹配或已进入其它终态时返回公共 409；网络、5xx、空响应或响应身份不匹配返回 503。两类失败都不得把孤立 checkpoint 隐藏为普通回答。相同 `X-Request-Id` 的响应丢失重试复用 conversation/workflow/Action；不同 request 不能补偿或复用该轮。
+
 reject 先提交 `REJECTED` 再恢复 Agent wait。相同 key 可重试恢复；相反 decision 或不同 key 返回 409。Python Resume 不能自行批准或执行业务 Tool，Java 仍是 Approval、Audit 与 Task 的唯一写入边界。
 
 若 Python 明确返回 workflow 不存在或状态冲突，Core 将内部 404/409 收敛为公共 409 且不暴露下游正文；网络、超时或 5xx 仍返回 503。

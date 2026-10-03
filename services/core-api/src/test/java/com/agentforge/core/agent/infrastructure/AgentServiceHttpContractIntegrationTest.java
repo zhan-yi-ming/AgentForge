@@ -124,6 +124,44 @@ class AgentServiceHttpContractIntegrationTest {
     }
 
     @Test
+    void javaClientAbortsARealWaitingRoundAndAllowsTheNextRound() {
+        HttpAgentServiceClient client = new HttpAgentServiceClient(restClient, objectMapper);
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID conversationId = UUID.randomUUID();
+        AgentChatResult waiting = client.chat(
+                projectId,
+                userId,
+                false,
+                "create task: Abort contract; priority=HIGH",
+                conversationId,
+                "abort-contract-start");
+        UUID workflowId = waiting.toolProposal().actionWorkflowId();
+
+        var aborted = client.abort(
+                projectId,
+                userId,
+                false,
+                conversationId,
+                workflowId,
+                "abort-contract-start");
+        AgentChatResult next = client.chat(
+                projectId,
+                userId,
+                false,
+                "create task: Next contract round; priority=MEDIUM",
+                conversationId,
+                "abort-contract-next");
+
+        assertThat(aborted.conversationId()).isEqualTo(conversationId);
+        assertThat(aborted.actionWorkflowId()).isEqualTo(workflowId);
+        assertThat(aborted.status()).isEqualTo("ABORTED");
+        assertThat(aborted.requestId()).isEqualTo("abort-contract-start");
+        assertThat(next.toolProposal()).isNotNull();
+        assertThat(next.toolProposal().actionWorkflowId()).isNotEqualTo(workflowId);
+    }
+
+    @Test
     void javaClientMapsInvalidInternalTokenToServiceUnavailable() {
         RestClient invalidTokenClient = restClient.mutate()
                 .defaultHeaders(headers -> headers.set("X-AgentForge-Internal-Token", "invalid-test-token"))

@@ -15,6 +15,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 import com.agentforge.core.agent.application.AgentChatResult;
+import com.agentforge.core.agent.application.AgentAbortResult;
 import com.agentforge.core.agent.application.AgentTaskType;
 import com.agentforge.core.agent.application.AgentResumeResult;
 import com.agentforge.core.agent.application.AgentServiceClient;
@@ -171,6 +172,40 @@ public class HttpAgentServiceClient implements AgentServiceClient {
         }
     }
 
+    @Override
+    public AgentAbortResult abort(
+            UUID projectId,
+            UUID userId,
+            boolean actorAdmin,
+            UUID conversationId,
+            UUID actionWorkflowId,
+            String requestId) {
+        try {
+            AgentAbortResult response = restClient.post()
+                    .uri("/internal/v1/agent/abort")
+                    .header("X-Request-Id", requestId)
+                    .body(new InternalAbortRequest(
+                            projectId, userId, actorAdmin, conversationId,
+                            actionWorkflowId, requestId))
+                    .retrieve()
+                    .body(AgentAbortResult.class);
+            if (response == null) {
+                throw new ServiceUnavailableException("Agent Service returned an empty abort response.");
+            }
+            return response;
+        }
+        catch (RestClientResponseException exception) {
+            if (exception.getStatusCode().value() == 404
+                    || exception.getStatusCode().value() == 409) {
+                throw new ConflictException("Agent workflow cannot be aborted.");
+            }
+            throw new ServiceUnavailableException("Agent Service abort is unavailable.", exception);
+        }
+        catch (RestClientException exception) {
+            throw new ServiceUnavailableException("Agent Service abort is unavailable.", exception);
+        }
+    }
+
     private record InternalChatRequest(
             UUID projectId,
             UUID userId,
@@ -190,6 +225,15 @@ public class HttpAgentServiceClient implements AgentServiceClient {
             UUID actionId,
             String decision,
             String idempotencyKey,
+            String requestId) {
+    }
+
+    private record InternalAbortRequest(
+            UUID projectId,
+            UUID userId,
+            boolean actorAdmin,
+            UUID conversationId,
+            UUID actionWorkflowId,
             String requestId) {
     }
 }

@@ -21,6 +21,8 @@ from .observability import build_observability
 from .responder_dependency import get_responder
 from .retrieval import DisabledRetrievalService, RetrievalService, cited_sources
 from .schemas import (
+    AbortRequest,
+    AbortResponse,
     ChatRequest,
     ChatResponse,
     HealthResponse,
@@ -395,6 +397,46 @@ def resume_action(
         decision=resumed.decision,
         status="RESUMED",
         request_id=resumed.request_id,
+    )
+
+
+@router.post(
+    "/internal/v1/agent/abort",
+    response_model=AbortResponse,
+    dependencies=[Depends(require_internal_token)],
+)
+def abort_action(
+    request: AbortRequest,
+    action_runtime: ActionWorkflowRuntime = Depends(get_action_runtime),
+    settings: Settings = Depends(get_settings),
+) -> AbortResponse:
+    namespace = MemoryNamespace(
+        tenant_id=settings.namespace_tenant,
+        workspace_id=settings.namespace_workspace,
+        project_id=request.project_id,
+        user_id=request.user_id,
+        thread_id=request.conversation_id,
+    )
+    try:
+        aborted = action_runtime.abort(
+            namespace,
+            workflow_id=request.action_workflow_id,
+            request_id=request.request_id,
+        )
+    except ActionWorkflowNotFound as exception:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exception)) from exception
+    except ActionWorkflowConflict as exception:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exception)) from exception
+    if aborted.workflow_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="action workflow identity is missing",
+        )
+    return AbortResponse(
+        conversation_id=aborted.conversation_id,
+        action_workflow_id=aborted.workflow_id,
+        status="ABORTED",
+        request_id=aborted.request_id,
     )
 
 

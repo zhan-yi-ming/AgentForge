@@ -4,7 +4,7 @@ import json
 from uuid import UUID
 
 from .context import ContextBundle
-from .schemas import ToolProposal
+from .schemas import ToolProposal, tool_proposal_or_none
 
 
 ALLOWED_FIELDS = {
@@ -33,7 +33,10 @@ def parse_tool_intent(content: str | None, bundle: ContextBundle) -> ToolProposa
     priority = raw.get("priority")
     if title is not None and (not isinstance(title, str) or not 1 <= len(title.strip()) <= 200):
         return None
-    if description is not None and (not isinstance(description, str) or len(description) > 2000):
+    if description is not None and (
+        not isinstance(description, str)
+        or not 1 <= len(description.strip()) <= 2000
+    ):
         return None
     if status is not None and (not isinstance(status, str) or status not in {"TODO", "IN_PROGRESS", "DONE"}):
         return None
@@ -43,8 +46,9 @@ def parse_tool_intent(content: str | None, bundle: ContextBundle) -> ToolProposa
     if action_type == "CREATE_TASK":
         if raw.get("taskId") is not None or raw.get("expectedVersion") is not None or not title:
             return None
-        return ToolProposal(
-            action_type="CREATE_TASK", title=title.strip(), description=description,
+        return tool_proposal_or_none(
+            action_type="CREATE_TASK", title=title.strip(),
+            description=description.strip() if description is not None else None,
             status=status or "TODO", priority=priority or "MEDIUM",
         )
 
@@ -63,8 +67,9 @@ def parse_tool_intent(content: str | None, bundle: ContextBundle) -> ToolProposa
         return None
     if not any(value is not None for value in (title, description, status, priority)):
         return None
-    return ToolProposal(
+    return tool_proposal_or_none(
         action_type="UPDATE_TASK", task_id=parsed_id, expected_version=version,
-        title=title.strip() if title else None, description=description,
+        title=title.strip() if title else None,
+        description=description.strip() if description is not None else None,
         status=status, priority=priority,
     )

@@ -15,6 +15,7 @@ stateDiagram-v2
     [*] --> Running
     Running --> Waiting: Tool proposal + interrupt
     Waiting --> Waiting: PostgreSQL checkpoint
+    Waiting --> Aborted: Java validation / persistence failed
     Waiting --> Resumed: approved / rejected decision
     Resumed --> Executing: approved
     Resumed --> Rejected: rejected
@@ -30,9 +31,11 @@ stateDiagram-v2
 6. Python 从 PostgreSQL 恢复相同 Thread，并要求 workflow ID 精确匹配当前等待轮次；批准恢复成功后 Java 再锁定 Approval、再次复核权限并执行 Tool。
 7. 任一网络响应丢失时，相同 key 重试返回已提交事实；不同 key 或相反 decision 冲突。
 
+若 proposal 未形成 Java PENDING Action，Core 使用完整 Namespace、request ID 和可用的 workflow ID 调用内部 Abort。Python 只允许当前 WAITING 进入 `ABORTED`，并保留历史；错 request/workflow、已 RESUMED 或其它轮次均失败关闭。新会话的 conversation ID 在 Core 调用 Python 前按 project/user/request ID 稳定派生，因此相同 `X-Request-Id` 的响应丢失重试仍定位同一轮。
+
 ## 状态与隔离
 
-checkpoint 只保存恢复所需的受限状态：schema version、tenant/workspace/project/user/thread、不可复用 workflow ID、proposal 指纹、等待/恢复状态、action ID、decision、Idempotency Key 和 request ID。不得保存 JWT、服务间 token、密码、完整 Prompt、回答正文或检索正文。
+checkpoint 只保存恢复所需的受限状态：schema version、tenant/workspace/project/user/thread、不可复用 workflow ID、proposal 指纹、等待/恢复/补偿状态、action ID、decision、Idempotency Key 和 request ID。不得保存 JWT、服务间 token、密码、完整 Prompt、回答正文或检索正文。
 
 Thread 恢复必须同时匹配完整 Memory Namespace 和本轮 workflow ID。仅知道 conversation ID 或旧 Action ID 不能跨 Project/User/轮次恢复。等待期间只有相同 request 与相同 proposal 的重试返回原 workflow；不同 request 即使 proposal 内容相同也冲突。恢复完成后的新 proposal 建立新的 workflow ID，同时保留 LangGraph checkpoint 历史。
 
@@ -56,6 +59,7 @@ V2-07 之前已持久化的 V2-06 Action 没有 checkpoint。V8 以可空 `actio
 - Thread/Namespace/workflow/action 不匹配：内部 Resume 返回冲突或不存在，不尝试新建运行态，也不消费当前等待轮次。
 - checkpoint schema version 不受支持：失败关闭并保留原 checkpoint，等待显式迁移策略。
 - Python Resume 暂时失败：公共决定返回依赖不可用；Java 已提交的 Approval 决定不回滚。
+- Java 未形成 Approval：Core 精确 Abort 当前 WAITING；Abort 失败显式返回依赖不可用，不伪装成普通回答。
 - Tool 业务冲突：Java 提交 FAILED；未知基础设施异常保持可安全重试的既有状态。
 
 ## 测试边界

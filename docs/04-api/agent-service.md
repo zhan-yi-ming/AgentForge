@@ -46,6 +46,8 @@ data: {"pendingAction":null}
 
 Python 不返回 actionId/status，也不执行写入。Java 不信任 proposal，必须重新校验组合、长度、枚举、actor、project 和 Task version。内部 token 错误返回 401。`GET /health` 返回服务状态，不包含密钥或环境值。
 
+Python 与 Java 对 proposal 文本使用相同边界：title 若提供为 trim 后 1–200 字符，description 若提供为 trim 后 1–2,000 字符；空白或超长字段不能进入 WAITING。
+
 当 proposal 已进入持久化 Action workflow 时，内部 `toolProposal` 额外包含 `actionWorkflowId`。它由 Python 为本次等待轮次生成，Java 必须持久化并用于同轮 proposal 去重；该字段不进入公共 Chat/pending action 响应，也不授予执行权限。等待中的同 request/proposal 重放返回同一 ID，不同 request 不得复用当前等待轮次。
 
 `POST /internal/v1/chat/stream` 使用相同 header 与 body，返回 `application/x-ndjson`。事件为 `metadata`、`delta`、`complete` 或 `error`，每行一个 JSON 对象。`complete` 可包含 Python `toolProposal`，但不包含 actionId/status；Java 消费并执行与 JSON 入口完全相同的白名单校验和 pending action 持久化。内部流不得直接暴露给浏览器。
@@ -67,6 +69,8 @@ V2-06 仍不改变 Python Chat HTTP schema。Approval 五态、Idempotency Key�
 V2-07 新增 `POST /internal/v1/agent/resume`，仅供 Core API 使用并继续要求 `X-AgentForge-Internal-Token`。当前请求包含 `projectId`、`userId`、`actorAdmin`、`conversationId`、`actionWorkflowId`、`actionId`、`decision`（`APPROVE | REJECT`）、`idempotencyKey` 与 `requestId`。Agent Service 使用配置中的 tenant/workspace 与请求 project/user/thread 组成完整 Namespace，从 PostgreSQL checkpoint 恢复动态 interrupt。既有 workflow v1 Action 恢复时允许省略 `actionWorkflowId`；新 workflow v2 必须提供并精确匹配。
 
 成功返回同一 conversation/workflow/action/decision、`status=RESUMED` 和 requestId；相同 workflow/action/decision/key replay 返回相同事实。Thread 不存在、仍无 interrupt、Namespace/workflow/action 不匹配、不同 key/decision、state schema version 不支持均失败关闭，不创建替代 Thread。Resume 只证明 Agent workflow 已恢复，不执行或授权 Task 写入。
+
+`POST /internal/v1/agent/abort` 仅供 Core 补偿“proposal 未形成 Java Approval”的当前等待轮次，继续要求内部 token。请求包含 project/user/admin、conversation、可空 `actionWorkflowId` 与 `requestId`；无 workflow ID 时 request ID 是必需的精确轮次凭据，有 ID 时两者都必须匹配。成功返回同一 conversation/workflow、`status=ABORTED` 和 request ID；相同 Abort 可重放。RESUMED、错误 Namespace/request/workflow 或不受支持版本返回 404/409，且不能清除其它轮次。Abort 不等于 REJECT，不创建审计、Action 或业务写入。
 
 最终模型输入受 `AGENTFORGE_AGENT_CONTEXT_TOKEN_BUDGET` 限制；最近轮数、摘要预算和最大 session 数分别由 `AGENTFORGE_AGENT_CONTEXT_RECENT_TURNS`、`AGENTFORGE_AGENT_CONTEXT_SUMMARY_TOKEN_BUDGET`、`AGENTFORGE_AGENT_CONTEXT_MAX_SESSIONS` 控制。预算只影响 Python 内部 Prompt，不改变响应字段、Java 授权、配额或 Tool confirmation 契约。
 

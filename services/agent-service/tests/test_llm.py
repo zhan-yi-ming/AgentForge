@@ -20,7 +20,7 @@ from agentforge_agent.llm import (
     build_responder,
 )
 from agentforge_agent.retrieval import RetrievalResult, TaskTarget
-from agentforge_agent.schemas import ToolProposal
+from agentforge_agent.schemas import ToolProposal, tool_proposal_or_none
 
 
 class FakeChatModel:
@@ -150,6 +150,24 @@ def test_model_planner_proposes_task_from_natural_language() -> None:
         action_type="CREATE_TASK", title="整理登录模块回归清单",
         status="TODO", priority="HIGH",
     )
+
+
+def test_model_planner_rejects_blank_optional_description() -> None:
+    model = FakeChatModel(
+        '{"actionType":"CREATE_TASK","title":"整理登录模块回归清单","description":"   "}'
+    )
+
+    assert CompatibleLlmResponder(model).plan_tool(
+        context_state("请创建任务")["context_bundle"]
+    ) is None
+
+
+def test_shared_tool_proposal_builder_degrades_validation_errors_to_no_proposal() -> None:
+    assert tool_proposal_or_none(
+        action_type="CREATE_TASK",
+        title="Valid title",
+        description="   ",
+    ) is None
 
 
 def test_model_planner_rejects_unretrieved_update_target() -> None:

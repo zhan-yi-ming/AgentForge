@@ -1,7 +1,7 @@
 import re
 from uuid import UUID
 
-from .schemas import ToolProposal
+from .schemas import ToolProposal, tool_proposal_or_none
 
 
 _UPDATE_PATTERN = re.compile(
@@ -23,7 +23,7 @@ def plan_tool(message: str) -> ToolProposal | None:
             task_id = UUID(update_match.group("task_id"))
         except ValueError:
             return None
-        return ToolProposal(
+        return tool_proposal_or_none(
             action_type="UPDATE_TASK",
             task_id=task_id,
             expected_version=int(update_match.group("version")),
@@ -35,7 +35,7 @@ def plan_tool(message: str) -> ToolProposal | None:
         title = chinese_create.group("title").strip()
         if not title:
             return None
-        return ToolProposal(
+        return tool_proposal_or_none(
             action_type="CREATE_TASK",
             title=title,
             description=normalized,
@@ -49,7 +49,7 @@ def plan_tool(message: str) -> ToolProposal | None:
         title = fields.pop("title", None)
         if not title:
             return None
-        return ToolProposal(
+        return tool_proposal_or_none(
             action_type="CREATE_TASK",
             title=title,
             status=fields.pop("status", "TODO"),
@@ -57,8 +57,6 @@ def plan_tool(message: str) -> ToolProposal | None:
             **fields,
         )
     return None
-
-
 def _parse_create_body(body: str) -> dict[str, object]:
     segments = [segment.strip() for segment in body.split(";") if segment.strip()]
     if not segments:

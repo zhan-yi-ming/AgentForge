@@ -142,6 +142,54 @@ def test_resume_restores_an_interrupted_action_and_replays_the_same_decision() -
     assert replayed.json() == resumed.json()
 
 
+def test_abort_ends_only_the_matching_waiting_round() -> None:
+    project_id = uuid4()
+    user_id = uuid4()
+    conversation_id = uuid4()
+    request = chat_request(
+        message="create task: Invalid downstream proposal; priority=HIGH",
+        project_id=str(project_id),
+        user_id=str(user_id),
+        conversation_id=str(conversation_id),
+    )
+    waiting = client.post(
+        "/internal/v1/chat",
+        headers={"X-AgentForge-Internal-Token": TOKEN},
+        json=request,
+    )
+    workflow_id = waiting.json()["toolProposal"]["actionWorkflowId"]
+    abort_request = {
+        "projectId": str(project_id),
+        "userId": str(user_id),
+        "actorAdmin": False,
+        "conversationId": str(conversation_id),
+        "actionWorkflowId": workflow_id,
+        "requestId": request["requestId"],
+    }
+
+    aborted = client.post(
+        "/internal/v1/agent/abort",
+        headers={"X-AgentForge-Internal-Token": TOKEN},
+        json=abort_request,
+    )
+    next_round = client.post(
+        "/internal/v1/chat",
+        headers={"X-AgentForge-Internal-Token": TOKEN},
+        json={**request, "message": "create task: Corrected proposal; priority=MEDIUM",
+              "requestId": "request-after-abort"},
+    )
+
+    assert aborted.status_code == 200
+    assert aborted.json() == {
+        "conversationId": str(conversation_id),
+        "actionWorkflowId": workflow_id,
+        "status": "ABORTED",
+        "requestId": request["requestId"],
+    }
+    assert next_round.status_code == 200
+    assert next_round.json()["toolProposal"]["actionWorkflowId"] != workflow_id
+
+
 def test_chat_runs_graph_and_creates_conversation_id() -> None:
     response = client.post(
         "/internal/v1/chat",
@@ -759,6 +807,37 @@ def test_chat_proposes_create_task_without_executing_it() -> None:
         "status": "TODO",
         "priority": "HIGH",
     }
+
+
+def test_chat_rejects_overlong_task_title_without_leaving_a_waiting_round() -> None:
+    project_id = uuid4()
+    user_id = uuid4()
+    conversation_id = uuid4()
+    rejected = client.post(
+        "/internal/v1/chat",
+        headers={"X-AgentForge-Internal-Token": TOKEN},
+        json=chat_request(
+            message=f"create task: {'x' * 201}",
+            project_id=str(project_id),
+            user_id=str(user_id),
+            conversation_id=str(conversation_id),
+        ),
+    )
+    accepted = client.post(
+        "/internal/v1/chat",
+        headers={"X-AgentForge-Internal-Token": TOKEN},
+        json=chat_request(
+            message="create task: Valid title",
+            project_id=str(project_id),
+            user_id=str(user_id),
+            conversation_id=str(conversation_id),
+        ),
+    )
+
+    assert rejected.status_code == 200
+    assert rejected.json()["toolProposal"] is None
+    assert accepted.status_code == 200
+    assert accepted.json()["toolProposal"]["title"] == "Valid title"
 
 
 def test_chat_uses_natural_language_planner_to_propose_action() -> None:
