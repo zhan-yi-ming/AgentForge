@@ -13,7 +13,7 @@
 ```text
 /opt/agentforge/repo       Git 工作树
 /opt/agentforge/env/.env   真实运行配置（0600，不进入 Git）
-/opt/agentforge/backups    PostgreSQL 备份
+/opt/agentforge/backups    PostgreSQL + Neo4j 一致备份目录
 /opt/agentforge/tls        ACME 证书与续期状态
 ```
 
@@ -44,6 +44,7 @@ scripts/deploy/health-check.sh
 scripts/deploy/logs.sh all
 scripts/deploy/logs.sh core-api
 scripts/deploy/backup.sh
+scripts/deploy/restore-backup.sh /opt/agentforge/backups/agentforge-<UTC时间>
 scripts/deploy/update.sh
 scripts/deploy/rollback.sh
 ```
@@ -57,7 +58,11 @@ compose logs --since 30m --no-color agent-service core-api
 
 第一条持续跟随入口、后端、Agent 与 Web；第二条适合排查最近的 Chat 503。停止跟随按 `Ctrl+C`。日志可能包含 requestId、项目 ID 等运维元数据，不得复制或公开包含 Bearer、内部 token 或模型 key 的请求内容。
 
-`update.sh` 先备份，再 fast-forward 拉取部署分支、顺序构建、启动并验收。`rollback.sh` 使用更新前保存的 commit，数据库迁移必须保持向后兼容；脚本不会删除 volume。
+`backup.sh` 会形成短维护窗口：记录运行中的服务，停止 gateway、Core API、Agent Service，生成 PostgreSQL custom dump；若部署存在受管 Neo4j 容器，再停止 Neo4j 并用固定镜像内的 `neo4j-admin database dump` 生成离线 `neo4j.dump`。两个归档写入同一临时目录，生成 `SHA256SUMS` 与不含凭据的 manifest 后才原子发布为 `/opt/agentforge/backups/agentforge-<UTC时间>/`；失败不会发布半成品，并恢复备份前运行的服务。目录及文件必须保持 root/服务用户以外不可读，14 天轮换只删除完整旧备份目录。
+
+`restore-backup.sh` 只接受备份根目录的直接子目录。它先验证 manifest 和 SHA-256，再停止写入面，等待 PostgreSQL healthy 后使用 `pg_restore --clean --if-exists --no-owner` 覆盖数据库并保留归档内的服务角色 ACL；不得使用 `--no-privileges` 跳过 V16/V17 建立的 Core/Agent 表级授权。存在 `neo4j.dump` 时保持 Neo4j 离线并以同一 Compose 固定版本执行 `neo4j-admin database load --overwrite-destination=true`。PostgreSQL-only 备份拒绝覆盖已有受管 Neo4j 数据，避免遗留不属于该备份代际的图。两库都成功后才恢复原先运行的服务；任一步失败均保持应用写入面停机，运维人员应先修复并重新执行恢复，不得单独启动 Core。恢复演练至少核验手工 Service、手工关系、多个 evidence、stable ID/version、PostgreSQL 已确认 canonical 映射引用，以及 `agentforge_core` / `agentforge_agent` 恢复后的代表性授权。不得复制活跃 `/data` 冒充备份。
+
+`update.sh` 先执行上述一致备份，再 fast-forward 拉取部署分支、顺序构建、启动并验收。`rollback.sh` 使用更新前保存的 commit，数据库迁移必须保持向后兼容；脚本不会删除 volume。
 
 ## Grafana 日志界面
 
