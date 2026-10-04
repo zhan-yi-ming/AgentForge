@@ -49,6 +49,7 @@ public class GraphResolutionDecisionService {
             || !resolvable(member.type()) || member.source()==null
             || request.sourceVersion()==null || request.canonicalSourceVersion()==null
             || request.sourceVersion()<0 || request.canonicalSourceVersion()<0) throw invalid();
+        lockRoles(projectId,entityId,request.canonicalEntityId());
         var anchor=graph.entity(projectId,request.canonicalEntityId(),actor);
         if (anchor.type()!=member.type() || anchor.source()==null) throw invalid();
         if(entityId.equals(anchor.id())) throw invalid();
@@ -242,6 +243,14 @@ public class GraphResolutionDecisionService {
                 rs.getObject("anchor_source_id",UUID.class),rs.getLong("anchor_source_version"),
                 rs.getLong("version")),projectId,id)
             .stream().findFirst();
+    }
+    private void lockRoles(UUID projectId, UUID memberId, UUID canonicalId) {
+        java.util.stream.Stream.of(memberId,canonicalId)
+            .map(UUID::toString)
+            .sorted()
+            .forEach(entityId -> jdbc.queryForObject(
+                "SELECT pg_advisory_xact_lock(hashtextextended(?,0))::text",
+                String.class,projectId+":resolution-role:"+entityId));
     }
     private java.util.Optional<Member> member(UUID projectId, UUID id) {
         return jdbc.query("""

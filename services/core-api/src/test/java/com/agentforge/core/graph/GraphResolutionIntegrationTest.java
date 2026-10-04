@@ -7,12 +7,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -64,6 +70,8 @@ class GraphResolutionIntegrationTest {
     @Autowired AuthenticationService auth;
     @Autowired ProjectService projects;
     @Autowired WikiPageService wiki;
+    @Autowired DataSource dataSource;
+    @Autowired JdbcTemplate jdbc;
     record Fixture(UUID project, AuthenticatedActor actor) {
         String path() { return "/api/v1/projects/"+project+"/graph"; }
         RequestPostProcessor token() { return jwt().jwt(j -> j.subject(actor.userId().toString()).claim("roles",java.util.List.of("USER"))); }
@@ -405,5 +413,83 @@ class GraphResolutionIntegrationTest {
         mvc.perform(put(f.path()+"/resolution/decisions/"+b).with(f.token())
             .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(reverse)))
             .andExpect(status().isConflict());
+    }
+
+    @Test
+    void concurrentOppositeMappingsSerializeEntityRolesWithoutPartialAudit() throws Exception {
+        var f=fixture();
+        var first=wiki.create(f.project(),f.actor(),"First","Service: Alpha");
+        var second=wiki.create(f.project(),f.actor(),"Second","Service: Beta");
+        UUID a=UUID.fromString(awaitService(f,first.id()));
+        UUID b=UUID.fromString(awaitService(f,second.id()));
+        long aVersion=graph.entity(f.project(),a,f.actor()).source().version();
+        long bVersion=graph.entity(f.project(),b,f.actor()).source().version();
+        var aToB=Map.of("canonicalEntityId",b,"canonicalName","Beta",
+            "aliases",java.util.List.of("Alpha"),"metadata",Map.of(),"confidence",0.8,
+            "expectedVersion",0,"sourceVersion",aVersion,"canonicalSourceVersion",bVersion);
+        var bToA=Map.of("canonicalEntityId",a,"canonicalName","Alpha",
+            "aliases",java.util.List.of("Beta"),"metadata",Map.of(),"confidence",0.8,
+            "expectedVersion",0,"sourceVersion",bVersion,"canonicalSourceVersion",aVersion);
+        String firstRole=java.util.stream.Stream.of(a,b).map(UUID::toString).sorted().findFirst().orElseThrow();
+        String lockName=f.project()+":resolution-role:"+firstRole;
+
+        try(var blocker=dataSource.getConnection();
+            var lock=blocker.prepareStatement("SELECT pg_advisory_lock(hashtextextended(?,0))")) {
+            lock.setString(1,lockName);
+            lock.execute();
+            var start=new CountDownLatch(1);
+            try(var executor=Executors.newFixedThreadPool(2)) {
+                Future<Integer> forward=executor.submit(() -> {
+                    start.await();
+                    return confirmStatus(f,a,aToB);
+                });
+                Future<Integer> reverse=executor.submit(() -> {
+                    start.await();
+                    return confirmStatus(f,b,bToA);
+                });
+                start.countDown();
+                awaitBlockedAdvisoryLocks(2);
+                try(var unlock=blocker.prepareStatement("SELECT pg_advisory_unlock(hashtextextended(?,0))")) {
+                    unlock.setString(1,lockName);
+                    unlock.execute();
+                }
+                assertThat(java.util.List.of(forward.get(10,TimeUnit.SECONDS),reverse.get(10,TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(200,409);
+            }
+        }
+
+        assertThat(jdbc.queryForObject("""
+            SELECT count(*) FROM graph_resolution_member
+            WHERE project_id=? AND status='CONFIRMED'
+            """,Integer.class,f.project())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("""
+            SELECT count(*) FROM graph_resolution_event
+            WHERE project_id=? AND action='CONFIRM'
+            """,Integer.class,f.project())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("""
+            SELECT count(*) FROM graph_canonical_entity c
+            JOIN graph_resolution_member m ON m.project_id=c.project_id AND m.entity_id=c.id
+            WHERE c.project_id=? AND m.status='CONFIRMED'
+            """,Integer.class,f.project())).isZero();
+    }
+
+    private int confirmStatus(Fixture fixture,UUID member,Map<String,?> body) throws Exception {
+        return mvc.perform(put(fixture.path()+"/resolution/decisions/"+member).with(fixture.token())
+            .contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body)))
+            .andReturn().getResponse().getStatus();
+    }
+
+    private void awaitBlockedAdvisoryLocks(int expected) throws InterruptedException {
+        long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(8);
+        int blocked=0;
+        while(System.nanoTime()<deadline) {
+            blocked=jdbc.queryForObject(
+                "SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND NOT granted",
+                Integer.class);
+            if(blocked>=expected) return;
+            Thread.sleep(50);
+        }
+        assertThat(blocked).as("confirmation transactions waiting on the shared entity-role lock")
+            .isGreaterThanOrEqualTo(expected);
     }
 }
