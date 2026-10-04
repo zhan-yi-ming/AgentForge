@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.agentforge.core.rag.application.CoreInternalAuthentication;
 import com.agentforge.core.rag.application.RagSource;
+import com.agentforge.core.rag.application.RagSourceSnapshot;
 import com.agentforge.core.rag.application.RagSourceService;
 import com.agentforge.core.rag.infrastructure.CoreInternalConfiguration;
 import com.agentforge.core.security.SecurityConfiguration;
@@ -51,8 +52,9 @@ class RagSourcesApiTest {
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID sourceId = UUID.randomUUID();
-        when(ragSourceService.list(eq(projectId), eq(userId), eq(false))).thenReturn(List.of(
-                new RagSource("WIKI", sourceId, 2, "Architecture", "# Core")));
+        when(ragSourceService.snapshot(eq(projectId), eq(userId), eq(false))).thenReturn(
+                new RagSourceSnapshot(42, List.of(
+                    new RagSource("WIKI", sourceId, 2, "Architecture", "# Core"))));
 
         mockMvc.perform(post("/internal/v1/rag/sources")
                         .header("X-AgentForge-Core-Internal-Token", "test-only-core-token")
@@ -61,6 +63,7 @@ class RagSourcesApiTest {
                         .content(body(projectId, userId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.projectId").value(projectId.toString()))
+                .andExpect(jsonPath("$.snapshotVersion").value(42))
                 .andExpect(jsonPath("$.requestId").value("request-123"))
                 .andExpect(jsonPath("$.sources[0].sourceType").value("WIKI"))
                 .andExpect(jsonPath("$.sources[0].sourceId").value(sourceId.toString()));

@@ -73,7 +73,7 @@
 
 ## Day 4 RAG 派生索引
 
-Flyway V3 迁移启用 `vector` 扩展并创建 `rag_chunk`。该表可从 Wiki/Task 重建，不是业务事实。
+Flyway V3 迁移启用 `vector` 扩展并创建 `rag_chunk`。该表可从 Wiki/Task 重建，不是业务事实。V17 新增 Core 只读的 `rag_source_generation(project_id,generation)`；Wiki/Task 提交由数据库触发器按项目推进代际，使可重复读来源集合与版本来自同一快照。V17 同时新增 `rag_project_snapshot(project_id,snapshot_version,updated_at)`，与 Chunk 在同一 Python 事务中推进，拒绝旧全量快照回退或误删；它同样是可重建派生元数据，仅向 `agentforge_agent` 授予所需 DML。
 
 | 字段 | 类型 | 约束 | 含义 |
 | --- | --- | --- | --- |

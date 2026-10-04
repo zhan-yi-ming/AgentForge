@@ -25,6 +25,7 @@ def test_pgvector_store_replaces_versions_removes_deleted_sources_and_isolates_p
             "V1__create_users_and_projects.sql",
             "V2__add_security_wiki_and_tasks.sql",
             "V3__add_rag_chunks.sql",
+            "V17__rag_snapshot_generation.sql",
         )
     ]
 
@@ -75,11 +76,11 @@ def test_pgvector_store_replaces_versions_removes_deleted_sources_and_isolates_p
             sourceType="WIKI", sourceId=other_id, version=0,
             title="Secret Project", content="confidential zebra material",
         )
-        store.synchronize(project_id, [wiki, task], embedder)
-        store.synchronize(other_project_id, [other], embedder)
+        assert store.synchronize(project_id, 10, [wiki, task], embedder)
+        assert store.synchronize(other_project_id, 11, [other], embedder)
 
         chunks, vector_ids, lexical_ids = store.search(
-            project_id, "authentication", embedder.embed(["authentication"])[0], 10,
+            project_id, 10, "authentication", embedder.embed(["authentication"])[0], 10,
         )
         assert lexical_ids
         assert vector_ids
@@ -92,7 +93,7 @@ def test_pgvector_store_replaces_versions_removes_deleted_sources_and_isolates_p
             sourceType="WIKI", sourceId=wiki_id, version=1,
             title="Authentication", content="Spring Security validates JWT tokens.",
         )
-        store.synchronize(project_id, [updated_wiki], embedder)
+        assert store.synchronize(project_id, 12, [updated_wiki], embedder)
 
         with psycopg.connect(dsn) as connection:
             rows = connection.execute(
@@ -102,3 +103,37 @@ def test_pgvector_store_replaces_versions_removes_deleted_sources_and_isolates_p
         assert rows
         assert {row[0] for row in rows} == {wiki_id}
         assert {row[1] for row in rows} == {1}
+
+        late_source = RagSource(
+            sourceType="TASK", sourceId=task_id, version=1,
+            title="Late task", content="This source belongs only to the stale snapshot.",
+        )
+        assert not store.synchronize(project_id, 11, [wiki, late_source], embedder)
+
+        with psycopg.connect(dsn) as connection:
+            rows = connection.execute(
+                "SELECT source_id, source_version FROM rag_chunk WHERE project_id = %s",
+                (project_id,),
+            ).fetchall()
+            snapshot_version = connection.execute(
+                "SELECT snapshot_version FROM rag_project_snapshot WHERE project_id = %s",
+                (project_id,),
+            ).fetchone()[0]
+        assert rows
+        assert {row[0] for row in rows} == {wiki_id}
+        assert {row[1] for row in rows} == {1}
+        assert snapshot_version == 12
+
+        stale_chunks, stale_vector, stale_lexical = store.search(
+            project_id, 11, "authentication", embedder.embed(["authentication"])[0], 10,
+        )
+        assert stale_chunks == {}
+        assert stale_vector == []
+        assert stale_lexical == []
+
+        current_chunks, current_vector, current_lexical = store.search(
+            project_id, 12, "authentication", embedder.embed(["authentication"])[0], 10,
+        )
+        assert current_chunks
+        assert current_vector
+        assert current_lexical

@@ -7,7 +7,7 @@ from agentforge_agent.embeddings import HashEmbeddingProvider
 from agentforge_agent.errors import RagDependencyError
 from agentforge_agent.rag_store import StoredChunk
 from agentforge_agent.retrieval import RetrievalService
-from agentforge_agent.schemas import GraphEntity, GraphEvidence, GraphMatch, RagSource
+from agentforge_agent.schemas import GraphEntity, GraphEvidence, GraphMatch, RagSource, RagSourcesResponse
 
 
 def test_relation_question_includes_graph_evidence_and_document_citation() -> None:
@@ -27,7 +27,8 @@ def test_relation_question_includes_graph_evidence_and_document_citation() -> No
 
     class CoreBoundary:
         def fetch_sources(self, *_args):
-            return [graph_source, text_source]
+            return RagSourcesResponse(projectId=project_id, snapshotVersion=1,
+                                      sources=[graph_source, text_source], requestId="graph-test")
 
         def fetch_graph(self, *_args):
             return [match]
@@ -100,7 +101,8 @@ def test_graph_relation_keeps_one_context_slot_when_text_has_both_rankings() -> 
 
     class CoreBoundary:
         def fetch_sources(self, *_args):
-            return [graph_source, *text_sources]
+            return RagSourcesResponse(projectId=project_id, snapshotVersion=1,
+                                      sources=[graph_source, *text_sources], requestId="graph-test")
 
         def fetch_graph(self, *_args):
             return [match]

@@ -8,6 +8,7 @@ from agentforge_agent.config import Settings
 from agentforge_agent.embeddings import HashEmbeddingProvider
 from agentforge_agent.repository_context import RepositoryContextProvider
 from agentforge_agent.retrieval import RetrievalService
+from agentforge_agent.schemas import RagSourcesResponse
 
 
 def _git(root, *args):
@@ -105,7 +106,8 @@ def test_retrieval_merges_repository_evidence_into_cited_context(tmp_path):
 
     class CoreBoundary:
         def fetch_sources(self, *_args):
-            return []
+            return RagSourcesResponse(projectId=project_id, snapshotVersion=1,
+                                      sources=[], requestId="repository-test")
 
         def fetch_graph(self, *_args):
             return []

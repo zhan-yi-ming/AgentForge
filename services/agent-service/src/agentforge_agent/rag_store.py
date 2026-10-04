@@ -29,12 +29,29 @@ class RagStore:
     def __init__(self, dsn: str) -> None:
         self.dsn = dsn
 
-    def synchronize(self, project_id: UUID, sources: list[RagSource], embedder: EmbeddingProvider) -> None:
+    def synchronize(
+        self,
+        project_id: UUID,
+        snapshot_version: int,
+        sources: list[RagSource],
+        embedder: EmbeddingProvider,
+    ) -> bool:
         try:
+            if snapshot_version < 0:
+                raise ValueError("snapshot_version must be non-negative")
             with psycopg.connect(self.dsn) as connection:
                 register_vector(connection)
                 with connection.cursor() as cursor:
                     cursor.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (str(project_id),))
+                    cursor.execute(
+                        "SELECT snapshot_version FROM rag_project_snapshot WHERE project_id = %s",
+                        (project_id,),
+                    )
+                    applied = cursor.fetchone()
+                    if applied is not None and snapshot_version < int(applied[0]):
+                        return False
+                    if applied is not None and snapshot_version == int(applied[0]):
+                        return True
                     cursor.execute(
                         """
                         SELECT source_type, source_id, max(source_version)
@@ -90,12 +107,24 @@ class RagStore:
                                     datetime.now(timezone.utc),
                                 ),
                             )
+                    cursor.execute(
+                        """
+                        INSERT INTO rag_project_snapshot (project_id, snapshot_version, updated_at)
+                        VALUES (%s, %s, now())
+                        ON CONFLICT (project_id) DO UPDATE SET
+                            snapshot_version = EXCLUDED.snapshot_version,
+                            updated_at = EXCLUDED.updated_at
+                        """,
+                        (project_id, snapshot_version),
+                    )
+            return True
         except (psycopg.Error, ValueError) as exception:
             raise RagDependencyError("RAG index database is unavailable.") from exception
 
     def search(
         self,
         project_id: UUID,
+        snapshot_version: int,
         query: str,
         query_embedding: list[float],
         candidate_k: int,
@@ -103,8 +132,16 @@ class RagStore:
     ) -> tuple[dict[str, StoredChunk], list[str], list[str]]:
         try:
             with psycopg.connect(self.dsn) as connection:
+                connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
                 register_vector(connection)
                 with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT snapshot_version FROM rag_project_snapshot WHERE project_id = %s",
+                        (project_id,),
+                    )
+                    applied = cursor.fetchone()
+                    if applied is None or int(applied[0]) != snapshot_version:
+                        return {}, [], []
                     cursor.execute(
                         """
                         SELECT id, project_id, source_type, source_id, source_version,

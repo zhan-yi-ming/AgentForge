@@ -94,6 +94,7 @@ V2-07 新增 `POST /internal/v1/agent/resume`，仅供 Core API 使用并继续�
 ```json
 {
   "projectId": "uuid",
+  "snapshotVersion": 12345,
   "sources": [
     {
       "sourceType": "WIKI",
@@ -107,7 +108,7 @@ V2-07 新增 `POST /internal/v1/agent/resume`，仅供 Core API 使用并继续�
 }
 ```
 
-Wiki `content` 原样返回；Task `content` 是由 Java 从 title/status/priority/description 形成的稳定文本。缺失或错误内部 token 返回 401，用户不存在返回 401，无项目权限返回 403，项目不存在返回 404。授权必须先于 Wiki/Task Repository 读取。
+`snapshotVersion` 是 Core 在同一 PostgreSQL 可重复读事务中读取的非负项目来源代际；Wiki/Task 的已提交增删改会推进它，只读请求不会。Agent 必须用它防止晚到旧请求回退索引，并且只搜索相同代际的 Chunk；它不是单个 Wiki/Task 的内容版本。Wiki `content` 原样返回；Task `content` 是由 Java 从 title/status/priority/description 形成的稳定文本。缺失或错误内部 token 返回 401，用户不存在返回 401，无项目权限返回 403，项目不存在返回 404。授权必须先于 Wiki/Task Repository 读取。
 
 ## P3-06 自动确认入口
 

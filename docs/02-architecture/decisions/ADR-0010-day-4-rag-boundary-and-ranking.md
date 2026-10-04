@@ -18,7 +18,7 @@ Wiki 与 Task 是 Java Core API 掌握的业务事实，Python Agent Service 负
 
 Java→Python Chat 与 Python→Java 来源读取使用两个不同的内部 token。Python 回调 Core API 时携带原始 `projectId`、`userId`、`actorAdmin` 和 `requestId`；Core API 验证服务 token、用户存在，并复用 `ProjectAccess` 再次授权后才读取 Wiki/Task。
 
-Python 只访问 `rag_chunk` 派生表，不查询或修改业务表。每次 Chat 先按来源版本对齐索引，再执行 pgvector cosine 排名和进程内 BM25，最后用 RRF 融合。固定 384 维是 V1 数据契约；默认 hash provider 保证无密钥和确定性，可选 OpenAI-compatible provider 提供更强语义向量。
+Python 只访问 `rag_chunk` 与 `rag_project_snapshot` 两张派生索引表，不查询或修改业务表。Core 在可重复读事务中读取由 Wiki/Task 提交触发器推进的项目来源代际，并将其作为已授权全量来源的单调 `snapshotVersion`；`rag_source_generation` 只向 Core 开放读取。Python 在项目事务锁内只应用不小于已落库代际的快照，旧快照既不能回退内容也不能执行缺失删除。每次 Chat 只在搜索事务看到的索引代际等于本次授权代际时执行 pgvector cosine 排名和进程内 BM25，否则文本候选 fail closed 为空，再由后续请求重新同步。固定 384 维是 V1 数据契约；默认 hash provider 保证无密钥和确定性，可选 OpenAI-compatible provider 提供更强语义向量。
 
 ## 结果
 

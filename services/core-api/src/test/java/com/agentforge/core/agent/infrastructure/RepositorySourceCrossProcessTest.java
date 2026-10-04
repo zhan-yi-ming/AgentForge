@@ -42,6 +42,7 @@ class RepositorySourceCrossProcessTest {
             from agentforge_agent.embeddings import HashEmbeddingProvider
             from agentforge_agent.repository_context import RepositoryContextProvider
             from agentforge_agent.retrieval import RetrievalService
+            from agentforge_agent.schemas import RagSourcesResponse
             root = Path(sys.argv[2])
             project = UUID(sys.argv[3])
             def git(*args):
@@ -53,7 +54,9 @@ class RepositorySourceCrossProcessTest {
             git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
                 'commit', '-qm', 'Document Core entry')
             class Core:
-                def fetch_sources(self, *_args): return []
+                def fetch_sources(self, *_args):
+                    return RagSourcesResponse(projectId=project, snapshotVersion=1,
+                                              sources=[], requestId='repository-cross-process')
                 def fetch_graph(self, *_args): return []
             class Index:
                 def synchronize(self, *_args): pass

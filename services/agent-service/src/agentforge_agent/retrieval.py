@@ -69,16 +69,18 @@ class RetrievalService:
         query: str,
         request_id: str,
     ) -> RetrievalResult:
-        sources = self.core_client.fetch_sources(
+        snapshot = self.core_client.fetch_sources(
             str(project_id),
             str(user_id),
             actor_admin,
             request_id,
         )
-        self.store.synchronize(project_id, sources, self.embedder)
+        sources = snapshot.sources
+        self.store.synchronize(project_id, snapshot.snapshot_version, sources, self.embedder)
         query_embedding = self.embedder.embed([query])[0]
         chunks, vector_ids, lexical_ids = self.store.search(
             project_id,
+            snapshot.snapshot_version,
             query,
             query_embedding,
             self.candidate_k,

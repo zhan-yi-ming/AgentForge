@@ -16,7 +16,7 @@ class CoreApiClient:
         user_id: str,
         actor_admin: bool,
         request_id: str,
-    ) -> list[RagSource]:
+    ) -> RagSourcesResponse:
         try:
             response = httpx.post(
                 f"{self.base_url}/internal/v1/rag/sources",
@@ -36,7 +36,7 @@ class CoreApiClient:
             parsed = RagSourcesResponse.model_validate(response.json())
             if str(parsed.project_id) != project_id or parsed.request_id != request_id:
                 raise ValueError("Core API source response correlation mismatch")
-            return parsed.sources
+            return parsed
         except (httpx.HTTPError, ValueError) as exception:
             raise RagDependencyError("Core API RAG source service is unavailable.") from exception
 

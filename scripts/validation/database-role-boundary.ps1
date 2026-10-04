@@ -7,7 +7,8 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $provision = Join-Path $root "infra/postgres/provision-roles.sh"
 $migration = Join-Path $root "services/core-api/src/main/resources/db/migration/V16__separate_database_service_roles.sql"
-foreach ($path in $provision, $migration) {
+$snapshotMigration = Join-Path $root "services/core-api/src/main/resources/db/migration/V17__rag_snapshot_generation.sql"
+foreach ($path in $provision, $migration, $snapshotMigration) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required role boundary file is missing: $path" }
 }
 
@@ -56,6 +57,7 @@ try {
 
     Invoke-Docker @("cp", $provision, "${container}:/tmp/provision-roles.sh")
     Invoke-Docker @("cp", $migration, "${container}:/tmp/V16.sql")
+    Invoke-Docker @("cp", $snapshotMigration, "${container}:/tmp/V17.sql")
     Invoke-Docker @("exec", "-e", "PGHOST=127.0.0.1", "-e", "POSTGRES_DB=$database",
         "-e", "POSTGRES_USER=agentforge_admin", "-e", "POSTGRES_PASSWORD=$adminPassword",
         "-e", "AGENTFORGE_CORE_DB_PASSWORD=$corePassword",
@@ -64,30 +66,40 @@ try {
 
     Invoke-Psql "agentforge_admin" $adminPassword @"
 CREATE TABLE app_user(id uuid PRIMARY KEY, marker text NOT NULL);
-CREATE TABLE task_item(id uuid PRIMARY KEY, marker text NOT NULL);
+CREATE TABLE project(id uuid PRIMARY KEY);
+CREATE TABLE wiki_page(id uuid PRIMARY KEY, project_id uuid, marker text NOT NULL);
+CREATE TABLE task_item(id uuid PRIMARY KEY, project_id uuid, marker text NOT NULL);
 CREATE TABLE agent_task_action(id uuid PRIMARY KEY, marker text NOT NULL);
 CREATE TABLE rag_chunk(id uuid PRIMARY KEY, marker text NOT NULL);
 CREATE SCHEMA agent_checkpoint;
 CREATE TABLE agent_checkpoint.checkpoints(id uuid PRIMARY KEY, marker text NOT NULL);
 INSERT INTO app_user VALUES ('00000000-0000-0000-0000-000000000001', 'initial');
-INSERT INTO task_item VALUES ('00000000-0000-0000-0000-000000000002', 'initial');
+INSERT INTO task_item(id,marker) VALUES ('00000000-0000-0000-0000-000000000002', 'initial');
 INSERT INTO agent_task_action VALUES ('00000000-0000-0000-0000-000000000003', 'initial');
+INSERT INTO project VALUES ('00000000-0000-0000-0000-000000000006');
 "@
     Invoke-Docker @("exec", "-e", "PGPASSWORD=$adminPassword", $container, "psql", "--no-psqlrc",
         "--set", "ON_ERROR_STOP=1", "--host", "127.0.0.1", "--username", "agentforge_admin",
         "--dbname", $database, "--file", "/tmp/V16.sql")
+    Invoke-Docker @("exec", "-e", "PGPASSWORD=$adminPassword", $container, "psql", "--no-psqlrc",
+        "--set", "ON_ERROR_STOP=1", "--host", "127.0.0.1", "--username", "agentforge_admin",
+        "--dbname", $database, "--file", "/tmp/V17.sql")
 
     Invoke-Psql "agentforge_core" $corePassword "UPDATE app_user SET marker='core-ok';"
+    Invoke-Psql "agentforge_core" $corePassword "INSERT INTO wiki_page VALUES ('00000000-0000-0000-0000-000000000007','00000000-0000-0000-0000-000000000006','core-source'); SELECT generation FROM rag_source_generation WHERE project_id='00000000-0000-0000-0000-000000000006';"
     Invoke-Psql "agentforge_agent" $agentPassword "INSERT INTO rag_chunk VALUES ('00000000-0000-0000-0000-000000000004','agent-ok');"
+    Invoke-Psql "agentforge_agent" $agentPassword "INSERT INTO rag_project_snapshot(project_id,snapshot_version) VALUES ('00000000-0000-0000-0000-000000000006',42);"
     Invoke-Psql "agentforge_agent" $agentPassword "ALTER TABLE agent_checkpoint.checkpoints ADD COLUMN agent_upgrade_marker text;"
     Invoke-Psql "agentforge_agent" $agentPassword "CREATE TABLE agent_checkpoint.writes(id uuid PRIMARY KEY); INSERT INTO agent_checkpoint.writes VALUES ('00000000-0000-0000-0000-000000000005');"
     Assert-PsqlDenied "UPDATE app_user SET marker='forbidden';"
     Assert-PsqlDenied "UPDATE task_item SET marker='forbidden';"
     Assert-PsqlDenied "UPDATE agent_task_action SET marker='forbidden';"
+    Assert-PsqlDenied "DELETE FROM project;"
+    Assert-PsqlDenied "SELECT * FROM rag_source_generation;"
     Assert-PsqlDenied "CREATE TABLE public.agent_escape(id integer);"
 
     Invoke-Psql "agentforge_admin" $adminPassword "DO `$check`$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname IN ('agentforge_core','agentforge_agent') AND (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)) THEN RAISE EXCEPTION 'service role is privileged'; END IF; END `$check`$;"
-    Write-Host "Database role boundary passed: Core business DML allowed; Agent RAG/checkpoint allowed; Agent business writes and public DDL denied."
+    Write-Host "Database role boundary passed: Core business DML allowed; Agent RAG chunk/snapshot and checkpoint allowed; Agent business writes and public DDL denied."
 } finally {
     if ($created) {
         & docker rm --force $container *> $null

@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.agentforge.core.project.ProjectAccess;
 import com.agentforge.core.security.AuthenticatedActor;
@@ -35,7 +36,8 @@ class RagSourceServiceTest {
         ProjectAccess projects = mock(ProjectAccess.class);
         WikiPageService wiki = mock(WikiPageService.class);
         TaskService tasks = mock(TaskService.class);
-        RagSourceService service = new RagSourceService(users, projects, wiki, tasks);
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        RagSourceService service = new RagSourceService(users, projects, wiki, tasks, jdbc);
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         AuthenticatedActor actor = new AuthenticatedActor(userId, false);
@@ -45,15 +47,25 @@ class RagSourceServiceTest {
         when(tasks.list(projectId, actor)).thenReturn(List.of(new TaskView(
                 UUID.randomUUID(), projectId, "Ship RAG", "Add retrieval", TaskStatus.TODO,
                 TaskPriority.HIGH, 1, now, now)));
+        when(jdbc.queryForObject(
+                "SELECT generation FROM rag_source_generation WHERE project_id=?",
+                Long.class,
+                projectId)).thenReturn(42L);
 
-        List<RagSource> result = service.list(projectId, userId, false);
+        RagSourceSnapshot snapshot = service.snapshot(projectId, userId, false);
+        List<RagSource> result = snapshot.sources();
 
+        assertThat(snapshot.snapshotVersion()).isEqualTo(42);
         assertThat(result).hasSize(2);
         assertThat(result.get(0).sourceType()).isEqualTo("WIKI");
         assertThat(result.get(1).content()).contains("Status: TODO", "Priority: HIGH", "Add retrieval");
-        InOrder order = inOrder(users, projects, wiki, tasks);
+        InOrder order = inOrder(users, projects, jdbc, wiki, tasks);
         order.verify(users).requireUserExists(userId);
         order.verify(projects).requireAccess(projectId, actor);
+        order.verify(jdbc).queryForObject(
+                "SELECT generation FROM rag_source_generation WHERE project_id=?",
+                Long.class,
+                projectId);
         order.verify(wiki).list(projectId, actor);
         order.verify(tasks).list(projectId, actor);
     }
@@ -64,16 +76,17 @@ class RagSourceServiceTest {
         ProjectAccess projects = mock(ProjectAccess.class);
         WikiPageService wiki = mock(WikiPageService.class);
         TaskService tasks = mock(TaskService.class);
-        RagSourceService service = new RagSourceService(users, projects, wiki, tasks);
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        RagSourceService service = new RagSourceService(users, projects, wiki, tasks, jdbc);
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         AuthenticatedActor actor = new AuthenticatedActor(userId, false);
         doThrow(new ForbiddenException("access denied")).when(projects).requireAccess(projectId, actor);
 
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.list(projectId, userId, false))
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.snapshot(projectId, userId, false))
                 .isInstanceOf(ForbiddenException.class);
 
-        verifyNoInteractions(wiki, tasks);
+        verifyNoInteractions(jdbc, wiki, tasks);
     }
 
     @Test
@@ -82,15 +95,16 @@ class RagSourceServiceTest {
         ProjectAccess projects = mock(ProjectAccess.class);
         WikiPageService wiki = mock(WikiPageService.class);
         TaskService tasks = mock(TaskService.class);
-        RagSourceService service = new RagSourceService(users, projects, wiki, tasks);
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        RagSourceService service = new RagSourceService(users, projects, wiki, tasks, jdbc);
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         doThrow(new ResourceNotFoundException("user missing")).when(users).requireUserExists(userId);
 
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.list(projectId, userId, false))
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.snapshot(projectId, userId, false))
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessage("The internal actor is not valid.");
 
-        verifyNoInteractions(projects, wiki, tasks);
+        verifyNoInteractions(projects, jdbc, wiki, tasks);
     }
 }
