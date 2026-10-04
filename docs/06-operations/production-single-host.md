@@ -33,7 +33,7 @@ scripts/deploy/seed-demo.sh
 
 从 V1.2 旧固定账号迁移时，Git 更新不会覆盖服务器私有 `.env`。维护者必须把其中两个 `AGENTFORGE_DEMO_FIXED_*` 值同步为登录页公开值，再运行 `scripts/deploy/seed-demo.sh` 创建/复用新普通 USER workspace；确认新账号可登录后，可保留旧账号作为临时回退或按受控数据流程停用。若未执行这一步，新登录页展示的公开账号不会在既有数据库中自动出现。
 
-部署先启动 PostgreSQL，运行一次幂等 `database-roles` 引导，再启动以管理员身份执行 Flyway、以 `agentforge_core` 运行的 Core；Agent 仅使用 `agentforge_agent` 连接。该顺序同时适用于既有持久卷，禁止删卷迁移。构建按 core-api、agent-service、web、gateway 顺序执行，避免 2C4G 机器并行构建。Docker Compose v5 使用 `docker compose build <service>`；不要传入已不受支持的 `build --no-deps`，且只有显式指定 `--with-dependencies` 时才会连带构建依赖。Demo 初始化先停止公网 gateway，只在 Core API 容器内部临时开启注册；创建或复用固定 USER workspace，并创建随机备用 USER workspace，恢复注册关闭后才重新开放 gateway。脚本只输出固定邮箱与随机备用凭据，不回显固定密码。
+部署先启动 PostgreSQL，运行一次幂等 `database-roles` 引导，再启动以管理员身份执行 Flyway、以 `agentforge_core` 运行的 Core；Agent 仅使用 `agentforge_agent` 连接。该顺序同时适用于既有持久卷，禁止删卷迁移。构建按 core-api、agent-service、web、gateway 顺序执行，避免 2C4G 机器并行构建。Docker Compose v5 使用 `docker compose build <service>`；不要传入已不受支持的 `build --no-deps`，且只有显式指定 `--with-dependencies` 时才会连带构建依赖。Core↔Agent 内部契约按同一版本发布；若必须手工分阶段替换，先升级 Core、确认内部来源接口已返回当前契约，再升级 Agent，不支持“新 Agent + 旧 Core”的混合版本。Demo 初始化先停止公网 gateway，只在 Core API 容器内部临时开启注册；创建或复用固定 USER workspace，并创建随机备用 USER workspace，恢复注册关闭后才重新开放 gateway。脚本只输出固定邮箱与随机备用凭据，不回显固定密码。
 
 Nginx 对 ASR session 路径使用独立 `asr_per_ip` 限流区（600 req/min、burst 30），避免音频上传/预览轮询耗尽普通 API 区；会话日额度、单包、总时长与并发限制仍由应用层执行。Nginx 对 `/agent/chat/stream` 关闭响应缓冲和缓存，并保持长于模型请求预算的读取超时；生产默认超时顺序为 Agent 单次等待 60 秒、Core 下游读取 75 秒、SSE emitter 与 Nginx 120 秒。其余 API 继续使用默认代理策略。部署后的流式验收必须证明多个 delta 能在 complete 前到达，而不只是最终正文正确。
 

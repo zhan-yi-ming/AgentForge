@@ -107,12 +107,16 @@ def test_retrieval_merges_repository_evidence_into_cited_context(tmp_path):
     class CoreBoundary:
         def fetch_sources(self, *_args):
             return RagSourcesResponse(projectId=project_id, snapshotVersion=1,
-                                      sources=[], requestId="repository-test")
+                                      sourcesChanged=True, sources=[],
+                                      requestId="repository-test")
 
         def fetch_graph(self, *_args):
             return []
 
     class IndexBoundary:
+        def snapshot_version(self, _project_id):
+            return None
+
         def synchronize(self, *_args):
             pass
 

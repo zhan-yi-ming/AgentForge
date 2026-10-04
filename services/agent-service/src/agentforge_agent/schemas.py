@@ -108,6 +108,7 @@ class RagSource(ApiModel):
 class RagSourcesResponse(ApiModel):
     project_id: UUID
     snapshot_version: int = Field(ge=0)
+    sources_changed: bool
     sources: list[RagSource]
     request_id: str
 

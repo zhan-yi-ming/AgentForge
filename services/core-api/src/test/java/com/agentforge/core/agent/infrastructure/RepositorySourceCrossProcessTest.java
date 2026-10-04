@@ -56,9 +56,11 @@ class RepositorySourceCrossProcessTest {
             class Core:
                 def fetch_sources(self, *_args):
                     return RagSourcesResponse(projectId=project, snapshotVersion=1,
-                                              sources=[], requestId='repository-cross-process')
+                                              sourcesChanged=True, sources=[],
+                                              requestId='repository-cross-process')
                 def fetch_graph(self, *_args): return []
             class Index:
+                def snapshot_version(self, *_args): return None
                 def synchronize(self, *_args): pass
                 def search(self, *_args): return {}, [], []
             retrieval = RetrievalService(

@@ -6,7 +6,26 @@ from testcontainers.community.postgres import PostgresContainer
 
 from agentforge_agent.embeddings import HashEmbeddingProvider
 from agentforge_agent.rag_store import RagStore
-from agentforge_agent.schemas import RagSource
+from agentforge_agent.schemas import GraphEntity, GraphEvidence, GraphMatch, RagSource
+
+
+def graph_match(source_id, source_version: int, excerpt: str) -> GraphMatch:
+    return GraphMatch(
+        hop=1,
+        relationId=uuid4(),
+        relationType="DESCRIBES",
+        **{
+            "from": GraphEntity(entityId=uuid4(), entityType="WIKI", displayName="Source"),
+            "to": GraphEntity(entityId=uuid4(), entityType="SERVICE", displayName="Core"),
+        },
+        evidence=GraphEvidence(
+            sourceType="WIKI",
+            sourceId=source_id,
+            sourceVersion=source_version,
+            excerpt=excerpt,
+            confidence=0.9,
+        ),
+    )
 
 
 def test_pgvector_store_replaces_versions_removes_deleted_sources_and_isolates_projects() -> None:
@@ -26,6 +45,7 @@ def test_pgvector_store_replaces_versions_removes_deleted_sources_and_isolates_p
             "V2__add_security_wiki_and_tasks.sql",
             "V3__add_rag_chunks.sql",
             "V17__rag_snapshot_generation.sql",
+            "V18__rag_lexical_search.sql",
         )
     ]
 
@@ -95,6 +115,14 @@ def test_pgvector_store_replaces_versions_removes_deleted_sources_and_isolates_p
         )
         assert store.synchronize(project_id, 12, [updated_wiki], embedder)
 
+        matching = graph_match(wiki_id, 1, "Security validates JWT")
+        evidence = store.load_graph_evidence(project_id, 12, [matching])
+        assert evidence[("WIKI", wiki_id, 1)].source_id == wiki_id
+        assert store.load_graph_evidence(project_id, 11, [matching]) == {}
+        assert store.load_graph_evidence(
+            project_id, 12, [graph_match(wiki_id, 0, "Security validates JWT")],
+        ) == {}
+
         with psycopg.connect(dsn) as connection:
             rows = connection.execute(
                 "SELECT source_id, source_version FROM rag_chunk WHERE project_id = %s",
@@ -137,3 +165,33 @@ def test_pgvector_store_replaces_versions_removes_deleted_sources_and_isolates_p
         assert current_chunks
         assert current_vector
         assert current_lexical
+
+        noisy_sources = [
+            RagSource(
+                sourceType="WIKI", sourceId=uuid4(), version=0,
+                title=f"Noise {index}", content=f"irrelevant material {index}",
+            )
+            for index in range(20)
+        ]
+        assert store.synchronize(project_id, 13, [updated_wiki, *noisy_sources], embedder)
+        bounded_chunks, bounded_vector, bounded_lexical = store.search(
+            project_id, 13, "authentication", embedder.embed(["authentication"])[0], 1,
+        )
+        assert len(bounded_vector) <= 1
+        assert len(bounded_lexical) <= 1
+        assert len(bounded_chunks) <= 2
+        assert bounded_lexical
+        assert bounded_chunks[bounded_lexical[0]].source_id == wiki_id
+
+        boundary_id = uuid4()
+        boundary_source = RagSource(
+            sourceType="WIKI",
+            sourceId=boundary_id,
+            version=0,
+            title="Boundary evidence",
+            content=f"before {'X' * 900} after",
+        )
+        assert store.synchronize(project_id, 14, [updated_wiki, boundary_source], embedder)
+        assert store.load_graph_evidence(
+            project_id, 14, [graph_match(boundary_id, 0, "X" * 900)],
+        ) == {}

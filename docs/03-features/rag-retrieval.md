@@ -17,9 +17,9 @@ Day 4 包含 Wiki/Task Chunk、384 维 Embedding、BM25、RRF、Retrieved Contex
 ## 关键流程
 
 1. 公共 Chat 请求先由 Java 校验 JWT 和项目 owner/admin 权限，再把 `userId` 与 `actorAdmin` 发送给 Python。
-2. LangGraph `retrieve` 节点用独立 Core 内部 token 回调来源接口；Java 验证 token、用户存在和项目权限，在 PostgreSQL 可重复读事务中返回 Wiki/Task 全量来源及其项目来源代际 `snapshotVersion`。该代际由 Wiki/Task 提交触发器推进，不因只读请求增加。
-3. Python 在项目事务锁内按快照代际同步派生 Chunk。旧于已应用代际的来源集合不得覆盖新索引或执行缺失删除；未变化来源复用现有向量，变化来源替换旧 Chunk，当前全量快照中已删除来源清除索引。
-4. 查询分别进入向量召回和 BM25 召回。RRF 按两个排名融合，不直接比较异构分数。
+2. LangGraph `retrieve` 节点用独立 Core 内部 token 回调来源接口；Java 验证 token、用户存在和项目权限，并在 PostgreSQL 可重复读事务中读取项目来源代际 `snapshotVersion`。Agent 携带已应用的可选 `knownSnapshotVersion`：代际未变时 Core 不读取或返回 Wiki/Task 正文；代际变化或本地尚无索引时才返回完整来源集合。该代际由 Wiki/Task 提交触发器推进，不因只读请求增加。
+3. Python 只对 `sourcesChanged=true` 的完整快照在项目事务锁内同步派生 Chunk。旧于已应用代际的来源集合不得覆盖新索引或执行缺失删除；变化来源替换旧 Chunk，完整快照中已删除来源清除索引。未变化响应不进入同步锁。
+4. 查询分别进入 PostgreSQL 内的向量召回和带 GIN 索引的词法预选，两路各自最多返回 `candidate_k` 个 ID；Python 只对有界词法候选计算 BM25，再用 RRF 融合，不直接比较异构分数，也不搬运项目全部 Chunk。
 5. 最多 6 个 Chunk 进入有字符预算的 Retrieved Context。确定性 responder 根据 Context 给出摘要；Chat 响应同时返回去重后的来源列表。
 
 P3-04 起，结构化来源列表只包含完成回答实际标注的已授权检索资料。检索候选以稳定编号进入模型上下文；回答使用 `【来源编号】` 标注资料，Python 将有效编号映射回 sourceType/sourceId/title/excerpt。没有有效标注时 `sources=[]`，不把候选自动列为引用。流式响应直到 complete 才确定准确来源。
@@ -32,7 +32,7 @@ P3-04 起，结构化来源列表只包含完成回答实际标注的已授权�
 
 ## 数据
 
-`rag_chunk` 是可重建的派生索引，不是业务事实。隔离键是 `project_id`；来源身份由 `source_type + source_id` 确定，`source_version` 用于内容失效。`rag_project_snapshot` 记录每个项目最后原子应用的全量来源代际，只用于拒绝乱序同步并约束搜索，不复制业务权限。向量固定为 384 维，内容保留原文片段以支持 BM25 和引用摘录。
+`rag_chunk` 是可重建的派生索引，不是业务事实。隔离键是 `project_id`；来源身份由 `source_type + source_id` 确定，`source_version` 用于内容失效。`rag_project_snapshot` 记录每个项目最后原子应用的全量来源代际，只用于来源握手、拒绝乱序同步并约束搜索，不复制业务权限。向量固定为 384 维；词法列由 title/content 生成并使用 GIN 索引，内容保留原文片段以支持引用摘录。
 
 ## 权限与安全
 
@@ -52,6 +52,8 @@ P3-04 起，结构化来源列表只包含完成回答实际标注的已授权�
 
 - Chunk 边界稳定，来源版本变化和删除能正确替换/清除索引；v2 后到达的 v1、删除后的旧全量快照均不能回退或复活索引。
 - 搜索只消费与当前授权 `snapshotVersion` 相同的索引；索引已被更新请求推进时本次文本候选为空，不泄漏另一快照内容。
+- 未变化代际不读取或传输 Wiki/Task 正文、不进入项目同步锁；变化代际仍以完整快照传播删除。
+- 向量和词法候选各自不超过 `candidate_k`，Python 收到的 Chunk 只来自两路候选并集；Graph evidence 只按有界 match 在相同代际索引中验证。
 - BM25、向量排名和 RRF 在固定语料上结果可重复；跨项目 Chunk 绝不进入候选。
 - 公共 Chat 返回相关 Wiki/Task 来源；无结果不伪造来源。
 - 内部接口覆盖缺失/错误 token、用户不存在、跨用户拒绝、ADMIN 和 owner 成功。
@@ -59,4 +61,4 @@ P3-04 起，结构化来源列表只包含完成回答实际标注的已授权�
 
 ## 已知限制与后续计划
 
-V1 每次 Chat 都会读取项目来源元数据，并在 Python 进程内计算 BM25；适合演示规模，不适合大项目。hash 向量主要表达词项相似性；真实语义 Embedding provider、后台索引任务、缓存、评测和 Token Manager 留到后续阶段。
+来源发生变化时，当前请求仍同步取得完整授权快照并更新索引；本次修复消除稳定项目的重复正文传输与全项目 Chunk 搬运，但不引入独立后台索引 worker。当前 PostgreSQL 词法预选使用 `simple` 配置；无空格的 CJK 查询可能得不到词法候选，此时只使用向量路，后续需以独立检索质量变更评估 `pg_trgm` 或中文分词，不能在容量修复中静默改变排序语义。hash 向量主要表达词项相似性；真实语义 Embedding provider 与后台增量队列留到后续独立阶段。

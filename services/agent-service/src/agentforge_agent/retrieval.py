@@ -8,7 +8,7 @@ from .embeddings import HashEmbeddingProvider
 from .rag_store import RagStore, StoredChunk
 from .ranking import RankableChunk, bm25_rank, reciprocal_rank_fusion
 from .repository_context import RepositoryContextProvider
-from .schemas import ChatSource, GraphMatch, RagSource
+from .schemas import ChatSource, GraphMatch
 
 
 @dataclass(frozen=True)
@@ -69,14 +69,17 @@ class RetrievalService:
         query: str,
         request_id: str,
     ) -> RetrievalResult:
+        known_snapshot_version = self.store.snapshot_version(project_id)
         snapshot = self.core_client.fetch_sources(
             str(project_id),
             str(user_id),
             actor_admin,
             request_id,
+            known_snapshot_version,
         )
         sources = snapshot.sources
-        self.store.synchronize(project_id, snapshot.snapshot_version, sources, self.embedder)
+        if snapshot.sources_changed:
+            self.store.synchronize(project_id, snapshot.snapshot_version, sources, self.embedder)
         query_embedding = self.embedder.embed([query])[0]
         chunks, vector_ids, lexical_ids = self.store.search(
             project_id,
@@ -88,7 +91,16 @@ class RetrievalService:
         graph_matches = self.core_client.fetch_graph(
             str(project_id), str(user_id), actor_admin, request_id, query,
         ) if query.strip() else []
-        graph_chunks = _graph_chunks(project_id, sources, graph_matches)
+        if not graph_matches:
+            graph_chunks = []
+        else:
+            graph_chunks = _graph_chunks_from_index(
+                project_id,
+                self.store.load_graph_evidence(
+                    project_id, snapshot.snapshot_version, graph_matches,
+                ),
+                graph_matches,
+            )
         chunks.update({chunk.id: chunk for chunk in graph_chunks})
         graph_ids = [chunk.id for chunk in graph_chunks]
         repository_matches = (
@@ -182,14 +194,19 @@ def _deduplicate_sources(chunks: list[StoredChunk]) -> list[ChatSource]:
     return result
 
 
-def _graph_chunks(project_id, sources: list[RagSource], matches: list[GraphMatch]) -> list[StoredChunk]:
-    authorized = {(source.source_type, source.source_id): source for source in sources}
+def _graph_chunks_from_index(
+    project_id: UUID,
+    authorized: dict[tuple[str, UUID, int], StoredChunk],
+    matches: list[GraphMatch],
+) -> list[StoredChunk]:
     result: list[StoredChunk] = []
     seen: set[str] = set()
     for match in matches[:40]:
         evidence = match.evidence
-        source = authorized.get((evidence.source_type, evidence.source_id))
-        if source is None or source.version != evidence.source_version or evidence.excerpt not in source.content:
+        source = authorized.get((
+            evidence.source_type, evidence.source_id, evidence.source_version,
+        ))
+        if source is None or evidence.excerpt not in source.content:
             continue
         identity = f"graph:{match.relation_id}:{evidence.source_id}"
         if identity in seen:
@@ -199,7 +216,7 @@ def _graph_chunks(project_id, sources: list[RagSource], matches: list[GraphMatch
                    f"{match.from_entity.display_name} {match.relation_type} "
                    f"{match.to_entity.display_name} (hop {match.hop}, confidence {evidence.confidence:.2f}).")
         result.append(StoredChunk(identity, project_id, source.source_type, source.source_id,
-                                  source.version, 0, source.title, content))
+                                  source.source_version, 0, source.title, content))
     return result
 
 

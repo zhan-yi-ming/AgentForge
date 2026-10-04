@@ -5,5 +5,10 @@ import java.util.UUID;
 
 import com.agentforge.core.rag.application.RagSource;
 
-public record RagSourcesResponse(UUID projectId, long snapshotVersion, List<RagSource> sources, String requestId) {
+public record RagSourcesResponse(
+        UUID projectId,
+        long snapshotVersion,
+        boolean sourcesChanged,
+        List<RagSource> sources,
+        String requestId) {
 }

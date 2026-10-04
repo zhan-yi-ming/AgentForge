@@ -57,7 +57,7 @@ class DatabaseIdentitySeparationIntegrationTest {
                 .isEqualTo("agentforge_core");
         assertThat(jdbcTemplate.queryForObject(
                 "select max(version::integer) from flyway_schema_history where success", Integer.class))
-                .isEqualTo(17);
+                .isEqualTo(18);
         assertThat(jdbcTemplate.queryForObject(
                 "select tableowner from pg_tables where schemaname='public' and tablename='app_user'",
                 String.class)).isEqualTo(POSTGRES.getUsername());

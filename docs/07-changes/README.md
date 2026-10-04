@@ -1,5 +1,7 @@
 # 变更记录
 
+- [2026-10-04-r15-rag-query-bounds.md](2026-10-04-r15-rag-query-bounds.md)：R15 来源代际握手与 PostgreSQL 内有界文本候选，避免每次 Chat 搬运全部项目正文（Implemented）。
+
 - [2026-10-02-v3-main-integration.md](2026-10-02-v3-main-integration.md)：V3 全部提交合并至 `main` 的独立 Release Gate、Pi 审核与远端 fast-forward 核验（In Progress）。
 
 - [2026-10-02-v3-full-impact-audit.md](2026-10-02-v3-full-impact-audit.md)：V3-01 至 V3-09 累计差异的跨功能影响、全量回归与 Pi Milestone 审计（Implemented，PASS）。

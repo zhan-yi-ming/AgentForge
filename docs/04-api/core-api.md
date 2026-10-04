@@ -283,7 +283,7 @@ reject 先提交 `REJECTED` 再恢复 Agent wait。相同 key 可重试恢复；
 
 同步或流式 Chat 携带已删除的 conversationId 时，Core 在调用 Agent Service 和消耗日配额之前返回 409；携带属于其他 project/user 的会话 ID 返回 404，不泄露其存在性。
 
-`/internal/v1/rag/sources` 是 Agent Service 专用只读接口，不属于浏览器公共 API。它使用独立 Core 内部 token，并在读取 Wiki/Task 前再次执行用户存在和项目权限校验。成功响应包含非负 `snapshotVersion`；该值是随 Wiki/Task 已提交变更推进、不会因读取增加的项目来源代际，并与来源列表在同一 PostgreSQL 可重复读事务中取得，用于 Agent 拒绝晚到的旧全量快照并约束同次搜索。
+`/internal/v1/rag/sources` 是 Agent Service 专用只读接口，不属于浏览器公共 API。它使用独立 Core 内部 token，并在读取来源代际或 Wiki/Task 前再次执行用户存在和项目权限校验。请求可携带非负 `knownSnapshotVersion`；成功响应包含非负 `snapshotVersion` 与 `sourcesChanged`。已应用代际匹配时返回 `sourcesChanged=false,sources=[]`，不读取 Wiki/Task 正文；不匹配或未携带时返回 `sourcesChanged=true` 与完整来源集合。该代际随 Wiki/Task 已提交变更推进、不会因读取增加，并与变化时返回的来源列表在同一 PostgreSQL 可重复读事务中取得，用于 Agent 拒绝晚到旧全量快照并约束同次搜索。
 
 ## 兼容性
 

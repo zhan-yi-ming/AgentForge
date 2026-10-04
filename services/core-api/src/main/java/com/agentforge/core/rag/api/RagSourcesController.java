@@ -30,10 +30,15 @@ public class RagSourcesController {
             @RequestHeader(value = "X-AgentForge-Core-Internal-Token", required = false) String token,
             @Valid @RequestBody RagSourcesRequest request) {
         authentication.requireValid(token);
-        var snapshot = ragSourceService.snapshot(request.projectId(), request.userId(), request.actorAdmin());
+        var snapshot = ragSourceService.snapshot(
+                request.projectId(),
+                request.userId(),
+                request.actorAdmin(),
+                request.knownSnapshotVersion());
         return new RagSourcesResponse(
                 request.projectId(),
                 snapshot.snapshotVersion(),
+                snapshot.sourcesChanged(),
                 snapshot.sources(),
                 request.requestId());
     }

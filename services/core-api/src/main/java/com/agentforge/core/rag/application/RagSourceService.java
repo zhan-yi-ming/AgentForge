@@ -40,7 +40,11 @@ public class RagSourceService {
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
-    public RagSourceSnapshot snapshot(UUID projectId, UUID userId, boolean actorAdmin) {
+    public RagSourceSnapshot snapshot(
+            UUID projectId,
+            UUID userId,
+            boolean actorAdmin,
+            Long knownSnapshotVersion) {
         try {
             userDirectory.requireUserExists(userId);
         }
@@ -53,6 +57,9 @@ public class RagSourceService {
                 "SELECT generation FROM rag_source_generation WHERE project_id=?",
                 Long.class,
                 projectId);
+        if (knownSnapshotVersion != null && knownSnapshotVersion == snapshotVersion) {
+            return new RagSourceSnapshot(snapshotVersion, false, List.of());
+        }
 
         List<RagSource> sources = new ArrayList<>();
         wikiPageService.list(projectId, actor).forEach(page -> sources.add(new RagSource(
@@ -67,7 +74,7 @@ public class RagSourceService {
                 task.version(),
                 task.title(),
                 taskContent(task.title(), task.status().name(), task.priority().name(), task.description()))));
-        return new RagSourceSnapshot(snapshotVersion, List.copyOf(sources));
+        return new RagSourceSnapshot(snapshotVersion, true, List.copyOf(sources));
     }
 
     private String taskContent(String title, String status, String priority, String description) {

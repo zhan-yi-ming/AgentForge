@@ -1,6 +1,7 @@
 package com.agentforge.core.rag.api;
 
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -52,8 +53,8 @@ class RagSourcesApiTest {
         UUID projectId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UUID sourceId = UUID.randomUUID();
-        when(ragSourceService.snapshot(eq(projectId), eq(userId), eq(false))).thenReturn(
-                new RagSourceSnapshot(42, List.of(
+        when(ragSourceService.snapshot(eq(projectId), eq(userId), eq(false), isNull())).thenReturn(
+                new RagSourceSnapshot(42, true, List.of(
                     new RagSource("WIKI", sourceId, 2, "Architecture", "# Core"))));
 
         mockMvc.perform(post("/internal/v1/rag/sources")
@@ -64,9 +65,28 @@ class RagSourcesApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.projectId").value(projectId.toString()))
                 .andExpect(jsonPath("$.snapshotVersion").value(42))
+                .andExpect(jsonPath("$.sourcesChanged").value(true))
                 .andExpect(jsonPath("$.requestId").value("request-123"))
                 .andExpect(jsonPath("$.sources[0].sourceType").value("WIKI"))
                 .andExpect(jsonPath("$.sources[0].sourceId").value(sourceId.toString()));
+    }
+
+    @Test
+    void matchingKnownSnapshotReturnsNoSourceBodies() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        when(ragSourceService.snapshot(projectId, userId, false, 42L)).thenReturn(
+                new RagSourceSnapshot(42, false, List.of()));
+
+        mockMvc.perform(post("/internal/v1/rag/sources")
+                        .header("X-AgentForge-Core-Internal-Token", "test-only-core-token")
+                        .header("X-Request-Id", "request-123")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body(projectId, userId, 42L)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.snapshotVersion").value(42))
+                .andExpect(jsonPath("$.sourcesChanged").value(false))
+                .andExpect(jsonPath("$.sources").isEmpty());
     }
 
     @Test
@@ -88,8 +108,15 @@ class RagSourcesApiTest {
     }
 
     private String body(UUID projectId, UUID userId) {
+        return body(projectId, userId, null);
+    }
+
+    private String body(UUID projectId, UUID userId, Long knownSnapshotVersion) {
+        String known = knownSnapshotVersion == null
+                ? ""
+                : "," + "\"knownSnapshotVersion\":" + knownSnapshotVersion;
         return """
-                {"projectId":"%s","userId":"%s","actorAdmin":false,"requestId":"request-123"}
-                """.formatted(projectId, userId);
+                {"projectId":"%s","userId":"%s","actorAdmin":false%s,"requestId":"request-123"}
+                """.formatted(projectId, userId, known);
     }
 }

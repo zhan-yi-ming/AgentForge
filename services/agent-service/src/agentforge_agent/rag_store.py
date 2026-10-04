@@ -10,7 +10,7 @@ from .chunking import Chunk, chunk_source
 from .embeddings import EmbeddingProvider
 from .errors import RagDependencyError
 from .ranking import RankableChunk, bm25_rank
-from .schemas import RagSource
+from .schemas import GraphMatch, RagSource
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,17 @@ class StoredChunk:
 class RagStore:
     def __init__(self, dsn: str) -> None:
         self.dsn = dsn
+
+    def snapshot_version(self, project_id: UUID) -> int | None:
+        try:
+            with psycopg.connect(self.dsn) as connection:
+                row = connection.execute(
+                    "SELECT snapshot_version FROM rag_project_snapshot WHERE project_id = %s",
+                    (project_id,),
+                ).fetchone()
+                return None if row is None else int(row[0])
+        except psycopg.Error as exception:
+            raise RagDependencyError("RAG index database is unavailable.") from exception
 
     def synchronize(
         self,
@@ -144,18 +155,6 @@ class RagStore:
                         return {}, [], []
                     cursor.execute(
                         """
-                        SELECT id, project_id, source_type, source_id, source_version,
-                               chunk_index, title, content
-                        FROM rag_chunk
-                        WHERE project_id = %s
-                        ORDER BY source_type, source_id, chunk_index
-                        """,
-                        (project_id,),
-                    )
-                    all_rows = cursor.fetchall()
-
-                    cursor.execute(
-                        """
                         SELECT id
                         FROM rag_chunk
                         WHERE project_id = %s AND 1 - (embedding <=> %s) >= %s
@@ -171,17 +170,101 @@ class RagStore:
                         ),
                     )
                     vector_ids = [str(row[0]) for row in cursor.fetchall()]
+                    cursor.execute(
+                        """
+                        SELECT id
+                        FROM rag_chunk
+                        WHERE project_id = %s
+                          AND search_document @@ plainto_tsquery('simple', %s)
+                        ORDER BY ts_rank_cd(
+                            search_document,
+                            plainto_tsquery('simple', %s)
+                        ) DESC, id
+                        LIMIT %s
+                        """,
+                        (project_id, query, query, candidate_k),
+                    )
+                    lexical_candidate_ids = [str(row[0]) for row in cursor.fetchall()]
+                    candidate_ids = list(dict.fromkeys([*vector_ids, *lexical_candidate_ids]))
+                    if not candidate_ids:
+                        return {}, vector_ids, []
+                    cursor.execute(
+                        """
+                        SELECT id, project_id, source_type, source_id, source_version,
+                               chunk_index, title, content
+                        FROM rag_chunk
+                        WHERE project_id = %s AND id = ANY(%s::uuid[])
+                        """,
+                        (project_id, candidate_ids),
+                    )
+                    candidate_rows = cursor.fetchall()
         except psycopg.Error as exception:
             raise RagDependencyError("RAG index database is unavailable.") from exception
 
-        stored_chunks = [_stored_chunk(row) for row in all_rows]
+        stored_chunks = [_stored_chunk(row) for row in candidate_rows]
         chunks = {chunk.id: chunk for chunk in stored_chunks}
         lexical_ids = bm25_rank(
             query,
-            [RankableChunk(chunk.id, chunk.content) for chunk in chunks.values()],
+            [
+                RankableChunk(chunk_id, chunks[chunk_id].content)
+                for chunk_id in lexical_candidate_ids
+                if chunk_id in chunks
+            ],
             candidate_k,
         )
         return chunks, vector_ids, lexical_ids
+
+    def load_graph_evidence(
+        self,
+        project_id: UUID,
+        snapshot_version: int,
+        matches: list[GraphMatch],
+    ) -> dict[tuple[str, UUID, int], StoredChunk]:
+        result: dict[tuple[str, UUID, int], StoredChunk] = {}
+        try:
+            with psycopg.connect(self.dsn) as connection:
+                connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT snapshot_version FROM rag_project_snapshot WHERE project_id = %s",
+                        (project_id,),
+                    )
+                    applied = cursor.fetchone()
+                    if applied is None or int(applied[0]) != snapshot_version:
+                        return {}
+                    for match in matches[:40]:
+                        evidence = match.evidence
+                        cursor.execute(
+                            """
+                            SELECT id, project_id, source_type, source_id, source_version,
+                                   chunk_index, title, content
+                            FROM rag_chunk
+                            WHERE project_id = %s
+                              AND source_type = %s
+                              AND source_id = %s
+                              AND source_version = %s
+                              AND strpos(content, %s) > 0
+                            ORDER BY chunk_index
+                            LIMIT 1
+                            """,
+                            (
+                                project_id,
+                                evidence.source_type,
+                                evidence.source_id,
+                                evidence.source_version,
+                                evidence.excerpt,
+                            ),
+                        )
+                        row = cursor.fetchone()
+                        if row is not None:
+                            result[(
+                                evidence.source_type,
+                                evidence.source_id,
+                                evidence.source_version,
+                            )] = _stored_chunk(row)
+        except psycopg.Error as exception:
+            raise RagDependencyError("RAG index database is unavailable.") from exception
+        return result
 
 
 def _chunk_id(chunk: Chunk) -> UUID:
