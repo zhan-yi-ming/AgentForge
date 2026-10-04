@@ -1,6 +1,6 @@
 # Agent Service API
 
-P3-05 语音输入新增受 Bearer 保护的 Core API：`POST /api/v1/projects/{projectId}/agent/asr/sessions` 开始录音，返回 `sessionId`；`POST .../asr/sessions/{sessionId}/audio` 接收 `application/octet-stream` PCM16 小块；`GET .../asr/sessions/{sessionId}` 返回 `{sessionId,text,finished}`；`POST .../asr/sessions/{sessionId}/finish` 请求结束；`DELETE .../asr/sessions/{sessionId}` 取消。各入口每次重新验证项目访问与登录用户；音频和阿里云凭据不出现在返回值。缺少 ASR 服务端配置或上游不可用返回通用 503。
+P3-05 语音输入新增受 Bearer 保护的 Core API：`POST /api/v1/projects/{projectId}/agent/asr/sessions` 开始录音，返回 `sessionId`；`POST .../asr/sessions/{sessionId}/audio` 接收不超过 64,000 字节且为偶数字节的 `application/octet-stream` PCM16 小块；`GET .../asr/sessions/{sessionId}` 返回 `{sessionId,text,finished}`；`POST .../asr/sessions/{sessionId}/finish` 请求结束；`DELETE .../asr/sessions/{sessionId}` 取消。各入口每次重新验证项目访问与登录用户；生产网关为整组 ASR session 路径使用独立 IP 限流区，不取消普通 API 限流。音频和阿里云凭据不出现在返回值。缺少 ASR 服务端配置或上游不可用返回通用 503。
 
 Core 到 Python 使用同路径的 `/internal/v1/asr/sessions` 系列入口，仍要求现有内部 token，请求或 header 携带 Java 已确认的 `projectId` 与 `userId` 并在 Python 临时会话中严格绑定。`finish` 成功返回最终文字后立即释放临时会话，随后该 ID 的查询或取消返回 404；由用户编辑并发送才进入既有聊天 API。
 

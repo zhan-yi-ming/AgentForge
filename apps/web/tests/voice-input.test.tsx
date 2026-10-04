@@ -1,10 +1,61 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import VoiceInput from "../src/pages/VoiceInput";
 import type { ApiClient } from "../src/api";
 
 describe("chat voice input", () => {
+  it("batches ordered audio below the server limit and polls every 1500 ms", async () => {
+    vi.useFakeTimers();
+    try {
+      const track = { stop: vi.fn() };
+      Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: {
+        getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [track] }),
+      } });
+      const processor = { connect: vi.fn(), disconnect: vi.fn(), onaudioprocess: null as null | ((event: AudioProcessingEvent) => void) };
+      const source = { connect: vi.fn(), disconnect: vi.fn() };
+      vi.stubGlobal("AudioContext", class {
+        sampleRate = 16000;
+        destination = {};
+        createMediaStreamSource() { return source; }
+        createScriptProcessor() { return processor; }
+        close() { return Promise.resolve(); }
+      });
+      const api = {
+        startVoice: vi.fn().mockResolvedValue({ sessionId: "session-1" }),
+        appendVoiceAudio: vi.fn().mockResolvedValue(undefined),
+        getVoice: vi.fn().mockResolvedValue({ sessionId: "session-1", text: "", finished: false }),
+        finishVoice: vi.fn().mockResolvedValue({ sessionId: "session-1", text: "done", finished: true }),
+        cancelVoice: vi.fn().mockResolvedValue(undefined),
+      } as unknown as ApiClient;
+      render(<VoiceInput api={api} projectId="project-1" onTranscript={vi.fn()} />);
+      fireEvent.click(screen.getByRole("button", { name: /语音输入/ }));
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+      const audio = (samples: number) => processor.onaudioprocess!({ inputBuffer: {
+        getChannelData: () => new Float32Array(samples),
+      } } as unknown as AudioProcessingEvent);
+      act(() => audio(20_000));
+      expect(api.appendVoiceAudio).not.toHaveBeenCalled();
+      act(() => audio(4_000));
+      await act(async () => { await Promise.resolve(); });
+      expect(api.appendVoiceAudio).toHaveBeenCalledTimes(1);
+      expect((api.appendVoiceAudio as ReturnType<typeof vi.fn>).mock.calls[0][2]).toHaveLength(48_000);
+
+      act(() => audio(40_000));
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      const sizes = (api.appendVoiceAudio as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[2].length);
+      expect(sizes).toEqual([48_000, 64_000, 16_000]);
+      expect(sizes.every((size) => size <= 64_000 && size % 2 === 0)).toBe(true);
+
+      act(() => { vi.advanceTimersByTime(1_499); });
+      expect(api.getVoice).not.toHaveBeenCalled();
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(api.getVoice).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("puts final ASR text into the editable draft only after stopping", async () => {
     const track = { stop: vi.fn() };
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: {

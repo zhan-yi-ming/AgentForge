@@ -9,6 +9,8 @@
 
 实时协议参考官方 `session.update`、`input_audio_buffer.append`、`session.finish` 与最终 `session.finished`；文件转写 HTTP API 因需要公网文件 URL 和异步任务，仅作为方案对照，不在本阶段实现。
 
+浏览器累计 48,000 字节后触发上传，并把任何积压按顺序拆成不超过 64,000 字节的偶数字节块；每 1,500 ms 查询一次预览。停止录音时先排空同一上传队列再请求最终文字。生产 Nginx 为 ASR session 路径使用独立的每 IP 600 req/min、burst 30 限流区，不消耗普通 API 的 120 req/min 配额；登录、Chat 和其他 API 的限流不变。
+
 ASR 独立配置：`AGENTFORGE_AGENT_ASR_API_KEY`、`AGENTFORGE_AGENT_ASR_WORKSPACE_ID`、`AGENTFORGE_AGENT_ASR_REGION`（默认 `cn-beijing`）。未配置时语音入口返回 503，文字聊天照常运行。每次开始录音消耗现有用户 AI 日配额，单用户同时最多一段录音；全局并发、音频时长和块大小另有限制。
 
 停止录音后若服务端未检测到有效语音并返回空转写，聊天页应明确提示用户重试，不自动填入或发送内容。成功完成的会话由 Agent Service 释放，浏览器仅在取消或失败时请求清理。

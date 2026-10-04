@@ -23,3 +23,13 @@ def test_nginx_chat_locations_cover_core_model_wait_budget(path):
     read = re.search(r"proxy_read_timeout\s+(\d+)s;", location)
     assert read is not None, "Agent Chat must declare its own outer waiting budget"
     assert int(read.group(1)) >= 330, "Nginx must cover the Core model waiting budget"
+
+
+def test_nginx_asr_uses_an_independent_rate_limit_zone():
+    template = (ROOT / "infra/nginx/production.conf.template").read_text(encoding="utf-8")
+    assert "zone=asr_per_ip:10m rate=600r/m" in template
+    marker = "location ~ ^/api/v1/projects/[^/]+/agent/asr/sessions"
+    assert marker in template
+    location = template.split(marker, 1)[1].split("}", 1)[0]
+    assert "limit_req zone=asr_per_ip burst=30 nodelay;" in location
+    assert template.index(marker) < template.index("location /api/ {")

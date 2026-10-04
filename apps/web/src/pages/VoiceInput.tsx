@@ -20,6 +20,10 @@ type Capture = {
   closed: boolean;
 };
 
+const AUDIO_FLUSH_BYTES = 48_000;
+const AUDIO_MAX_CHUNK_BYTES = 64_000;
+const PREVIEW_POLL_MS = 1_500;
+
 function pcm16(samples: Float32Array, sourceRate: number): Uint8Array {
   const ratio = sourceRate / 16000;
   const count = Math.floor(samples.length / ratio);
@@ -56,7 +60,10 @@ export default function VoiceInput({ api, projectId, onTranscript }: Props) {
     for (const part of current.pending) { bytes.set(part, offset); offset += part.length; }
     current.pending = [];
     current.pendingBytes = 0;
-    current.queue = current.queue.then(() => api.appendVoiceAudio(projectId, current.sessionId, bytes));
+    for (let start = 0; start < bytes.length; start += AUDIO_MAX_CHUNK_BYTES) {
+      const chunk = bytes.slice(start, Math.min(start + AUDIO_MAX_CHUNK_BYTES, bytes.length));
+      current.queue = current.queue.then(() => api.appendVoiceAudio(projectId, current.sessionId, chunk));
+    }
     void current.queue.catch(() => {
       if (capture.current === current && !current.closed) {
         setError("语音上传中断，请重试。");
@@ -105,7 +112,7 @@ export default function VoiceInput({ api, projectId, onTranscript }: Props) {
         const bytes = pcm16(event.inputBuffer.getChannelData(0), context!.sampleRate);
         current.pending.push(bytes);
         current.pendingBytes += bytes.length;
-        if (current.pendingBytes >= 16_000) flush(current);
+        if (current.pendingBytes >= AUDIO_FLUSH_BYTES) flush(current);
       };
       source.connect(processor);
       processor.connect(context.destination);
@@ -115,7 +122,7 @@ export default function VoiceInput({ api, projectId, onTranscript }: Props) {
         }).catch(() => {
           if (capture.current === current && !current.closed) { setError("语音识别中断，请重试。"); void cancel(); }
         });
-      }, 500);
+      }, PREVIEW_POLL_MS);
       setPhase("recording");
     } catch {
       stream?.getTracks().forEach((track) => track.stop());
