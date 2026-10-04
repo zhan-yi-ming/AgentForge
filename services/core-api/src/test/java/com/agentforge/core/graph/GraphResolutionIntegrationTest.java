@@ -49,6 +49,8 @@ class GraphResolutionIntegrationTest {
     }
     @org.springframework.test.context.bean.override.mockito.MockitoBean
     com.agentforge.core.graph.application.GraphResolutionAdvisor advisor;
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.agentforge.core.agent.application.AiUsageQuota aiUsageQuota;
     @Autowired com.agentforge.core.graph.application.GraphService graph;
     @org.junit.jupiter.api.BeforeEach
     void noExternalModelByDefault() {
@@ -98,6 +100,42 @@ class GraphResolutionIntegrationTest {
         assertThat(suggestion.get("reviewRequired").asBoolean()).isTrue();
         assertThat(suggestion.get("candidates").toString()).contains(candidate);
         assertThat(sourceEntity).isNotEqualTo(candidate);
+        org.mockito.Mockito.verify(aiUsageQuota).consume(f.actor().userId());
+    }
+    @Test
+    void suggestionWithoutCandidatesDoesNotConsumeQuotaOrCallAdvisor() throws Exception {
+        var f=fixture();
+        var page=wiki.create(f.project(),f.actor(),"Only","Service: UniqueName");
+        String sourceEntity=awaitService(f,page.id());
+        mvc.perform(post(f.path()+"/resolution/suggestions").with(f.token())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of("entityId",sourceEntity))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.candidates.length()").value(0));
+        org.mockito.Mockito.verifyNoInteractions(aiUsageQuota);
+        org.mockito.Mockito.verifyNoInteractions(advisor);
+    }
+    @Test
+    void exhaustedQuotaRejectsSuggestionBeforeAdvisor() throws Exception {
+        var f=fixture();
+        var first=wiki.create(f.project(),f.actor(),"First","Service: Billing");
+        wiki.create(f.project(),f.actor(),"Second","Service: Billing");
+        String sourceEntity=awaitService(f,first.id());
+        org.mockito.Mockito.doThrow(new com.agentforge.core.shared.error.RateLimitExceededException("limit"))
+            .when(aiUsageQuota).consume(f.actor().userId());
+        mvc.perform(post(f.path()+"/resolution/suggestions").with(f.token())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of("entityId",sourceEntity))))
+            .andExpect(status().isTooManyRequests());
+        org.mockito.Mockito.verifyNoInteractions(advisor);
+    }
+    @Test
+    void unauthenticatedSuggestionDoesNotConsumeQuota() throws Exception {
+        mvc.perform(post("/api/v1/projects/"+UUID.randomUUID()+"/graph/resolution/suggestions")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(json.writeValueAsString(Map.of("entityId",UUID.randomUUID()))))
+            .andExpect(status().isUnauthorized());
+        org.mockito.Mockito.verifyNoInteractions(aiUsageQuota);
     }
     @Test
     void humanCanConfirmAndReadCanonicalMapping() throws Exception {

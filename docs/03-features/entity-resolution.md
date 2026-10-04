@@ -12,6 +12,8 @@ V3-05 为每份 Wiki/Task 中显式提到的 Service/API/Issue 创建来源作�
 
 项目 owner/admin 可对当前有效实体请求候选建议。Java 从本项目图中有界检索同类型实体，并验证候选当前来源；不得返回跨项目实体或失效证据。规则阶段使用大小写、Unicode 空白及标点规范化后的名称/已确认 alias 做精确与 token 相似度比较。Python Agent 可对 Java 给出的有界候选计算 embedding 相似度并调用配置的 LLM 做消歧建议；只回传候选 ID、有限 0..1 confidence 和简短理由，无法判断时明确 abstain。LLM 不生成新实体 ID，不写数据库，失败时建议降级为“需要人工审阅”。规则/embedding/LLM 分数只能排序和提示，不能自动确认或 merge；低置信度标为 reviewRequired，实际所有合并均需人工确认。
 
+费用保护由 Java 在模型边界前执行：没有候选时直接返回空建议，不消耗 AI 日额度且不调用 Python；存在候选时，每个公开建议请求按认证用户原子消费一次现有 AI 日额度（不是每个候选一次），额度耗尽返回统一 429。Python advisor 的依赖失败仍可降级为人工审阅，但不得吞掉调用前的配额错误；未认证请求在服务入口前拒绝，不产生配额记录。
+
 ## 规范映射与人工确认
 
 规范实体记录 `canonicalName`、类型、受限 metadata、来源与 CAS version；成员映射记录 aliases、来源图实体 ID、规范 ID、确认人、确认时来源版本、confidence、状态和时间。一个成员在同项目最多有一个当前映射，规范 ID 只能指向同项目同类型的当前有效实体。aliases 关联到确认的成员和来源，不可因同名自动扩散到其他项目或类型。metadata 不得携带原文正文、凭据或任意模型推断事实。Java 对人工确认重新验证两个实体、来源版本、项目权限、预期版本和所选目标；保存审计事件。重复的相同请求幂等返回当前结果，冲突返回 409。
@@ -21,6 +23,8 @@ V3-05 为每份 Wiki/Task 中显式提到的 Service/API/Issue 创建来源作�
 ## 公共接口与权限
 
 路径均在 `/api/v1/projects/{projectId}/graph/resolution` 下，Bearer 且要求项目 owner/admin。`GET/PUT /canonicals/{canonicalId}` 读取/修改当前有效规范实体的 canonicalName 和受限 metadata；PUT 使用来源版本与规范 CAS，变更追加审计。`POST /suggestions` 接收 `{entityId}`，返回当前候选、评分、可选推荐 ID、confidence 与 reviewRequired；不持久化、不执行合并。`PUT /decisions/{entityId}` 接收 `{canonicalEntityId,canonicalName,aliases,metadata,confidence,sourceVersion,canonicalSourceVersion,expectedVersion}`，由人选择并确认，返回规范映射；`DELETE /decisions/{entityId}?expectedVersion=N` 撤销当前映射并返回 204；`GET /decisions/{entityId}` 查看当前映射或未映射状态。所有输入有大小、类型、项目与来源约束；Graph 关闭/Neo4j 不可用时图相关入口返回通用 503，模型建议不可用不得阻断已持有有效人工决策的读取。
+
+`POST /suggestions` 只有在发现至少一个有效候选时才计一次用户 AI 日额度；429 表示本次没有调用模型，也没有形成建议。
 
 ## 验收与限制
 

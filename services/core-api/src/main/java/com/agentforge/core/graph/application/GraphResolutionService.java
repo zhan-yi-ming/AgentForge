@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import com.agentforge.core.agent.application.AiUsageQuota;
 import com.agentforge.core.graph.domain.GraphModel.*;
 import com.agentforge.core.graph.domain.GraphStore;
 import com.agentforge.core.security.AuthenticatedActor;
@@ -17,9 +18,12 @@ public class GraphResolutionService {
     private final GraphStore store;
     private final GraphResolutionAdvisor advisor;
     private final GraphResolutionDecisionService decisions;
+    private final AiUsageQuota aiUsageQuota;
     public GraphResolutionService(GraphService graph, GraphStore store,
-        GraphResolutionAdvisor advisor, GraphResolutionDecisionService decisions) {
+        GraphResolutionAdvisor advisor, GraphResolutionDecisionService decisions,
+        AiUsageQuota aiUsageQuota) {
         this.graph=graph; this.store=store; this.advisor=advisor; this.decisions=decisions;
+        this.aiUsageQuota=aiUsageQuota;
     }
     public record Candidate(UUID entityId, String displayName, double ruleScore) {}
     public record Suggestion(UUID entityId, List<Candidate> candidates,
@@ -57,8 +61,12 @@ public class GraphResolutionService {
             truncated=true;
             candidates.subList(20,candidates.size()).clear();
         }
-        var advice=advisor.suggest(source.id(),source.displayName(),source.type().name(),
-            candidates.stream().map(c -> new GraphResolutionAdvisor.Candidate(c.entityId(),c.displayName())).toList());
+        var advice=new GraphResolutionAdvisor.Advice(null,0);
+        if(!candidates.isEmpty()) {
+            aiUsageQuota.consume(actor.userId());
+            advice=advisor.suggest(source.id(),source.displayName(),source.type().name(),
+                candidates.stream().map(c -> new GraphResolutionAdvisor.Candidate(c.entityId(),c.displayName())).toList());
+        }
         return new Suggestion(entityId,List.copyOf(candidates),advice.recommendedCandidateId(),
             advice.confidence(),true,truncated);
     }
