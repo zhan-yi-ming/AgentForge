@@ -152,4 +152,4 @@ Python 在已有来源回调之后调用 Core API `POST /internal/v1/graph/retri
 
 ## V3-08 Repository 来源（Implemented）
 
-内部 Chat 与 Chat stream 请求字段保持不变；Java 授权后的 `projectId` 选择 Python 部署配置中的本机只读仓库。响应的 `sources` 允许新增 `sourceType=REPOSITORY`，其余字段 `sourceId`（UUID）、`title`、`excerpt` 不变。Repository 来源只能对应当前 HEAD 中选中的白名单资料或近期提交摘要，并且最终回答须显式引用其编号。图 evidence 的来源仍仅为 Wiki/Task；Repository 来源不成为 Task Tool 目标。未配置或 Git 不可用时没有 Repository 来源，不新增请求参数或错误状态。
+内部 Chat 与 Chat stream 请求字段保持不变；Java 授权后的 `projectId` 选择 Python 部署配置中的本机只读仓库。每次检索先把 HEAD 解析为不可变完整 commit ID，tree/blob/log 与该批来源的 UUID/revision 全部从同一 commit 派生；检索中途 HEAD 变化只影响下一次调用。响应的 `sources` 允许新增 `sourceType=REPOSITORY`，其余字段 `sourceId`（UUID）、`title`、`excerpt` 不变。Repository 来源只能对应固定 commit 中选中的白名单资料或近期提交摘要，并且最终回答须显式引用其编号。图 evidence 的来源仍仅为 Wiki/Task；Repository 来源不成为 Task Tool 目标。未配置或 Git 不可用时没有 Repository 来源，不新增请求参数或错误状态。

@@ -38,7 +38,7 @@ class RepositoryContextProvider:
             if actual != root:
                 return []
             revision = self._git(root, "rev-parse", "HEAD").decode().strip()
-            tree = self._git(root, "ls-tree", "-r", "-z", "HEAD",
+            tree = self._git(root, "ls-tree", "-r", "-z", revision,
                              max_bytes=262_144, allow_truncate=True)
             rows = tree.split(b"\0")
             if not tree.endswith(b"\0"):
@@ -77,7 +77,7 @@ class RepositoryContextProvider:
                     "REPOSITORY", uuid5(NAMESPACE_URL, f"{project_id}:{revision}:tree"),
                     "Directory structure", tree, revision,
                 ))
-            commits = self._git(root, "log", "-n", "8", "--format=%h%x09%s", "HEAD",
+            commits = self._git(root, "log", "-n", "8", "--format=%h%x09%s", revision,
                                 max_bytes=4096).decode("utf-8")
             for line in commits.splitlines()[:8]:
                 short_id, separator, subject = line.partition("\t")

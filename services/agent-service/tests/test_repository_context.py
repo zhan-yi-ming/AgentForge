@@ -1,6 +1,6 @@
 import subprocess
 import json
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import pytest
 
@@ -92,6 +92,50 @@ def test_repository_context_has_directory_and_commit_summary_with_fresh_revision
     assert {item.revision for item in before} != {item.revision for item in after}
     assert {item.source_id for item in before}.isdisjoint(
         {item.source_id for item in after})
+
+
+@pytest.mark.parametrize("start_at_new", [False, True])
+def test_repository_context_pins_one_commit_when_head_moves_mid_read(tmp_path, start_at_new):
+    project_id = uuid4()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    (repo / "README.md").write_text("Old committed snapshot\n", encoding="utf-8")
+    _git(repo, "add", "--", "README.md")
+    _git(repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+         "commit", "-qm", "Initial snapshot")
+    old_revision = _git(repo, "rev-parse", "HEAD")
+    (repo / "README.md").write_text("New committed snapshot\n", encoding="utf-8")
+    _git(repo, "add", "--", "README.md")
+    _git(repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+         "commit", "-qm", "Updated snapshot")
+    new_revision = _git(repo, "rev-parse", "HEAD")
+
+    initial_revision = new_revision if start_at_new else old_revision
+    moved_revision = old_revision if start_at_new else new_revision
+    initial_content = "New committed snapshot" if start_at_new else "Old committed snapshot"
+    _git(repo, "reset", "--hard", initial_revision)
+
+    class MovingHeadProvider(RepositoryContextProvider):
+        moved = False
+
+        def _git(self, root, *args, **kwargs):
+            result = super()._git(root, *args, **kwargs)
+            if args == ("rev-parse", "HEAD") and not self.moved:
+                self.moved = True
+                _git(repo, "reset", "--hard", moved_revision)
+            return result
+
+    matches = MovingHeadProvider({project_id: repo}).retrieve(project_id, "snapshot")
+    readme = next(item for item in matches if item.title == "README.md")
+
+    assert initial_content in readme.content
+    assert all(item.revision == initial_revision for item in matches)
+    assert readme.source_id == uuid5(
+        NAMESPACE_URL, f"{project_id}:{initial_revision}:README.md",
+    )
+    commit_contents = [item.content for item in matches if item.title.startswith("Commit ")]
+    assert any("Updated snapshot" in content for content in commit_contents) is start_at_new
 
 
 def test_retrieval_merges_repository_evidence_into_cited_context(tmp_path):

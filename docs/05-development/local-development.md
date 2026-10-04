@@ -383,4 +383,4 @@ Set optional `AGENTFORGE_AGENT_LLM_ROUTES` to the candidate JSON array documente
 
 ## V3-08 可选仓库上下文
 
-默认 `AGENTFORGE_AGENT_REPOSITORIES=[]`。启用时由部署方在 Agent Service 设置 JSON 数组，例如 `[{"projectId":"<项目 UUID>","path":"<绝对仓库根目录>"}]`。路径必须是容器或本机可读的标准 Git 工作树根；每个项目最多绑定一个，不能通过 Chat 输入覆盖。仅可配置经过安全审查且允许进入模型的仓库。生产/Compose 可使用单独的只读覆盖文件 `infra/compose.repository-context.yaml`，并将绑定路径设为挂载点。不要挂载整个宿主家目录；禁用时删除映射和覆盖文件即可。首次请求若仓库不可用，现有 Wiki/Task/Graph 检索仍可继续。
+默认 `AGENTFORGE_AGENT_REPOSITORIES=[]`。启用时由部署方在 Agent Service 设置 JSON 数组，例如 `[{"projectId":"<项目 UUID>","path":"<绝对仓库根目录>"}]`。路径必须是容器或本机可读的标准 Git 工作树根；每个项目最多绑定一个，不能通过 Chat 输入覆盖。仅可配置经过安全审查且允许进入模型的仓库。Agent 镜像必须内置 Git CLI；生产/Compose 使用单独的只读覆盖文件 `infra/compose.repository-context.yaml`，并将绑定路径设为挂载点。验收需在构建后的容器内执行 `git --version`、读取该仓库已提交对象并证明挂载点不可写，不能以宿主机 Git 测试代替。不要挂载整个宿主家目录；禁用时删除映射和覆盖文件即可。首次请求若仓库不可用，现有 Wiki/Task/Graph 检索仍可继续。

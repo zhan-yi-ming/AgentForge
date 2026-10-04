@@ -1,5 +1,7 @@
 # 变更记录
 
+- [2026-10-04-r16-repository-commit-pinning.md](2026-10-04-r16-repository-commit-pinning.md)：R16 将单次 Repository Context 的 tree/blob/log 与来源身份固定到同一不可变 commit，并补齐容器 Git 运行时（Implemented）。
+
 - [2026-10-04-r15-rag-query-bounds.md](2026-10-04-r15-rag-query-bounds.md)：R15 来源代际握手与 PostgreSQL 内有界文本候选，避免每次 Chat 搬运全部项目正文（Implemented）。
 
 - [2026-10-02-v3-main-integration.md](2026-10-02-v3-main-integration.md)：V3 全部提交合并至 `main` 的独立 Release Gate、Pi 审核与远端 fast-forward 核验（In Progress）。
