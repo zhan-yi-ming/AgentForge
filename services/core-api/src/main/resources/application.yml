@@ -17,6 +17,8 @@ spring:
           time_zone: UTC
   flyway:
     enabled: true
+    user: ${AGENTFORGE_DB_MIGRATION_USERNAME:${AGENTFORGE_DB_USERNAME:agentforge}}
+    password: ${AGENTFORGE_DB_MIGRATION_PASSWORD:${AGENTFORGE_DB_PASSWORD:agentforge_local_only}}
   jackson:
     default-property-inclusion: non_null
 

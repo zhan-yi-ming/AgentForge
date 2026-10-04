@@ -21,10 +21,14 @@ try {
     $agentBytes = New-Object byte[] 32
     $coreBytes = New-Object byte[] 32
     $databaseBytes = New-Object byte[] 24
+    $coreDatabaseBytes = New-Object byte[] 24
+    $agentDatabaseBytes = New-Object byte[] 24
     $random.GetBytes($jwtBytes)
     $random.GetBytes($agentBytes)
     $random.GetBytes($coreBytes)
     $random.GetBytes($databaseBytes)
+    $random.GetBytes($coreDatabaseBytes)
+    $random.GetBytes($agentDatabaseBytes)
 } finally {
     $random.Dispose()
 }
@@ -33,12 +37,16 @@ $jwtSecret = [Convert]::ToBase64String($jwtBytes)
 $agentToken = -join ($agentBytes | ForEach-Object { $_.ToString("x2") })
 $coreToken = -join ($coreBytes | ForEach-Object { $_.ToString("x2") })
 $databasePassword = -join ($databaseBytes | ForEach-Object { $_.ToString("x2") })
+$coreDatabasePassword = -join ($coreDatabaseBytes | ForEach-Object { $_.ToString("x2") })
+$agentDatabasePassword = -join ($agentDatabaseBytes | ForEach-Object { $_.ToString("x2") })
 
 $content = [IO.File]::ReadAllText($templatePath)
 $content = $content.Replace("REPLACE_WITH_BASE64_32_BYTE_RANDOM_VALUE", $jwtSecret)
 $content = $content.Replace("REPLACE_WITH_RANDOM_INTERNAL_TOKEN", $agentToken)
 $content = $content.Replace("REPLACE_WITH_RANDOM_CORE_INTERNAL_TOKEN", $coreToken)
 $content = $content.Replace("agentforge_local_only", $databasePassword)
+$content = $content.Replace("agentforge_core_local_only", $coreDatabasePassword)
+$content = $content.Replace("agentforge_agent_local_only", $agentDatabasePassword)
 [IO.File]::WriteAllText($targetPath, $content, [Text.UTF8Encoding]::new($false))
 
 Write-Host "Created local configuration: $targetPath"

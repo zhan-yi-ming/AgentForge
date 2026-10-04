@@ -38,7 +38,7 @@ if ($published.Count -ne 2 -or
     throw "Only gateway ports 80 and 443 may be published: $($published | ConvertTo-Json -Compress)"
 }
 
-foreach ($internalService in 'postgres','core-api','agent-service','web') {
+foreach ($internalService in 'postgres','database-roles','core-api','agent-service','web') {
     if ($null -ne $config.services.$internalService.PSObject.Properties['ports']) {
         throw "$internalService must not publish host ports."
     }
@@ -52,4 +52,4 @@ foreach ($deployScript in $deployScripts) {
     }
 }
 
-Write-Host "Production Compose boundary passed: only gateway publishes 80/443; all 8 services use 10m x 3 logs; deploy scripts avoid unsupported Compose v5 build flags."
+Write-Host "Production Compose boundary passed: only gateway publishes 80/443; every service uses 10m x 3 logs; deploy scripts avoid unsupported Compose v5 build flags."

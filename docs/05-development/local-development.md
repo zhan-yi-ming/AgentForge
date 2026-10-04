@@ -39,7 +39,9 @@ docker compose --env-file .env -f infra/compose.yaml ps
 - `AGENTFORGE_JWT_SECRET`：Core API 签名 JWT，必须是 Base64 编码且解码后至少 32 字节。
 - `AGENTFORGE_AGENT_INTERNAL_TOKEN`：Java → Python 的内部 token，至少 16 字符。
 - `AGENTFORGE_CORE_INTERNAL_TOKEN`：Python → Java 的另一个内部 token，至少 16 字符，不能与上一项共用。
-- `POSTGRES_PASSWORD`：本机数据库密码，并同步进入两个数据库连接 URL。
+- `POSTGRES_PASSWORD`：本机 PostgreSQL 初始化/Flyway 管理密码，不交给应用运行连接。
+- `AGENTFORGE_CORE_DB_PASSWORD`：本机 `agentforge_core` 运行角色密码。
+- `AGENTFORGE_AGENT_DB_PASSWORD`：本机 `agentforge_agent` 派生索引/checkpoint 角色密码。
 - `AGENTFORGE_AGENT_LLM_API_KEY`：启用 `deepseek`、`zhipu`、`qwen` 或 `openai` 时填写主模型的 key；配置 fallback 时还需独立填写 `AGENTFORGE_AGENT_LLM_FALLBACK_API_KEY`。
 
 推荐直接运行 `scripts/setup-local-env.ps1` 自动生成以上值，不要手工复制示例占位符。`.env` 已被 Git 忽略。

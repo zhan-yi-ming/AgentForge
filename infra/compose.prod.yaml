@@ -25,13 +25,34 @@ services:
     logging: *bounded-logging
     networks: [app]
 
+  database-roles:
+    image: pgvector/pgvector:pg17
+    environment:
+      PGHOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      AGENTFORGE_CORE_DB_PASSWORD: ${AGENTFORGE_CORE_DB_PASSWORD:?set AGENTFORGE_CORE_DB_PASSWORD}
+      AGENTFORGE_AGENT_DB_PASSWORD: ${AGENTFORGE_AGENT_DB_PASSWORD:?set AGENTFORGE_AGENT_DB_PASSWORD}
+    volumes:
+      - ./postgres/provision-roles.sh:/opt/agentforge/provision-roles.sh:ro
+    command: ["bash", "/opt/agentforge/provision-roles.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    logging: *bounded-logging
+    networks: [app]
+
   core-api:
     build:
       context: ../services/core-api
     environment:
       AGENTFORGE_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
-      AGENTFORGE_DB_USERNAME: ${POSTGRES_USER}
-      AGENTFORGE_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      AGENTFORGE_DB_USERNAME: agentforge_core
+      AGENTFORGE_DB_PASSWORD: ${AGENTFORGE_CORE_DB_PASSWORD}
+      AGENTFORGE_DB_MIGRATION_USERNAME: ${POSTGRES_USER}
+      AGENTFORGE_DB_MIGRATION_PASSWORD: ${POSTGRES_PASSWORD}
       AGENTFORGE_SERVER_PORT: 8080
       AGENTFORGE_GRAPH_ENABLED: ${AGENTFORGE_GRAPH_ENABLED:-false}
       AGENTFORGE_GRAPH_URI: bolt://neo4j:7687
@@ -50,6 +71,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      database-roles:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health"]
       interval: 10s
@@ -67,7 +90,8 @@ services:
       AGENTFORGE_AGENT_INTERNAL_TOKEN: ${AGENTFORGE_AGENT_INTERNAL_TOKEN}
       AGENTFORGE_CORE_INTERNAL_TOKEN: ${AGENTFORGE_CORE_INTERNAL_TOKEN}
       AGENTFORGE_AGENT_CORE_API_URL: http://core-api:8080
-      AGENTFORGE_AGENT_RAG_DB_DSN: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AGENTFORGE_AGENT_RAG_DB_DSN: postgresql://agentforge_agent:${AGENTFORGE_AGENT_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AGENTFORGE_AGENT_CHECKPOINT_DB_DSN: postgresql://agentforge_agent:${AGENTFORGE_AGENT_DB_PASSWORD}@postgres:5432/${POSTGRES_DB}
       AGENTFORGE_AGENT_EMBEDDING_PROVIDER: hash
       AGENTFORGE_AGENT_EMBEDDING_DIMENSIONS: 384
       AGENTFORGE_AGENT_ASR_API_KEY: ${AGENTFORGE_AGENT_ASR_API_KEY:-}

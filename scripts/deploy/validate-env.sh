@@ -21,6 +21,8 @@ set +a
 : "${POSTGRES_DB:?POSTGRES_DB is required}"
 : "${POSTGRES_USER:?POSTGRES_USER is required}"
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
+: "${AGENTFORGE_CORE_DB_PASSWORD:?AGENTFORGE_CORE_DB_PASSWORD is required}"
+: "${AGENTFORGE_AGENT_DB_PASSWORD:?AGENTFORGE_AGENT_DB_PASSWORD is required}"
 : "${AGENTFORGE_JWT_SECRET:?AGENTFORGE_JWT_SECRET is required}"
 : "${AGENTFORGE_AGENT_INTERNAL_TOKEN:?AGENTFORGE_AGENT_INTERNAL_TOKEN is required}"
 : "${AGENTFORGE_CORE_INTERNAL_TOKEN:?AGENTFORGE_CORE_INTERNAL_TOKEN is required}"
@@ -35,6 +37,14 @@ is_public_host "${PUBLIC_HOST}" || {
 }
 [[ "${POSTGRES_PASSWORD}" =~ ^[A-Za-z0-9_-]{24,}$ ]] || {
     echo "POSTGRES_PASSWORD must be at least 24 URL-safe characters." >&2
+    exit 1
+}
+[[ "${AGENTFORGE_CORE_DB_PASSWORD}" =~ ^[A-Za-z0-9_-]{24,}$ ]] || {
+    echo "AGENTFORGE_CORE_DB_PASSWORD must be at least 24 URL-safe characters." >&2
+    exit 1
+}
+[[ "${AGENTFORGE_AGENT_DB_PASSWORD}" =~ ^[A-Za-z0-9_-]{24,}$ ]] || {
+    echo "AGENTFORGE_AGENT_DB_PASSWORD must be at least 24 URL-safe characters." >&2
     exit 1
 }
 [[ "${#AGENTFORGE_AGENT_INTERNAL_TOKEN}" -ge 32 && "${#AGENTFORGE_CORE_INTERNAL_TOKEN}" -ge 32 ]] || {

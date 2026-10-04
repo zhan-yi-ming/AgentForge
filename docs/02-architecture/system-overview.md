@@ -46,7 +46,7 @@ V3-02 在 Python Agent Service 内建立 LiteLLM Model Gateway，集中处理模
 
 ### PostgreSQL
 
-保存业务事实，并通过 `pgvector` 保存可重建的 RAG Chunk 向量。业务表只由 Java 访问；Python 只访问 `rag_chunk` 派生索引，避免过早增加独立向量数据库。
+保存业务事实，并通过 `pgvector` 保存可重建的 RAG Chunk 向量。`POSTGRES_USER` 只承担初始化、角色引导和 Flyway；Core 运行连接使用 `agentforge_core`，Python 使用 `agentforge_agent`，后者仅获 `rag_chunk` 与 `agent_checkpoint` 权限，数据库拒绝其修改 Java 业务事实。详见 [ADR-0040](decisions/ADR-0040-database-service-role-separation.md)。
 
 ### Redis
 

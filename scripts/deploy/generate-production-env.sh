@@ -24,6 +24,8 @@ fi
 install -d -m 0700 "$(dirname "${TARGET}")"
 umask 077
 DB_PASSWORD="$(openssl rand -hex 24)"
+CORE_DB_PASSWORD="$(openssl rand -hex 24)"
+AGENT_DB_PASSWORD="$(openssl rand -hex 24)"
 JWT_SECRET="$(openssl rand -base64 48 | tr -d '\n')"
 AGENT_TOKEN="$(openssl rand -hex 32)"
 CORE_TOKEN="$(openssl rand -hex 32)"
@@ -34,6 +36,8 @@ PUBLIC_URL_HOST=${ISSUER_HOST}
 POSTGRES_DB=agentforge
 POSTGRES_USER=agentforge
 POSTGRES_PASSWORD=${DB_PASSWORD}
+AGENTFORGE_CORE_DB_PASSWORD=${CORE_DB_PASSWORD}
+AGENTFORGE_AGENT_DB_PASSWORD=${AGENT_DB_PASSWORD}
 AGENTFORGE_POSTGRES_VOLUME=agentforge-postgres-data
 AGENTFORGE_LOKI_VOLUME=agentforge-loki-data
 AGENTFORGE_ALLOY_VOLUME=agentforge-alloy-data

@@ -183,6 +183,7 @@ function Invoke-JavaPythonContracts {
     $stageSucceeded = $false
     $environmentNames = @(
         "POSTGRES_PORT", "POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD",
+        "AGENTFORGE_CORE_DB_PASSWORD", "AGENTFORGE_AGENT_DB_PASSWORD",
         "AGENTFORGE_AGENT_INTERNAL_TOKEN", "AGENTFORGE_CORE_INTERNAL_TOKEN", "AGENTFORGE_JWT_SECRET",
         "AGENTFORGE_AGENT_RAG_DB_DSN", "AGENTFORGE_AGENT_CHECKPOINT_DB_DSN",
         "AGENTFORGE_AGENT_RAG_ENABLED", "AGENTFORGE_AGENT_LLM_PROVIDER",
@@ -200,6 +201,8 @@ function Invoke-JavaPythonContracts {
         $env:POSTGRES_DB = "agentforge"
         $env:POSTGRES_USER = "agentforge"
         $env:POSTGRES_PASSWORD = $databasePassword
+        $env:AGENTFORGE_CORE_DB_PASSWORD = "v309_core_$runId"
+        $env:AGENTFORGE_AGENT_DB_PASSWORD = "v309_agent_$runId"
         $env:AGENTFORGE_AGENT_INTERNAL_TOKEN = $agentToken
         $env:AGENTFORGE_CORE_INTERNAL_TOKEN = $coreToken
         $env:AGENTFORGE_JWT_SECRET = [Convert]::ToBase64String(

@@ -108,6 +108,8 @@ function Set-ReleaseEnvironment([int]$PostgresPort, [int]$CorePort, [int]$AgentP
     $env:POSTGRES_DB = "agentforge"
     $env:POSTGRES_USER = "agentforge"
     $env:POSTGRES_PASSWORD = "v209_$([guid]::NewGuid().ToString('N'))"
+    $env:AGENTFORGE_CORE_DB_PASSWORD = "v209_core_$([guid]::NewGuid().ToString('N'))"
+    $env:AGENTFORGE_AGENT_DB_PASSWORD = "v209_agent_$([guid]::NewGuid().ToString('N'))"
     $env:AGENTFORGE_JWT_SECRET = [Convert]::ToBase64String(
         [Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
     )

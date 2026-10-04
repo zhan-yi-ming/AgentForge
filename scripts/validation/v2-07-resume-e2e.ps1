@@ -73,6 +73,8 @@ try {
     $env:POSTGRES_DB = "agentforge"
     $env:POSTGRES_USER = "agentforge"
     $env:POSTGRES_PASSWORD = $databasePassword
+    $env:AGENTFORGE_CORE_DB_PASSWORD = "v207_core_$runId"
+    $env:AGENTFORGE_AGENT_DB_PASSWORD = "v207_agent_$runId"
     Invoke-Compose @("up", "-d", "postgres")
 
     $postgresReady = $false

@@ -123,7 +123,7 @@ confirm/reject 在事务内悲观锁定 action。同 key 的终态请求返回�
 
 Flyway V8 创建独立 `agent_checkpoint` schema，并为 `agent_task_action` 增加可空的 `action_workflow_version` 兼容标记；后续迁移为 workflow v2 增加唯一 `action_workflow_id`，不回填或重写既有 v1 Action。该 schema 内部的 checkpoint migrations、checkpoints、writes 与 blobs 表由 `langgraph-checkpoint-postgres` 的幂等 setup 管理，应用代码不依赖其内部列结构。它们是 Python Agent 运行态，不是 Java 业务事实。
 
-checkpoint state 只保存 schema version、完整 Memory Namespace、workflow ID、proposal 指纹、等待/恢复状态、action/decision/idempotency/request 元数据。workflow v2 的 ID 必须与 Java Action 唯一列一致；v1 checkpoint 仅用于已有 Action 的兼容恢复。禁止保存 JWT、内部 token、密码、完整 Prompt、回答正文和检索正文。生产部署应把 Python 数据库权限限制为 checkpoint schema 及既有 RAG 派生数据；Python 不得写 `agent_task_action`、`task_item` 或 audit 表。
+checkpoint state 只保存 schema version、完整 Memory Namespace、workflow ID、proposal 指纹、等待/恢复状态、action/decision/idempotency/request 元数据。workflow v2 的 ID 必须与 Java Action 唯一列一致；v1 checkpoint 仅用于已有 Action 的兼容恢复。禁止保存 JWT、内部 token、密码、完整 Prompt、回答正文和检索正文。生产与本地 Compose 由 [ADR-0040](decisions/ADR-0040-database-service-role-separation.md) 强制分离数据库身份：初始化管理员执行 Flyway；`agentforge_core` 只承担业务运行期 DML；`agentforge_agent` 只获 `rag_chunk` DML，并拥有 `agent_checkpoint` schema 及既有表/序列以执行后续幂等 setup DDL。Python 对 `app_user`、`task_item`、`agent_task_action` 与 audit 表的写入必须由 PostgreSQL 拒绝，而不是只靠代码约定。
 
 ## 隔离与并发
 
@@ -170,6 +170,7 @@ P3-02 删除历史时先检查同一 project/user/conversation 下没有 `PENDIN
 
 - 迁移文件放在 `services/core-api/src/main/resources/db/migration/`。
 - 已经进入共享分支或被其他环境执行的版本化迁移不得修改；通过新迁移修正。
+- 数据库服务角色由部署引导幂等创建，权限变化由新 Flyway 迁移完成；既有卷不得删除重建。
 - JPA 使用 `ddl-auto=validate`，启动时验证 Entity 与迁移结果一致。
 - 迁移失败先查看 Flyway schema history 和数据库日志，不允许临时切回 `update` 绕过。
 
