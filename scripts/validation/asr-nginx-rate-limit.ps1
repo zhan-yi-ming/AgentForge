@@ -67,8 +67,9 @@ while [ `$i -lt 40 ]; do
   i=`$((i + 1))
 done
 test `$rejected -eq 1
-wget -q -O /dev/null http://127.0.0.1:8080/api/v1/projects/p/agent/asr/sessions/u1
+    wget -q -O /dev/null http://127.0.0.1:8080/api/v1/projects/p/agent/asr/sessions/u1
 "@
+    $loop = $loop.Replace("`r`n", "`n")
     & docker exec $container sh -c $loop
     if ($LASTEXITCODE -ne 0) { throw "ASR Nginx sustained-rate smoke failed." }
     Write-Host "ASR Nginx rate-limit smoke passed: two same-IP sessions plus ordinary API sustained for $DurationSeconds seconds; generic API burst was rejected; ASR remained available."
