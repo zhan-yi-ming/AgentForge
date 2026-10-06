@@ -1,5 +1,7 @@
 # 变更记录
 
+- [2026-10-06-r01-r18-main-integration.md](2026-10-06-r01-r18-main-integration.md)：把已审计的 R01–R18 以非 force fast-forward 合并到 main，并执行独立 Release Gate（Proposed）。
+
 - [2026-10-06-r01-r18-cumulative-audit.md](2026-10-06-r01-r18-cumulative-audit.md)：R01–R18 累计差异的跨功能严重问题复核、完整 Release Regression 与 Pi Milestone 审计（Implemented；未发现经复现确认的严重问题）。
 
 - [2026-10-06-r18-conversation-revision-lease.md](2026-10-06-r18-conversation-revision-lease.md)：R18 以会话 revision 与短期 exchange claim 拒绝同一会话并发提交，并保护 Action checkpoint 收口（Implemented）。
