@@ -18,6 +18,7 @@ const FORMAT_PROMPT_PREFIX = "请将以下内容整理为 Markdown，保留事�
 const MAX_FORMAT_INPUT_LENGTH = 16_000 - FORMAT_PROMPT_PREFIX.length;
 
 type WorkspacePanel = "wiki" | "tasks" | "format";
+type WorkspaceScope = { generation: number; projectId: string; token: string | null };
 
 function Icon({ name }: { name: "info" | "logout" | "back" | "expand" | "shrink" }) {
   const paths = {
@@ -109,6 +110,10 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   const streamAbort = useRef<AbortController | undefined>(undefined);
   const formatAbort = useRef<AbortController | undefined>(undefined);
   const activeProjectId = useRef("");
+  const workspaceGeneration = useRef(0);
+  const wikiSaveSequence = useRef(0);
+  const decisionSequence = useRef(0);
+  const pendingActionRef = useRef<AgentAction | undefined>(undefined);
   const wikiPanel = useRef<HTMLElement | null>(null);
   const chatSequence = useRef(0);
   const chatModeRef = useRef(false);
@@ -143,12 +148,33 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
 
   useEffect(() => { conversationIdRef.current = conversationId; }, [conversationId]);
 
+  const captureWorkspaceScope = useCallback((selectedProjectId: string): WorkspaceScope => ({
+    generation: workspaceGeneration.current,
+    projectId: selectedProjectId,
+    token: sessionStorage.getItem(TOKEN_KEY),
+  }), []);
+
+  const isWorkspaceScopeCurrent = useCallback((scope: WorkspaceScope) =>
+    workspaceGeneration.current === scope.generation &&
+    activeProjectId.current === scope.projectId &&
+    sessionStorage.getItem(TOKEN_KEY) === scope.token, []);
+
+  const advanceWorkspaceScope = useCallback((selectedProjectId: string) => {
+    workspaceGeneration.current += 1;
+    activeProjectId.current = selectedProjectId;
+  }, []);
+
+  const commitPendingAction = useCallback((action?: AgentAction) => {
+    pendingActionRef.current = action;
+    setPendingAction(action);
+  }, []);
+
   const resetWorkspaceState = useCallback(() => {
+    advanceWorkspaceScope("");
     streamAbort.current?.abort();
     formatAbort.current?.abort();
     streamAbort.current = undefined;
     formatAbort.current = undefined;
-    activeProjectId.current = "";
     decisionKeys.current.clear();
     setProjects([]);
     setProjectId("");
@@ -163,7 +189,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setChatHistory([]);
     setConversationSummaries([]);
     setExpandedChatIds(new Set());
-    setPendingAction(undefined);
+    commitPendingAction(undefined);
     setFormatInput("");
     setFormattedText("");
     setFormatComplete(false);
@@ -183,7 +209,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setConversationToDelete(undefined);
     setDeleteBusy(false);
     setPreviewOpen(false);
-  }, []);
+  }, [advanceWorkspaceScope, commitPendingAction]);
 
   const report = useCallback((cause: unknown) => {
     if (cause instanceof ApiProblem) {
@@ -197,10 +223,6 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     } else setError(cause instanceof Error ? cause.message : "请求失败，请稍后重试。");
   }, [resetWorkspaceState, navigate]);
 
-  const loadTasks = useCallback(async (selectedProjectId: string) => {
-    setTasks(await api.listTasks(selectedProjectId));
-  }, [api]);
-
   const selectWiki = useCallback((page?: WikiPage) => {
     setWikiFeedback("");
     setWikiId(page?.id ?? "");
@@ -209,39 +231,47 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setWikiVersion(page?.version ?? 0);
   }, []);
 
-  const showFirstRecoverable = useCallback((recoverableActions: RecoverableAgentAction[]) => {
+  const showFirstRecoverable = useCallback((recoverableActions: RecoverableAgentAction[], replacingActionId?: string) => {
+    const current = pendingActionRef.current;
+    if (replacingActionId && current && current.id !== replacingActionId) return;
     const recovered = recoverableActions[0];
-    setPendingAction(recovered
+    commitPendingAction(recovered
       ? { ...recovered.action, source: recovered.source, recovered: true }
       : undefined);
     if (recovered?.decisionKey) decisionKeys.current.set(recovered.action.id, recovered.decisionKey);
-  }, []);
+  }, [commitPendingAction]);
 
   useEffect(() => {
     if (!authenticated) return;
     let active = true;
+    const scope = captureWorkspaceScope(activeProjectId.current);
     api.listProjects().then((items) => {
-      if (!active) return;
+      if (!active || !isWorkspaceScopeCurrent(scope)) return;
       setProjects(items);
       setProjectId((current) => current || items[0]?.id || "");
-    }).catch(report);
+    }).catch((cause) => { if (active && isWorkspaceScopeCurrent(scope)) report(cause); });
     return () => { active = false; };
-  }, [api, authenticated, report]);
+  }, [api, authenticated, captureWorkspaceScope, isWorkspaceScopeCurrent, report]);
 
   useEffect(() => {
     if (!projectId) return;
-    activeProjectId.current = projectId;
+    if (activeProjectId.current !== projectId) advanceWorkspaceScope(projectId);
+    const scope = captureWorkspaceScope(projectId);
     activeConversationLoad.current += 1;
     loadingConversationId.current = undefined;
     streamAbort.current?.abort();
     formatAbort.current?.abort();
+    streamAbort.current = undefined;
+    formatAbort.current = undefined;
     let active = true;
     setBusy(false);
+    setStreaming(false);
+    setDeleteBusy(false);
     setError("");
     setConversationId(undefined);
     setChatHistory([]);
     setExpandedChatIds(new Set());
-    setPendingAction(undefined);
+    commitPendingAction(undefined);
     decisionKeys.current.clear();
     setConversationSummaries([]);
     setHistoryOpen(false);
@@ -252,7 +282,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setFormatApplied(false);
     Promise.all([api.listWikiPages(projectId), api.listTasks(projectId), api.listConversations(projectId)])
       .then(([pages, loadedTasks, loadedConversations]) => {
-        if (!active) return;
+        if (!active || !isWorkspaceScopeCurrent(scope)) return;
         setWikiPages(pages);
         setTasks(loadedTasks);
         setConversationSummaries(loadedConversations);
@@ -260,20 +290,21 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         if (currentRoute.page !== "chat" || !currentRoute.conversationId) {
           api.listRecoverableActions(projectId).then((recoverableActions) => {
             const latestRoute = parseRoute(window.location.pathname);
-            if (active && activeProjectId.current === projectId &&
+            if (active && isWorkspaceScopeCurrent(scope) &&
                 (latestRoute.page !== "chat" || !latestRoute.conversationId)) {
               showFirstRecoverable(recoverableActions);
             }
-          }).catch((cause) => { if (active) report(cause); });
+          }).catch((cause) => { if (active && isWorkspaceScopeCurrent(scope)) report(cause); });
         }
         selectWiki(pages[0]);
-      }).catch(report);
+      }).catch((cause) => { if (active && isWorkspaceScopeCurrent(scope)) report(cause); });
     return () => { active = false; streamAbort.current?.abort(); formatAbort.current?.abort(); };
-  }, [api, projectId, report, selectWiki, showFirstRecoverable]);
+  }, [advanceWorkspaceScope, api, captureWorkspaceScope, isWorkspaceScopeCurrent, projectId, report, selectWiki, showFirstRecoverable]);
 
   async function openConversation(selectedConversationId: string) {
     if (!projectId) return;
     const requestedProjectId = projectId;
+    const scope = captureWorkspaceScope(requestedProjectId);
     const load = ++activeConversationLoad.current;
     loadingConversationId.current = selectedConversationId;
     streamAbort.current?.abort();
@@ -281,10 +312,10 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setBusy(true); setError("");
     setChatHistory([]);
     setConversationId(undefined);
-    setPendingAction(undefined);
+    commitPendingAction(undefined);
     try {
       const detail = await api.getConversation(requestedProjectId, selectedConversationId);
-      if (activeProjectId.current !== requestedProjectId || activeConversationLoad.current !== load) return;
+      if (!isWorkspaceScopeCurrent(scope) || activeConversationLoad.current !== load) return;
       const items: ChatHistoryItem[] = [];
       let pendingQuestion: typeof detail.messages[number] | undefined;
       let activeItem: ChatHistoryItem | undefined;
@@ -313,16 +344,16 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
       navigate(`/chat/${encodeURIComponent(detail.conversationId)}`);
       try {
         const recoverableActions = await api.listRecoverableActions(requestedProjectId, selectedConversationId);
-        if (activeProjectId.current === requestedProjectId && activeConversationLoad.current === load) {
+        if (isWorkspaceScopeCurrent(scope) && activeConversationLoad.current === load) {
           showFirstRecoverable(recoverableActions);
         }
       } catch (cause) {
-        if (activeProjectId.current === requestedProjectId && activeConversationLoad.current === load) report(cause);
+        if (isWorkspaceScopeCurrent(scope) && activeConversationLoad.current === load) report(cause);
       }
     } catch (cause) {
-      if (activeProjectId.current === requestedProjectId && activeConversationLoad.current === load) report(cause);
+      if (isWorkspaceScopeCurrent(scope) && activeConversationLoad.current === load) report(cause);
     } finally {
-      if (activeProjectId.current === requestedProjectId && activeConversationLoad.current === load) {
+      if (isWorkspaceScopeCurrent(scope) && activeConversationLoad.current === load) {
         loadingConversationId.current = undefined;
         setBusy(false);
       }
@@ -331,13 +362,14 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
 
   function newChat() {
     const requestedProjectId = projectId;
-    activeConversationLoad.current += 1;
+    const scope = captureWorkspaceScope(requestedProjectId);
+    const load = ++activeConversationLoad.current;
     loadingConversationId.current = undefined;
     streamAbort.current?.abort();
     setConversationId(undefined);
     setChatHistory([]);
     setExpandedChatIds(new Set());
-    setPendingAction(undefined);
+    commitPendingAction(undefined);
     setChatMessage("");
     setBusy(false);
     setStreaming(false);
@@ -351,11 +383,13 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     if (requestedProjectId) {
       api.listRecoverableActions(requestedProjectId).then((recoverableActions) => {
         const currentRoute = parseRoute(window.location.pathname);
-        if (activeProjectId.current === requestedProjectId && currentRoute.page === "chat" &&
+        if (isWorkspaceScopeCurrent(scope) && activeConversationLoad.current === load && currentRoute.page === "chat" &&
             !currentRoute.conversationId) {
           showFirstRecoverable(recoverableActions);
         }
-      }).catch(report);
+      }).catch((cause) => {
+        if (isWorkspaceScopeCurrent(scope) && activeConversationLoad.current === load) report(cause);
+      });
     }
   }
 
@@ -363,12 +397,12 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     if (!projectId || !conversationToDelete || deleteBusy) return;
     const selectedId = conversationToDelete.conversationId;
     const requestedProjectId = projectId;
-    const requestedToken = sessionStorage.getItem(TOKEN_KEY);
+    const scope = captureWorkspaceScope(requestedProjectId);
     setDeleteBusy(true);
     setError("");
     try {
       await api.deleteConversation(requestedProjectId, selectedId);
-      if (activeProjectId.current !== requestedProjectId || sessionStorage.getItem(TOKEN_KEY) !== requestedToken) return;
+      if (!isWorkspaceScopeCurrent(scope)) return;
       setConversationSummaries((current) => current.filter((item) => item.conversationId !== selectedId));
       setConversationToDelete(undefined);
       const currentRoute = parseRoute(window.location.pathname);
@@ -379,13 +413,13 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         streamAbort.current?.abort();
         setConversationId(undefined);
         setChatHistory([]);
-        setPendingAction(undefined);
+        commitPendingAction(undefined);
         setStreaming(false);
       }
     } catch (cause) {
-      if (activeProjectId.current === requestedProjectId && sessionStorage.getItem(TOKEN_KEY) === requestedToken) report(cause);
+      if (isWorkspaceScopeCurrent(scope)) report(cause);
     } finally {
-      setDeleteBusy(false);
+      if (isWorkspaceScopeCurrent(scope)) setDeleteBusy(false);
     }
   }
 
@@ -408,18 +442,21 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
         void openConversation(route.conversationId);
       } else if (!route.conversationId && routeChanged && (loadingConversationId.current || conversationId)) {
         const load = ++activeConversationLoad.current;
+        const scope = captureWorkspaceScope(projectId);
         loadingConversationId.current = undefined;
         streamAbort.current?.abort();
         setConversationId(undefined);
         setChatHistory([]);
-        setPendingAction(undefined);
+        commitPendingAction(undefined);
         api.listRecoverableActions(projectId).then((recoverableActions) => {
           const latestRoute = parseRoute(window.location.pathname);
-          if (activeProjectId.current === projectId && activeConversationLoad.current === load &&
+          if (isWorkspaceScopeCurrent(scope) && activeConversationLoad.current === load &&
               latestRoute.page === "chat" && !latestRoute.conversationId) {
             showFirstRecoverable(recoverableActions);
           }
-        }).catch(report);
+        }).catch((cause) => {
+          if (isWorkspaceScopeCurrent(scope) && activeConversationLoad.current === load) report(cause);
+        });
       }
     } else if (route.page === "wiki" || route.page === "wiki-graph") {
       setChatMode(false);
@@ -450,17 +487,26 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
 
   async function saveWiki() {
     if (!projectId || !wikiTitle.trim()) return;
+    const scope = captureWorkspaceScope(projectId);
+    const save = ++wikiSaveSequence.current;
+    const isCurrentSave = () => wikiSaveSequence.current === save && isWorkspaceScopeCurrent(scope);
     setBusy(true); setError(""); setWikiFeedback("");
     try {
       const saved = wikiId
-        ? await api.updateWikiPage(projectId, wikiId, wikiTitle, wikiContent, wikiVersion)
-        : await api.createWikiPage(projectId, wikiTitle, wikiContent);
-      const pages = await api.listWikiPages(projectId);
+        ? await api.updateWikiPage(scope.projectId, wikiId, wikiTitle, wikiContent, wikiVersion)
+        : await api.createWikiPage(scope.projectId, wikiTitle, wikiContent);
+      if (!isCurrentSave()) return;
+      const pages = await api.listWikiPages(scope.projectId);
+      if (!isCurrentSave()) return;
       setWikiPages(pages);
       const latest = pages.find((page) => page.id === saved.id) ?? saved;
       selectWiki(latest);
       setWikiFeedback(`Wiki 已保存 · v${latest.version}`);
-    } catch (cause) { report(cause); } finally { setBusy(false); }
+    } catch (cause) {
+      if (isCurrentSave()) report(cause);
+    } finally {
+      if (isCurrentSave()) setBusy(false);
+    }
   }
 
   function applyFormattedText() {
@@ -531,6 +577,13 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setError("");
   }
 
+  function chooseProject(selectedProjectId: string) {
+    if (selectedProjectId !== projectId) advanceWorkspaceScope(selectedProjectId);
+    setProjectId(selectedProjectId);
+    if (route.page === "chat") navigate("/chat");
+    setProjectsOpen(false);
+  }
+
   function startPreviewDrag(event: ReactPointerEvent<HTMLElement>) {
     if ((event.target as HTMLElement).closest("button")) return;
     previewDrag.current = { startX: event.clientX, startY: event.clientY, originX: previewPosition.x, originY: previewPosition.y };
@@ -566,45 +619,50 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setProjectsOpen(false);
     setTasksOpen(false);
     const requestedProjectId = projectId;
+    const scope = captureWorkspaceScope(requestedProjectId);
     const question = chatMessage.trim();
     const historyId = `chat-${++chatSequence.current}`;
+    const chatRequest = chatSequence.current;
     const controller = new AbortController();
     streamAbort.current?.abort();
     streamAbort.current = controller;
-    setStreaming(true); setError(""); setPendingAction(undefined);
+    const isCurrentChat = () => streamAbort.current === controller &&
+      !controller.signal.aborted && isWorkspaceScopeCurrent(scope);
+    setStreaming(true); setError(""); commitPendingAction(undefined);
     setChatHistory((current) => [...current, { id: historyId, question, answer: "", sources: [] }]);
     setExpandedChatIds((current) => new Set(current).add(historyId));
     try {
       const result = await api.chatStream(projectId, question, conversationId, {
         onMetadata: (metadata) => {
-          if (activeProjectId.current !== requestedProjectId || streamAbort.current !== controller ||
-            controller.signal.aborted || parseRoute(window.location.pathname).page !== "chat") return;
+          if (!isCurrentChat() || parseRoute(window.location.pathname).page !== "chat") return;
           setConversationId(metadata.conversationId);
           navigate(`/chat/${encodeURIComponent(metadata.conversationId)}`, true);
           setChatHistory((current) => current.map((item) => item.id === historyId ? { ...item, sources: metadata.sources } : item));
         },
         onDelta: (text) => {
-          if (activeProjectId.current === requestedProjectId && streamAbort.current === controller && !controller.signal.aborted) {
+          if (isCurrentChat()) {
             setChatHistory((current) => current.map((item) => item.id === historyId ? { ...item, answer: item.answer + text } : item));
           }
         },
       }, controller.signal);
-      if (activeProjectId.current !== requestedProjectId || streamAbort.current !== controller || controller.signal.aborted) return;
+      if (!isCurrentChat()) return;
       setConversationId(result.conversationId);
       setChatHistory((current) => current.map((item) => item.id === historyId ? { ...item, answer: result.answer, sources: result.sources } : item));
-      setPendingAction(result.pendingAction);
+      commitPendingAction(result.pendingAction);
       if (!chatModeRef.current) setUnreadChat(true);
       setChatMessage("");
       api.listConversations(requestedProjectId).then((items) => {
-        if (activeProjectId.current === requestedProjectId) setConversationSummaries(items);
-      }).catch(report);
+        if (isWorkspaceScopeCurrent(scope) && chatSequence.current === chatRequest) setConversationSummaries(items);
+      }).catch((cause) => {
+        if (isWorkspaceScopeCurrent(scope) && chatSequence.current === chatRequest) report(cause);
+      });
     } catch (cause) {
-      if (streamAbort.current === controller) {
+      if (streamAbort.current === controller && isWorkspaceScopeCurrent(scope)) {
         setChatHistory((current) => current.filter((item) => item.id !== historyId));
-        if (!isAbortError(cause)) report(cause);
+        if (!controller.signal.aborted && !isAbortError(cause)) report(cause);
       }
     } finally {
-      if (streamAbort.current === controller) {
+      if (streamAbort.current === controller && isWorkspaceScopeCurrent(scope)) {
         streamAbort.current = undefined;
         setStreaming(false);
       }
@@ -614,6 +672,14 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
   async function decideAction(decision: "confirm" | "reject", automatic = false) {
     if (!projectId || !pendingAction) return;
     const actionId = pendingAction.id;
+    const scope = captureWorkspaceScope(projectId);
+    const decisionRequest = ++decisionSequence.current;
+    const isCurrentDecision = () =>
+      decisionSequence.current === decisionRequest && isWorkspaceScopeCurrent(scope);
+    const stillOwnsPendingAction = () => {
+      const current = pendingActionRef.current;
+      return !current || current.id === actionId;
+    };
     let idempotencyKey = decisionKeys.current.get(actionId);
     if (!idempotencyKey) {
       idempotencyKey = crypto.randomUUID();
@@ -623,36 +689,46 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     try {
       if (decision === "confirm") {
         const result = automatic
-          ? await api.autoConfirmAction(projectId, actionId, idempotencyKey)
-          : await api.confirmAction(projectId, actionId, idempotencyKey);
+          ? await api.autoConfirmAction(scope.projectId, actionId, idempotencyKey)
+          : await api.confirmAction(scope.projectId, actionId, idempotencyKey);
+        if (!isCurrentDecision() || !stillOwnsPendingAction()) return;
         if (result.status === "FAILED") {
           decisionKeys.current.delete(actionId);
-          setPendingAction(undefined);
+          commitPendingAction(undefined);
           setError("审批已记录，但执行失败。请刷新目标后重新发起。");
           const currentRoute = parseRoute(window.location.pathname);
           const selectedConversationId = currentRoute.page === "chat" ? currentRoute.conversationId : undefined;
           try {
-            const recoverableActions = await api.listRecoverableActions(projectId, selectedConversationId);
-            if (activeProjectId.current === projectId) showFirstRecoverable(recoverableActions);
-          } catch (cause) { report(cause); }
+            const recoverableActions = await api.listRecoverableActions(scope.projectId, selectedConversationId);
+            if (isCurrentDecision()) showFirstRecoverable(recoverableActions, actionId);
+          } catch (cause) { if (isCurrentDecision() && stillOwnsPendingAction()) report(cause); }
           return;
         }
-        await loadTasks(projectId);
-      } else await api.rejectAction(projectId, actionId, idempotencyKey);
+        const loadedTasks = await api.listTasks(scope.projectId);
+        if (!isCurrentDecision() || !stillOwnsPendingAction()) return;
+        setTasks(loadedTasks);
+      } else {
+        await api.rejectAction(scope.projectId, actionId, idempotencyKey);
+        if (!isCurrentDecision() || !stillOwnsPendingAction()) return;
+      }
       decisionKeys.current.delete(actionId);
-      setPendingAction(undefined);
+      commitPendingAction(undefined);
       const currentRoute = parseRoute(window.location.pathname);
       const selectedConversationId = currentRoute.page === "chat" ? currentRoute.conversationId : undefined;
       try {
-        const recoverableActions = await api.listRecoverableActions(projectId, selectedConversationId);
-        if (activeProjectId.current === projectId) showFirstRecoverable(recoverableActions);
-      } catch (cause) { report(cause); }
-    } catch (cause) { report(cause); } finally { setBusy(false); }
+        const recoverableActions = await api.listRecoverableActions(scope.projectId, selectedConversationId);
+        if (isCurrentDecision()) showFirstRecoverable(recoverableActions, actionId);
+      } catch (cause) { if (isCurrentDecision() && stillOwnsPendingAction()) report(cause); }
+    } catch (cause) {
+      if (isCurrentDecision() && stillOwnsPendingAction()) report(cause);
+    } finally {
+      if (isCurrentDecision()) setBusy(false);
+    }
   }
 
   async function formatText() {
     if (!projectId || !formatInput.trim() || formatInput.trim().length > MAX_FORMAT_INPUT_LENGTH) return;
-    const requestedProjectId = projectId;
+    const scope = captureWorkspaceScope(projectId);
     const controller = new AbortController();
     formatAbort.current?.abort();
     formatAbort.current = controller;
@@ -660,32 +736,32 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
     setFormattedText("");
     setFormatComplete(false);
     setFormatApplied(false);
+    const isCurrentFormat = () => formatAbort.current === controller &&
+      !controller.signal.aborted && isWorkspaceScopeCurrent(scope);
     try {
       const result = await api.chatStream(
-        projectId,
+        scope.projectId,
         `${FORMAT_PROMPT_PREFIX}${formatInput.trim()}`,
         undefined,
         {
           onDelta: (text) => {
-            if (activeProjectId.current === requestedProjectId) {
-              setFormattedText((current) => current + text);
-            }
+            if (isCurrentFormat()) setFormattedText((current) => current + text);
           },
         },
         controller.signal,
         "FORMAT",
       );
-      if (activeProjectId.current !== requestedProjectId) return;
+      if (!isCurrentFormat()) return;
       setFormattedText(normalizeMarkdownContent(result.answer));
       setFormatComplete(true);
     } catch (cause) {
-      if (!isAbortError(cause) && activeProjectId.current === requestedProjectId) {
+      if (!isAbortError(cause) && isCurrentFormat()) {
         setFormattedText("");
         setFormatComplete(false);
         report(cause);
       }
     } finally {
-      if (formatAbort.current === controller) {
+      if (isCurrentFormat()) {
         formatAbort.current = undefined;
         setBusy(false);
       }
@@ -741,7 +817,7 @@ export function App({ api: injectedApi }: { api?: ApiClient }) {
       <button className="rail-button" aria-expanded={historyOpen} onClick={() => { setHistoryOpen((open) => !open); setProjectsOpen(false); setTasksOpen(false); }}><span>◴</span><small>历史</small></button>
       {(chatHistory.length > 0 || streaming) && <button className="rail-button conversation-button" onClick={enterChatMode}><span>◌</span><small>对话</small>{unreadChat && <i className="unread-badge" aria-label="有新的 AI 回答" />}</button>}
     </div>}
-    {projectsOpen && <aside className="floating-drawer projects-drawer"><div className="drawer-heading"><div><span className="section-label">WORKSPACES</span><strong>项目空间</strong></div><button className="drawer-close" aria-label="关闭项目空间" onClick={() => setProjectsOpen(false)}>×</button></div>{projects.map((project) => <button key={project.id} className={project.id === projectId ? "project active" : "project"} onClick={() => { setProjectId(project.id); if (route.page === "chat") navigate("/chat"); setProjectsOpen(false); }}><strong>{project.name}</strong><span>{project.description || "暂无描述"}</span></button>)}{!projects.length && <p className="empty-state">还没有项目</p>}</aside>}
+    {projectsOpen && <aside className="floating-drawer projects-drawer"><div className="drawer-heading"><div><span className="section-label">WORKSPACES</span><strong>项目空间</strong></div><button className="drawer-close" aria-label="关闭项目空间" onClick={() => setProjectsOpen(false)}>×</button></div>{projects.map((project) => <button key={project.id} className={project.id === projectId ? "project active" : "project"} onClick={() => chooseProject(project.id)}><strong>{project.name}</strong><span>{project.description || "暂无描述"}</span></button>)}{!projects.length && <p className="empty-state">还没有项目</p>}</aside>}
     {historyOpen && <aside className="floating-drawer history-drawer"><div className="drawer-heading"><div><span className="section-label">HISTORY</span><strong>历史会话</strong></div><button className="drawer-close" aria-label="关闭历史会话" onClick={() => setHistoryOpen(false)}>×</button></div><button className="ghost" onClick={newChat}>新建会话</button>{conversationSummaries.map((conversation) => <div className="history-record" key={conversation.conversationId}><button className="project" onClick={() => void openConversation(conversation.conversationId)} disabled={busy || deleteBusy}><strong>{conversation.preview}</strong><span>{conversation.messageCount} 条消息</span></button><button type="button" className="history-delete" aria-label={`删除会话 ${conversation.preview}`} onClick={() => setConversationToDelete(conversation)} disabled={deleteBusy}>删除</button></div>)}{!conversationSummaries.length && <p className="empty-state">暂无历史会话</p>}</aside>}
     {tasksOpen && <aside className="floating-drawer tasks-drawer"><div className="drawer-heading"><div><span className="section-label">EXECUTION</span><strong>执行任务</strong></div><button className="drawer-close" aria-label="关闭执行任务" onClick={() => setTasksOpen(false)}>×</button></div><div className="task-list">{tasks.map((task) => <article key={task.id}><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority}</span><h3>{task.title}</h3><p>{task.description || "暂无描述"}</p><footer><span>{task.status.replace("_", " ")}</span><span>v{task.version}</span></footer></article>)}{!tasks.length && <p className="empty-state">暂无任务，可让 Agent 提出一个。</p>}</div></aside>}
     <main className="workspace centered-workspace">

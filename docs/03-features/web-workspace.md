@@ -31,12 +31,13 @@
 - Wiki 保存成功显示明确反馈，并以服务端返回和刷新列表中的最新页面、version 更新当前草稿；失败时只展示错误，不显示成功。
 - 保存 Wiki 不会创建 Task；“执行任务”只展示 Task API 数据，并在界面明确说明只有 Agent 提出且用户确认的任务操作才会改变这里。用户应以 Wiki 编辑区的保存状态和版本号判断保存结果。
 - confirm/reject 达到终态后清除 pending action 与本地 key；confirm 返回 `EXECUTED` 才刷新 Task，返回 `FAILED` 时显示失败且不误刷新；网络失败保留两者供安全重试。
-- 切换项目取消 Chat 与整理流，并清空项目相关草稿、conversation 和 pending action；旧项目迟到事件不可写入当前视图。
+- 每次登录会话或项目选择建立新的 workspace generation。Wiki 保存、Task 刷新、Action 决策、Chat/历史与 AI 整理的异步结果，只有 token、projectId、generation 和对应操作身份仍匹配时才能写入当前视图；即使 A→B→A 回到同一 projectId，第一次 A 的迟到结果也必须丢弃。
+- 切换项目取消 Chat 与整理流，并清空项目相关草稿、conversation 和 pending action；注销/重登录或项目切换后，旧请求的 success、error、busy/finally 与恢复查询都不可写入当前视图。已经到达后端的保存或决策不自动重发，旧 Action 只能收口自身，不能清除新的 pending action。
 - V2-05 左侧历史入口按当前项目加载认证用户自己的持久化会话。选择历史后进入聊天内容页、恢复已完成消息并复用 conversationId；切换项目会丢弃已加载详情并重新查询，前端不提交 userId 或权限 Metadata。
 
 ## 测试边界
 
-测试通过 DOM 与网络 client 的公共接口观察行为，不断言私有 state。至少覆盖：登录页不出现凭据明文、只显示简历邮箱与微信号提示、任一凭据错误显示统一联系文案、首次引导关闭/持久化/重新打开、登录后 Chat 是主内容首个功能、项目加载、Markdown 原始 HTML 不成为 DOM、完整外层 Markdown 围栏被移除但正文内部代码块保留、项目对话最新展开且旧记录可展开、执行任务语义说明、AI 整理在 stream promise 完成前展示真实 delta、未闭合 fence 不产生整页代码块、与 Chat 互斥、项目切换取消旧流、失败半成品不可应用、意外 proposal 不污染 Chat、应用后形成带标题的新 Wiki 草稿并在保存时调用 create API、滚动定位与反馈、Wiki 保存成功反馈、Chat 展示 pending action、确认请求携带稳定 key、网络重试复用 key、`EXECUTED` 后刷新 Task、`FAILED` 不误刷新、拒绝不写，以及 Problem Details 可见。
+测试通过 DOM 与网络 client 的公共接口观察行为，不断言私有 state。至少覆盖：登录页不出现凭据明文、只显示简历邮箱与微信号提示、任一凭据错误显示统一联系文案、首次引导关闭/持久化/重新打开、登录后 Chat 是主内容首个功能、项目加载、Markdown 原始 HTML 不成为 DOM、完整外层 Markdown 围栏被移除但正文内部代码块保留、项目对话最新展开且旧记录可展开、执行任务语义说明、AI 整理在 stream promise 完成前展示真实 delta、未闭合 fence 不产生整页代码块、与 Chat 互斥、项目切换取消旧流并恢复新项目 Chat/历史删除控件、A→B→A 不接受旧格式化事件、注销重登录不接受旧保存结果、旧 Action 完成不清除新 pending、失败半成品不可应用、意外 proposal 不污染 Chat、应用后形成带标题的新 Wiki 草稿并在保存时调用 create API、滚动定位与反馈、Wiki 保存成功反馈、Chat 展示 pending action、确认请求携带稳定 key、网络重试复用 key、`EXECUTED` 后刷新 Task、`FAILED` 不误刷新、拒绝不写，以及 Problem Details 可见。
 
 ## 已知限制
 

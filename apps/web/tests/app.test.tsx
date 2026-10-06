@@ -1132,4 +1132,209 @@ describe("App", () => {
     expect(screen.getByLabelText("待整理原文")).toHaveValue("");
     expect(screen.queryByText("# Project one")).not.toBeInTheDocument();
   });
+
+  it("does not apply a Wiki save response after switching projects", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    const savedInFirst: WikiPage = {
+      id: "wiki-first", projectId: project.id, title: "First project saved", content: "# First", version: 0,
+      createdAt: "2026-10-04T00:00:00Z", updatedAt: "2026-10-04T00:00:00Z",
+    };
+    const secondWiki: WikiPage = {
+      id: "wiki-second", projectId: secondProject.id, title: "Second project page", content: "# Second", version: 2,
+      createdAt: "2026-10-04T00:00:00Z", updatedAt: "2026-10-04T00:00:00Z",
+    };
+    let resolveSave!: (page: WikiPage) => void;
+    let saveFinished = false;
+    const mockApi = api({
+      listProjects: vi.fn().mockResolvedValue([project, secondProject]),
+      listWikiPages: vi.fn().mockImplementation(async (selectedProjectId) => {
+        if (selectedProjectId === secondProject.id) return [secondWiki];
+        return saveFinished ? [savedInFirst] : [];
+      }),
+      createWikiPage: vi.fn().mockReturnValue(new Promise<WikiPage>((resolve) => { resolveSave = resolve; })),
+    });
+    const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: "Wiki 工作台" }));
+    await user.type(await screen.findByLabelText("Wiki 标题"), "First project saved");
+    await user.type(screen.getByLabelText("Wiki Markdown 草稿"), "# First");
+    await user.click(screen.getByRole("button", { name: "保存 Wiki" }));
+    await waitFor(() => expect(mockApi.createWikiPage).toHaveBeenCalledWith(project.id, "First project saved", "# First"));
+
+    await user.click(screen.getByRole("button", { name: /项目/ }));
+    await user.click(await screen.findByRole("button", { name: /Second Project/ }));
+    await waitFor(() => expect(screen.getByLabelText("Wiki 标题")).toHaveValue("Second project page"));
+
+    saveFinished = true;
+    await act(async () => resolveSave(savedInFirst));
+    expect(screen.getByLabelText("Wiki 标题")).toHaveValue("Second project page");
+    expect(screen.queryByText(/Wiki 已保存/)).not.toBeInTheDocument();
+  });
+
+  it("does not apply a Wiki save response after logout and another login", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    const savedForFirstUser: WikiPage = {
+      id: "wiki-user-a", projectId: project.id, title: "User A saved", content: "# A", version: 0,
+      createdAt: "2026-10-04T00:00:00Z", updatedAt: "2026-10-04T00:00:00Z",
+    };
+    const secondUserWiki: WikiPage = {
+      id: "wiki-user-b", projectId: project.id, title: "User B page", content: "# B", version: 3,
+      createdAt: "2026-10-04T00:00:00Z", updatedAt: "2026-10-04T00:00:00Z",
+    };
+    let resolveSave!: (page: WikiPage) => void;
+    const loginMock = vi.fn()
+      .mockResolvedValueOnce({ accessToken: "token-a", tokenType: "Bearer", expiresIn: 1800,
+        user: { id: "user-a", email: "a@example.com", displayName: "A", role: "USER" } })
+      .mockResolvedValueOnce({ accessToken: "token-b", tokenType: "Bearer", expiresIn: 1800,
+        user: { id: "user-b", email: "b@example.com", displayName: "B", role: "USER" } });
+    const listWikiPages = vi.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([secondUserWiki])
+      .mockResolvedValueOnce([savedForFirstUser]);
+    const mockApi = api({
+      login: loginMock,
+      listWikiPages,
+      createWikiPage: vi.fn().mockReturnValue(new Promise<WikiPage>((resolve) => { resolveSave = resolve; })),
+    });
+    const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: "Wiki 工作台" }));
+    await user.type(await screen.findByLabelText("Wiki 标题"), "User A saved");
+    await user.click(screen.getByRole("button", { name: "保存 Wiki" }));
+    await waitFor(() => expect(mockApi.createWikiPage).toHaveBeenCalled());
+
+    await user.click(screen.getByRole("button", { name: "退出" }));
+    await user.clear(screen.getByLabelText("邮箱"));
+    await user.type(screen.getByLabelText("邮箱"), "b@example.com");
+    await user.type(screen.getByLabelText("密码"), "password-b");
+    await user.click(screen.getByRole("button", { name: "登录" }));
+    await user.click(await screen.findByRole("button", { name: "Wiki 工作台" }));
+    await waitFor(() => expect(screen.getByLabelText("Wiki 标题")).toHaveValue("User B page"));
+
+    await act(async () => resolveSave(savedForFirstUser));
+    expect(screen.getByLabelText("Wiki 标题")).toHaveValue("User B page");
+    expect(screen.queryByText(/Wiki 已保存/)).not.toBeInTheDocument();
+  });
+
+  it("ignores an older formatting stream after returning to the same project", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    type StreamCallbacks = Parameters<ApiClient["chatStream"]>[3];
+    const callbacks: StreamCallbacks[] = [];
+    const resolvers: Array<(chat: AgentChat) => void> = [];
+    const chatStream = vi.fn().mockImplementation((_projectId, _message, _conversationId, receivedCallbacks) => {
+      callbacks.push(receivedCallbacks);
+      return new Promise<AgentChat>((resolve) => { resolvers.push(resolve); });
+    });
+    const user = await login(api({ listProjects: vi.fn().mockResolvedValue([project, secondProject]), chatStream }));
+    await user.click(screen.getByRole("button", { name: "AI 文本整理" }));
+    await user.type(await screen.findByLabelText("待整理原文"), "old notes");
+    await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
+    await waitFor(() => expect(chatStream).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole("button", { name: /项目/ }));
+    await user.click(await screen.findByRole("button", { name: /Second Project/ }));
+    await user.click(screen.getByRole("button", { name: /项目/ }));
+    await user.click(await screen.findByRole("button", { name: /AgentForge/ }));
+    await user.type(screen.getByLabelText("待整理原文"), "current notes");
+    await user.click(screen.getByRole("button", { name: "AI 整理并预览" }));
+    await waitFor(() => expect(chatStream).toHaveBeenCalledTimes(2));
+    act(() => callbacks[1].onDelta?.("# Current result"));
+    expect(await screen.findByText("# Current result")).toBeInTheDocument();
+
+    act(() => callbacks[0].onDelta?.("# Stale result"));
+    await act(async () => resolvers[0]({ conversationId: "old-format", answer: "# Stale final",
+      requestId: "old-request", sources: [] }));
+    expect(screen.getByText("# Current result")).toBeInTheDocument();
+    expect(screen.queryByText(/Stale/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "AI 整理并预览" })).toBeDisabled();
+
+    await act(async () => resolvers[1]({ conversationId: "current-format", answer: "# Current result",
+      requestId: "current-request", sources: [] }));
+  });
+
+  it("does not let an old approval completion clear a new project's pending action", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    const oldAction: AgentAction = {
+      id: "action-old", projectId: project.id, conversationId: "conversation-old", actionType: "CREATE_TASK",
+      status: "PENDING", title: "Old project action", createdAt: "2026-10-04T00:00:00Z",
+    };
+    const newAction: AgentAction = {
+      id: "action-new", projectId: secondProject.id, actionType: "CREATE_TASK",
+      status: "PENDING", title: "New project action", createdAt: "2026-10-04T00:01:00Z",
+    };
+    let resolveDecision!: (action: AgentAction) => void;
+    const confirmAction = vi.fn().mockReturnValue(new Promise<AgentAction>((resolve) => { resolveDecision = resolve; }));
+    const mockApi = api({
+      listProjects: vi.fn().mockResolvedValue([project, secondProject]),
+      chatStream: vi.fn().mockResolvedValue({ conversationId: "conversation-old", answer: "Review old action",
+        requestId: "old-chat", sources: [], pendingAction: oldAction }),
+      listRecoverableActions: vi.fn().mockImplementation(async (selectedProjectId) => selectedProjectId === secondProject.id
+        ? [{ action: newAction, source: "CHAT" as const }]
+        : []),
+      confirmAction,
+    });
+    const user = await login(mockApi);
+    await user.type(screen.getByLabelText("给 Agent 的消息"), "create old task");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    await user.click(await screen.findByRole("button", { name: "确认执行" }));
+    await waitFor(() => expect(confirmAction).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole("button", { name: /项目/ }));
+    await user.click(await screen.findByRole("button", { name: /Second Project/ }));
+    expect(await screen.findByText("New project action")).toBeInTheDocument();
+
+    await act(async () => resolveDecision({ ...oldAction, status: "EXECUTED" }));
+    expect(screen.getByText("New project action")).toBeInTheDocument();
+    expect(confirmAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores chat controls when switching projects aborts an active stream", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    let streamSignal: AbortSignal | undefined;
+    const chatStream = vi.fn().mockImplementation((_projectId, _message, _conversationId, _callbacks, signal) => {
+      streamSignal = signal;
+      return new Promise<AgentChat>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+      });
+    });
+    const user = await login(api({ listProjects: vi.fn().mockResolvedValue([project, secondProject]), chatStream }));
+    await user.type(screen.getByLabelText("给 Agent 的消息"), "old project question");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => expect(chatStream).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole("button", { name: "发送" })).toHaveTextContent("生成中…");
+
+    await user.click(screen.getByRole("button", { name: /项目/ }));
+    await user.click(await screen.findByRole("button", { name: /Second Project/ }));
+
+    expect(streamSignal?.aborted).toBe(true);
+    await waitFor(() => expect(screen.getByRole("button", { name: "发送" })).toBeEnabled());
+    expect(screen.getByRole("button", { name: "发送" })).toHaveTextContent("发送");
+  });
+
+  it("restores history deletion controls after switching projects during deletion", async () => {
+    localStorage.setItem("agentforge.onboardingComplete", "true");
+    const firstSummary = { conversationId: "delete-first", preview: "First project history", messageCount: 2,
+      createdAt: "2026-10-04T00:00:00Z", updatedAt: "2026-10-04T00:01:00Z" };
+    const secondSummary = { conversationId: "delete-second", preview: "Second project history", messageCount: 2,
+      createdAt: "2026-10-04T00:00:00Z", updatedAt: "2026-10-04T00:01:00Z" };
+    let resolveDelete!: () => void;
+    const mockApi = api({
+      listProjects: vi.fn().mockResolvedValue([project, secondProject]),
+      listConversations: vi.fn().mockImplementation(async (selectedProjectId) =>
+        selectedProjectId === secondProject.id ? [secondSummary] : [firstSummary]),
+      deleteConversation: vi.fn().mockReturnValue(new Promise<void>((resolve) => { resolveDelete = resolve; })),
+    });
+    const user = await login(mockApi);
+    await user.click(screen.getByRole("button", { name: /历史/ }));
+    await user.click(await screen.findByRole("button", { name: "删除会话 First project history" }));
+    await user.click(within(screen.getByRole("dialog", { name: "删除聊天记录" }))
+      .getByRole("button", { name: "确认删除" }));
+    await waitFor(() => expect(mockApi.deleteConversation).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole("button", { name: /项目/ }));
+    await user.click(await screen.findByRole("button", { name: /Second Project/ }));
+    await user.click(screen.getByRole("button", { name: /历史/ }));
+    const secondDelete = await screen.findByRole("button", { name: "删除会话 Second project history" });
+    expect(secondDelete).toBeEnabled();
+
+    await act(async () => resolveDelete());
+  });
 });
