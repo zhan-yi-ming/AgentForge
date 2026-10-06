@@ -1,5 +1,7 @@
 # 变更记录
 
+- [2026-10-06-r18-conversation-revision-lease.md](2026-10-06-r18-conversation-revision-lease.md)：R18 以会话 revision 与短期 exchange claim 拒绝同一会话并发提交，并保护 Action checkpoint 收口（Implemented）。
+
 - [2026-10-04-r17-web-async-scope.md](2026-10-04-r17-web-async-scope.md)：R17 以登录会话、项目代际与操作身份隔离 Web 迟到异步响应（Implemented）。
 
 - [2026-10-04-r16-repository-commit-pinning.md](2026-10-04-r16-repository-commit-pinning.md)：R16 将单次 Repository Context 的 tree/blob/log 与来源身份固定到同一不可变 commit，并补齐容器 Git 运行时（Implemented）。

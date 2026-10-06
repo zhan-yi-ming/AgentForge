@@ -62,6 +62,8 @@ V2-03 仍不改变 HTTP schema。Python 把相同 conversationId 的已完成 us
 
 V2-04 继续保持 HTTP schema 不变。Python 把服务端配置的 deployment tenant/workspace 与请求中的 projectId、userId、实际 conversationId 组合成内部 Memory Namespace；tenant/workspace 不接受客户端字段。相同 conversationId 位于不同 project/user 时属于不同空 session，不能读取或覆盖其他 Namespace 的历史。每次 load 返回绑定 Namespace 与 generation 的内部 lease，完成提交必须携带该 lease；淘汰或重建后的陈旧提交同步返回 422，已开始的流以通用 `error` 结束。Namespace 只提供记忆归属，不能替代 Java 的项目授权。
 
+R18 不改变 HTTP schema，但把内部 lease 扩展为 Namespace、generation、revision 与唯一 lease ID。模型调用期间不持有 Memory 全局锁；完整回答生成后先短暂认领读取时 revision，认领成功后才能创建 Action WAITING checkpoint 并提交 exchange。提交推进 revision；失败或取消释放认领。同一 revision 的并发请求只有一个可以完成：同步冲突返回脱敏 422，已开始的内部流以通用 `error` 结束且不发送 `complete`；失败请求不提交 Memory、不创建 WAITING。不同 Namespace 的认领互不排斥。被认领 session 不被 LRU 淘汰；进程重启、实例切换或旧 generation/revision/lease 仍失败关闭。
+
 V2-05 不改变 Python Chat HTTP schema，也不让 Python 接收或决定 Tool Policy。Python `toolProposal` 仍只包含动作名与业务参数；Java 忽略任何未声明的权限 Metadata，并按服务端注册表重新确定 role/risk/approval。持久化展示历史由 Core API 在完整成功边界写入 PostgreSQL，Agent Service 的进程内 Context Memory 不读取该表。
 
 V2-06 仍不改变 Python Chat HTTP schema。Approval 五态、Idempotency Key、执行前权限复核与 Audit Event 全部位于 Java/Core API；Python 继续只生成不可信 `toolProposal`，不接收或回传可信 approval、actor、risk、idempotency 或 audit 字段。

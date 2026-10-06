@@ -169,20 +169,29 @@ def chat(
             )
             bundle = state["context_bundle"]
             proposal = bundle.tool.proposal
-            if proposal is not None:
-                waiting = action_runtime.interrupt(
-                    namespace,
-                    proposal,
-                    bundle.project.request_id,
+            lease = bundle.conversation.lease
+            try:
+                conversation_memory.claim_exchange(
+                    lease,
+                    bundle.working.message,
+                    state["answer"],
                 )
-                proposal = proposal.model_copy(
-                    update={"action_workflow_id": waiting.workflow_id}
+                if proposal is not None:
+                    waiting = action_runtime.interrupt(
+                        namespace,
+                        proposal,
+                        bundle.project.request_id,
+                    )
+                    proposal = proposal.model_copy(
+                        update={"action_workflow_id": waiting.workflow_id}
+                    )
+                conversation_memory.commit_exchange(
+                    lease,
+                    bundle.working.message,
+                    state["answer"],
                 )
-            conversation_memory.commit_exchange(
-                bundle.conversation.lease,
-                bundle.working.message,
-                state["answer"],
-            )
+            finally:
+                conversation_memory.release_exchange(lease)
             agent_observation.update(output={"status": "completed"})
             request_observation.update(output={"status": "completed"})
         except Exception as exception:
@@ -268,6 +277,7 @@ def chat_stream(
     def events():
         generation_observation = agent_observation.child("llm", "generation")
         answer_parts: list[str] = []
+        lease = state["context_bundle"].conversation.lease
         try:
             yield encode(
                 {
@@ -291,6 +301,12 @@ def chat_stream(
                     yield encode({"type": "delta", "text": chunk})
             bundle = state["context_bundle"]
             proposal = bundle.tool.proposal
+            answer = "".join(answer_parts)
+            conversation_memory.claim_exchange(
+                lease,
+                bundle.working.message,
+                answer,
+            )
             if proposal is not None:
                 waiting = action_runtime.interrupt(
                     namespace,
@@ -301,9 +317,9 @@ def chat_stream(
                     update={"action_workflow_id": waiting.workflow_id}
                 )
             conversation_memory.commit_exchange(
-                bundle.conversation.lease,
+                lease,
                 bundle.working.message,
-                "".join(answer_parts),
+                answer,
             )
             yield encode(
                 {
@@ -353,6 +369,7 @@ def chat_stream(
             request_observation.fail(exception)
             raise
         finally:
+            conversation_memory.release_exchange(lease)
             generation_observation.end()
             agent_observation.end()
             request_observation.end()

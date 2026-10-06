@@ -32,7 +32,9 @@ V2-04 用不可变 `MemoryNamespace` 统一表达 `deployment tenant → deploym
 
 同步 `/internal/v1/chat` 与流式 `/internal/v1/chat/stream` 使用同一个 prepare/retrieve/plan Context 过程。同步路径随后执行 responder；流式路径把已构建的 bundle 交给模型原生 stream。二者返回既有 conversation、request、sources、answer/proposal 契约，不新增 ContextBundle 字段。
 
-prepare 按完整 Memory Namespace 从同一个 store 读取历史和 lease。lease 同时绑定 Namespace 与 session generation，并且 commit 不能省略；同步回答成功后提交完整 exchange，流式回答只有在 delta 全部生成并准备发送 `complete` 时提交。失败、中断、LRU 淘汰或 session 重建后的陈旧 lease 都不能写入。相同 thread ID 在其他 Project/User Namespace 下得到独立空 session，不会读取或覆盖原历史。
+prepare 按完整 Memory Namespace 从同一个 store 读取历史和 lease。lease 同时绑定 Namespace、session generation、读取时 revision 与唯一 lease ID，并且 commit 不能省略。模型生成期间不持有 Memory 全局锁；回答完整生成后先用短临界区认领该 revision，只有认领成功的请求才可创建 Action WAITING checkpoint 并提交 exchange。提交原子推进 revision 并释放认领；失败、取消或 checkpoint 异常释放原 lease 的认领。相同 revision 的另一个完成请求必须失败关闭，不能按完成先后把两个基于同一历史的回答都写入。
+
+同步回答成功后提交完整 exchange，流式回答只有在 delta 全部生成并准备发送 `complete` 时尝试认领与提交；若并发冲突，流式入口以安全 `error` 结束且不发送 `complete`。流式 delta 在冲突判定前可能已经传输，但失败请求不会提交 Memory，也不会创建 WAITING checkpoint。被认领的 session 在提交或释放前不可被 LRU 淘汰；容量已满且全部 session 正被认领时，新 Namespace 失败关闭。相同 thread ID 在其他 Project/User Namespace 下得到独立 session，其认领互不阻塞；进程重启、切换实例或淘汰后的 lease 都不能在新 session 提交。
 
 ## Conversation Summary 与 Token Budget
 
@@ -65,12 +67,12 @@ V3-08 可选 Repository Context 由服务端项目 UUID 映射提供，只从绑
 - Context 正文不进入 Langfuse metadata；Trace 继续只记录白名单状态与数量。
 - Context 构建或检索失败沿用现有 422/503 与脱敏错误行为。
 - Conversation store 有 session 数量上限并按最久未使用淘汰，避免 Prompt 受控但进程内存无限增长。
-- Memory 的所有 load/commit 都要求完整 Namespace；commit 还要求 load 返回的 lease，不能通过只传 conversationId 写入。
-- 同步路径的 scope/generation 冲突返回脱敏 422；流式响应若已开始则以安全 `error` 事件结束且不发送 `complete`。
+- Memory 的所有 load/claim/commit 都要求完整 Namespace；claim/commit 还要求 load 返回的 generation/revision/lease ID，不能通过只传 conversationId 写入。
+- 同步路径的 scope/generation/revision/claim 冲突返回脱敏 422；流式响应若已开始则以安全 `error` 事件结束且不发送 `complete`。
 
 ## 测试边界
 
-通过 LangGraph/FastAPI 公共入口断言 prepare 后各 Node 消费同一个 bundle、同步与流式输出一致、Namespace 中的 project 标识显式传给 Retriever、成功后提交且失败不提交。通过 Context/store 公共接口对 tenant/workspace/project/user/thread 分别变化执行负向隔离，并验证 lease、LRU、Recent/Summary 生命周期与 Tool 排除。通过真实 pgvector seam 继续证明跨 project 检索不会泄漏；Responder 模型 boundary fake 检查最终 sections、Token Budget、检索保护以及同步/流式使用同一组合结果。
+通过 LangGraph/FastAPI 公共入口断言 prepare 后各 Node 消费同一个 bundle、同步与流式输出一致、Namespace 中的 project 标识显式传给 Retriever、成功后提交且失败不提交。通过 Context/store 公共接口对 tenant/workspace/project/user/thread 分别变化执行负向隔离，并验证同 Namespace 并发只有一个 revision 可提交、不同 Namespace 可同时认领、取消释放、实例重启拒绝旧 lease、LRU 不淘汰已认领 session、Recent/Summary 生命周期与 Tool 排除。通过 Action proposal 入口证明 claim 先于 checkpoint 创建，冲突请求不会遗留 WAITING。通过真实 pgvector seam 继续证明跨 project 检索不会泄漏；Responder 模型 boundary fake 检查最终 sections、Token Budget、检索保护以及同步/流式使用同一组合结果。
 
 ## 已知限制
 

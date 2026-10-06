@@ -44,6 +44,8 @@ class MemoryNamespace:
 class ConversationLease:
     namespace: MemoryNamespace
     session_generation: UUID
+    session_revision: int = 0
+    lease_id: UUID = field(default_factory=uuid4)
 
 
 @dataclass(frozen=True)
@@ -121,6 +123,8 @@ class TokenCounter:
 @dataclass
 class _ConversationSession:
     generation: UUID = field(default_factory=uuid4)
+    revision: int = 0
+    claimed_by: UUID | None = None
     recent_messages: list[ConversationMessage] = field(default_factory=list)
     summary_messages: list[ConversationMessage] = field(default_factory=list)
 
@@ -160,10 +164,39 @@ class ConversationMemory:
             session = self._session(namespace)
             return ConversationContext(
                 namespace=namespace,
-                lease=ConversationLease(namespace, session.generation),
+                lease=ConversationLease(
+                    namespace,
+                    session.generation,
+                    session.revision,
+                ),
                 summary=self._render_summary(session.summary_messages),
                 recent_messages=tuple(session.recent_messages),
             )
+
+    def claim_exchange(
+        self,
+        lease: ConversationLease,
+        user_message: str,
+        assistant_message: str,
+    ) -> None:
+        self._normalize_exchange(user_message, assistant_message)
+        with self._lock:
+            session = self._session_for_lease(lease)
+            if session.claimed_by is not None:
+                raise ValueError("conversation changed before completion")
+            session.claimed_by = lease.lease_id
+            self._sessions.move_to_end(lease.namespace)
+
+    def release_exchange(self, lease: ConversationLease) -> None:
+        with self._lock:
+            session = self._sessions.get(lease.namespace)
+            if (
+                session is not None
+                and session.generation == lease.session_generation
+                and session.revision == lease.session_revision
+                and session.claimed_by == lease.lease_id
+            ):
+                session.claimed_by = None
 
     def commit_exchange(
         self,
@@ -171,20 +204,16 @@ class ConversationMemory:
         user_message: str,
         assistant_message: str,
     ) -> None:
-        normalized_user = user_message.strip()
-        normalized_assistant = assistant_message.strip()
-        if not normalized_user or not normalized_assistant:
-            raise ValueError("completed conversation messages must not be blank")
-        normalized_user = self._token_counter.truncate_text(
-            normalized_user,
-            self._message_token_budget,
-        )
-        normalized_assistant = self._token_counter.truncate_text(
-            normalized_assistant,
-            self._message_token_budget,
+        normalized_user, normalized_assistant = self._normalize_exchange(
+            user_message,
+            assistant_message,
         )
         with self._lock:
-            session = self._session_for_commit(lease)
+            session = self._session_for_lease(lease)
+            if session.claimed_by is None:
+                session.claimed_by = lease.lease_id
+            elif session.claimed_by != lease.lease_id:
+                raise ValueError("conversation changed before completion")
             session.recent_messages.extend(
                 (
                     ConversationMessage("user", normalized_user),
@@ -196,8 +225,31 @@ class ConversationMemory:
                 session.summary_messages.extend(session.recent_messages[:overflow])
                 del session.recent_messages[:overflow]
                 self._trim_summary(session)
+            session.revision += 1
+            session.claimed_by = None
+            self._sessions.move_to_end(lease.namespace)
 
-    def _session_for_commit(
+    def _normalize_exchange(
+        self,
+        user_message: str,
+        assistant_message: str,
+    ) -> tuple[str, str]:
+        normalized_user = user_message.strip()
+        normalized_assistant = assistant_message.strip()
+        if not normalized_user or not normalized_assistant:
+            raise ValueError("completed conversation messages must not be blank")
+        return (
+            self._token_counter.truncate_text(
+                normalized_user,
+                self._message_token_budget,
+            ),
+            self._token_counter.truncate_text(
+                normalized_assistant,
+                self._message_token_budget,
+            ),
+        )
+
+    def _session_for_lease(
         self,
         lease: ConversationLease,
     ) -> _ConversationSession:
@@ -205,9 +257,9 @@ class ConversationMemory:
         if (
             session is None
             or session.generation != lease.session_generation
+            or session.revision != lease.session_revision
         ):
             raise ValueError("conversation changed before completion")
-        self._sessions.move_to_end(lease.namespace)
         return session
 
     def _session(
@@ -217,7 +269,17 @@ class ConversationMemory:
         session = self._sessions.get(namespace)
         if session is None:
             if len(self._sessions) >= self._max_sessions:
-                self._sessions.popitem(last=False)
+                evictable = next(
+                    (
+                        candidate
+                        for candidate, existing in self._sessions.items()
+                        if existing.claimed_by is None
+                    ),
+                    None,
+                )
+                if evictable is None:
+                    raise ValueError("conversation memory capacity is temporarily unavailable")
+                del self._sessions[evictable]
             session = _ConversationSession()
             self._sessions[namespace] = session
         else:

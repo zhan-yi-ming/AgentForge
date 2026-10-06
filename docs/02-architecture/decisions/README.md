@@ -39,3 +39,4 @@ ADR 保存影响长期结构的决定。编号只增不减，Accepted 记录不�
 - [ADR-0039-checkpoint-owner-and-decision-actor.md](ADR-0039-checkpoint-owner-and-decision-actor.md)：管理员代审批时分离 checkpoint owner 与实际决策 actor，恢复原请求人的 Namespace。
 - [ADR-0040-database-service-role-separation.md](ADR-0040-database-service-role-separation.md)：分离 PostgreSQL 管理、Core 运行与 Agent 派生数据角色，以数据库 grants 强制 Java/Python 职责边界。
 - [ADR-0041-manual-graph-disaster-recovery.md](ADR-0041-manual-graph-disaster-recovery.md)：将不可由 PostgreSQL 重建的手工图事实与规范映射纳入同一离线备份/恢复集。
+- [ADR-0042-conversation-revision-lease.md](ADR-0042-conversation-revision-lease.md)：用 generation、revision 与短期 exchange claim 串行化同一进程内会话的完成提交，同时保持不同会话和模型调用并行。

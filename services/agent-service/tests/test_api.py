@@ -387,6 +387,69 @@ def test_chat_stream_reports_a_waiting_action_conflict() -> None:
     }
 
 
+@pytest.mark.parametrize("path", ["/internal/v1/chat", "/internal/v1/chat/stream"])
+def test_conversation_claim_conflict_happens_before_action_checkpoint(path: str) -> None:
+    class ClaimRejectingMemory(ConversationMemory):
+        def __init__(self):
+            super().__init__(
+                recent_turns=2,
+                summary_token_budget=200,
+                max_sessions=10,
+                token_counter=TokenCounter(),
+            )
+
+        def claim_exchange(self, lease, user_message, assistant_message):
+            raise ValueError("conversation changed before completion")
+
+        def commit_exchange(self, lease, user_message, assistant_message):
+            raise ValueError("conversation changed before completion")
+
+    class ProposalResponder:
+        def __call__(self, state):
+            return "Please review."
+
+        def stream(self, state):
+            yield "Please review."
+
+        def plan_tool(self, bundle):
+            return ToolProposal(
+                action_type="CREATE_TASK",
+                title="Claimed task",
+                status="TODO",
+            )
+
+    class RecordingRuntime:
+        def __init__(self):
+            self.interrupt_calls = 0
+
+        def interrupt(self, namespace, proposal, request_id):
+            self.interrupt_calls += 1
+            return type("Waiting", (), {"workflow_id": uuid4()})()
+
+    runtime = RecordingRuntime()
+    app.dependency_overrides[get_conversation_memory] = lambda: ClaimRejectingMemory()
+    app.dependency_overrides[get_responder] = lambda: ProposalResponder()
+    app.dependency_overrides[get_action_runtime] = lambda: runtime
+    try:
+        response = client.post(
+            path,
+            headers={"X-AgentForge-Internal-Token": TOKEN},
+            json=chat_request(message="create task: Claimed task"),
+        )
+    finally:
+        app.dependency_overrides.pop(get_conversation_memory, None)
+        app.dependency_overrides.pop(get_responder, None)
+        app.dependency_overrides[get_action_runtime] = lambda: action_runtime
+
+    if path.endswith("/stream"):
+        events = [json.loads(line) for line in response.text.splitlines()]
+        assert events[-1]["type"] == "error"
+        assert all(event["type"] != "complete" for event in events)
+    else:
+        assert response.status_code == 422
+    assert runtime.interrupt_calls == 0
+
+
 def test_chat_sanitizes_llm_provider_failure() -> None:
     def failing_responder(state):
         raise LlmDependencyError("upstream body containing secret details")
