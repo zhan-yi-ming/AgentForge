@@ -30,3 +30,7 @@ workflow ID 是内部关联标识，不进入公共 pendingAction DTO，也不�
 ## 取代关系
 
 细化并扩展 ADR-0022；不改变 ADR-0021 的 Java 业务权威、决策幂等与审计边界。
+
+## ADR-0043 补充：旧轮已完成事实
+
+workflow ID 不匹配当前轮时，不允许恢复当前 interrupt；但允许严格匹配同 Namespace 历史中该 workflow 的 RESUMED/action/decision/key 后只读重放已提交结果，使尚未完成 Java 业务写入的 APPROVED Action 仍可重试。该路径不调用历史图、不改变当前轮。v1 无 workflow ID 的兼容恢复保持原边界。

@@ -121,6 +121,25 @@ class AgentServiceHttpContractIntegrationTest {
         assertThat(resumed.actionId()).isEqualTo(actionId);
         assertThat(resumed.decision()).isEqualTo("APPROVE");
         assertThat(resumed.status()).isEqualTo("RESUMED");
+
+        // The first resume response may be lost before Java executes the approved
+        // action. A later chat round must not make that decision unrecoverable.
+        AgentChatResult next = client.chat(projectId, userId, false,
+                "create task: Next action while the first awaits execution", conversationId,
+                "resume-contract-next");
+        UUID nextWorkflowId = next.toolProposal().actionWorkflowId();
+        var replayed = client.resume(projectId, userId, true, conversationId, workflowId,
+                actionId, "APPROVE", "resume-contract-key", "resume-contract-retry");
+        assertThat(replayed).isEqualTo(resumed);
+        assertThatThrownBy(() -> client.resume(projectId, userId, true, conversationId, workflowId,
+                actionId, "APPROVE", "wrong-key", "invalid-replay"))
+                .isInstanceOf(com.agentforge.core.shared.error.ConflictException.class);
+        UUID nextActionId = UUID.randomUUID();
+        var completedNext = client.resume(projectId, userId, false, conversationId, nextWorkflowId,
+                nextActionId, "REJECT", "next-key", "next-reject");
+        assertThat(completedNext.actionWorkflowId()).isEqualTo(nextWorkflowId);
+        assertThat(completedNext.actionId()).isEqualTo(nextActionId);
+        assertThat(completedNext.decision()).isEqualTo("REJECT");
     }
 
     @Test

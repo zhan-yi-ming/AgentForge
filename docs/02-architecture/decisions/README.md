@@ -1,5 +1,7 @@
 # 架构决策记录
 
+- [ADR-0043](ADR-0043-historical-action-resume-replay.md)：已恢复审批轮次的历史事实只读重放。
+
 ADR 保存影响长期结构的决定。编号只增不减，Accepted 记录不通过覆写“改历史”；若改变决定，新建 ADR 并声明取代关系。
 
 ## 索引

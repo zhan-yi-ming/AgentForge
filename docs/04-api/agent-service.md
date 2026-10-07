@@ -70,7 +70,7 @@ V2-06 仍不改变 Python Chat HTTP schema。Approval 五态、Idempotency Key�
 
 V2-07 新增 `POST /internal/v1/agent/resume`，仅供 Core API 使用并继续要求 `X-AgentForge-Internal-Token`。当前请求包含 `projectId`、`userId`、`actorAdmin`、`conversationId`、`actionWorkflowId`、`actionId`、`decision`（`APPROVE | REJECT`）、`idempotencyKey` 与 `requestId`。其中 `userId` 是 Java 从已持久化 Action 取得的 checkpoint owner（原请求人），不是可由客户端指定的当前审批人；`actorAdmin` 描述当前决策 actor 的管理员角色。Agent Service 使用配置中的 tenant/workspace 与请求 project/owner/thread 组成完整 Namespace，从 PostgreSQL checkpoint 恢复动态 interrupt，但不据这些字段授权审批。既有 workflow v1 Action 恢复时允许省略 `actionWorkflowId`；新 workflow v2 必须提供并精确匹配。
 
-成功返回同一 conversation/workflow/action/decision、`status=RESUMED` 和 requestId；相同 workflow/action/decision/key replay 返回相同事实。Thread 不存在、仍无 interrupt、Namespace/workflow/action 不匹配、不同 key/decision、state schema version 不支持均失败关闭，不创建替代 Thread。Resume 只证明 Agent workflow 已恢复，不执行或授权 Task 写入。
+成功返回同一 conversation/workflow/action/decision、`status=RESUMED` 和 requestId；相同 Namespace/workflow/action/decision/key replay 返回相同事实及原 requestId，即使该 v2 workflow 已不是最新轮次。旧轮仅能只读重放持久历史中的 RESUMED 事实，不得消费或改写当前轮；旧 WAITING、ABORTED 与未知 workflow 不可恢复。Thread 不存在、仍无 interrupt、Namespace/workflow/action 不匹配、不同 key/decision、state schema version 不支持均失败关闭，不创建替代 Thread。Resume 只证明 Agent workflow 已恢复，不执行或授权 Task 写入。
 
 `POST /internal/v1/agent/abort` 仅供 Core 补偿“proposal 未形成 Java Approval”的当前等待轮次，继续要求内部 token。请求包含 project/user/admin、conversation、可空 `actionWorkflowId` 与 `requestId`；无 workflow ID 时 request ID 是必需的精确轮次凭据，有 ID 时两者都必须匹配。成功返回同一 conversation/workflow、`status=ABORTED` 和 request ID；相同 Abort 可重放。RESUMED、错误 Namespace/request/workflow 或不受支持版本返回 404/409，且不能清除其它轮次。Abort 不等于 REJECT，不创建审计、Action 或业务写入。
 

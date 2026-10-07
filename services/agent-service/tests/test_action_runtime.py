@@ -155,7 +155,7 @@ def test_old_decision_cannot_resume_a_new_waiting_round():
         runtime.resume(
             scope,
             workflow_id=first_waiting.workflow_id,
-            action_id=first_action,
+            action_id=uuid4(),
             decision="REJECT",
             idempotency_key="first-key",
             request_id="retry-old-reject",
@@ -387,3 +387,98 @@ def test_postgres_concurrent_replay_of_one_round_returns_one_workflow_id():
 
         assert {view.status for view in waiting} == {"WAITING"}
         assert len({view.workflow_id for view in waiting}) == 1
+
+
+@pytest.mark.parametrize("decision", ["APPROVE", "REJECT"])
+def test_postgres_old_resume_replays_after_next_round_and_restart(decision):
+    scope = namespace()
+    action_id = uuid4()
+    with PostgresContainer("pgvector/pgvector:pg17") as postgres:
+        dsn = postgres.get_connection_url().replace("postgresql+psycopg2", "postgresql")
+        import psycopg
+
+        with psycopg.connect(dsn, autocommit=True) as connection:
+            connection.execute("CREATE SCHEMA agent_checkpoint")
+        with open_postgres_action_runtime(dsn) as runtime:
+            first = runtime.interrupt(scope, proposal(), "first-round")
+            original = runtime.resume(
+                scope, workflow_id=first.workflow_id, action_id=action_id,
+                decision=decision, idempotency_key="first-key", request_id="first-decision",
+            )
+            second = runtime.interrupt(scope, proposal(), "second-round")
+
+        with open_postgres_action_runtime(dsn) as restarted:
+            replay = restarted.resume(
+                scope, workflow_id=first.workflow_id, action_id=action_id,
+                decision=decision, idempotency_key="first-key", request_id="retry-first",
+            )
+            assert replay == original
+            # Reading the old receipt must leave the current waiting round untouched.
+            assert restarted.interrupt(scope, proposal(), "second-round") == second
+            second_action_id = uuid4()
+            completed_second = restarted.resume(
+                scope, workflow_id=second.workflow_id, action_id=second_action_id,
+                decision="APPROVE", idempotency_key="second-key", request_id="second-decision",
+            )
+            assert completed_second.action_id == second_action_id
+            assert restarted.resume(
+                scope, workflow_id=first.workflow_id, action_id=action_id,
+                decision=decision, idempotency_key="first-key", request_id="retry-after-second",
+            ) == original
+
+
+@pytest.mark.parametrize("changed", ["action", "decision", "key", "workflow", "tenant", "workspace", "project", "user", "thread"])
+def test_historical_resume_rejects_changed_identity_and_preserves_current_round(changed):
+    from dataclasses import replace
+
+    runtime = ActionWorkflowRuntime(InMemorySaver())
+    scope = namespace()
+    first = runtime.interrupt(scope, proposal(), "first")
+    action_id = uuid4()
+    runtime.resume(scope, workflow_id=first.workflow_id, action_id=action_id,
+                   decision="APPROVE", idempotency_key="original-key", request_id="approved")
+    second = runtime.interrupt(scope, proposal(), "second")
+    request_scope = scope
+    fields = {"tenant": "tenant_id", "workspace": "workspace_id", "project": "project_id",
+              "user": "user_id", "thread": "thread_id"}
+    if changed in fields:
+        request_scope = replace(scope, **{fields[changed]: "another" if changed in ("tenant", "workspace") else uuid4()})
+    with pytest.raises((ActionWorkflowConflict, ActionWorkflowNotFound)):
+        runtime.resume(
+            request_scope,
+            workflow_id=uuid4() if changed == "workflow" else first.workflow_id,
+            action_id=uuid4() if changed == "action" else action_id,
+            decision="REJECT" if changed == "decision" else "APPROVE",
+            idempotency_key="wrong-key" if changed == "key" else "original-key",
+            request_id="retry",
+        )
+    assert runtime.interrupt(scope, proposal(), "second") == second
+
+
+def test_aborted_historical_round_cannot_be_resumed():
+    runtime = ActionWorkflowRuntime(InMemorySaver())
+    scope = namespace()
+    first = runtime.interrupt(scope, proposal(), "first")
+    runtime.abort(scope, workflow_id=first.workflow_id, request_id="first")
+    second = runtime.interrupt(scope, proposal(), "second")
+    with pytest.raises(ActionWorkflowConflict):
+        runtime.resume(scope, workflow_id=first.workflow_id, action_id=uuid4(),
+                       decision="APPROVE", idempotency_key="key", request_id="retry-aborted")
+    assert runtime.interrupt(scope, proposal(), "second") == second
+
+
+def test_old_resume_remains_replayable_after_many_completed_rounds():
+    runtime = ActionWorkflowRuntime(InMemorySaver())
+    scope = namespace()
+    first = runtime.interrupt(scope, proposal(), "first")
+    action_id = uuid4()
+    original = runtime.resume(scope, workflow_id=first.workflow_id, action_id=action_id,
+                              decision="APPROVE", idempotency_key="first-key", request_id="first-decision")
+    for round_number in range(25):
+        waiting = runtime.interrupt(scope, proposal(), f"round-{round_number}")
+        runtime.resume(scope, workflow_id=waiting.workflow_id, action_id=uuid4(),
+                       decision="REJECT", idempotency_key=f"key-{round_number}", request_id=f"reject-{round_number}")
+    current = runtime.interrupt(scope, proposal(), "current")
+    assert runtime.resume(scope, workflow_id=first.workflow_id, action_id=action_id,
+                          decision="APPROVE", idempotency_key="first-key", request_id="retry-first") == original
+    assert runtime.interrupt(scope, proposal(), "current") == current

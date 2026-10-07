@@ -128,6 +128,10 @@ class ActionWorkflowRuntime:
             if not snapshot.values:
                 raise ActionWorkflowNotFound("action workflow was not found")
             self._require_supported(snapshot.values, namespace)
+            if workflow_id is not None and snapshot.values.get("workflow_id") != str(workflow_id):
+                return self._replay_historical_resume(
+                    config, namespace, workflow_id, action_id, decision, idempotency_key
+                )
             self._require_workflow(snapshot.values, workflow_id)
 
             if snapshot.values.get("status") == "RESUMED":
@@ -148,6 +152,36 @@ class ActionWorkflowRuntime:
                 config=config,
             )
             return _view(result, namespace.thread_id)
+
+    def _replay_historical_resume(
+        self,
+        config,
+        namespace: MemoryNamespace,
+        workflow_id: UUID,
+        action_id: UUID,
+        decision: Decision,
+        idempotency_key: str,
+    ) -> ActionWorkflowView:
+        # get_state_history eagerly loads its page. Bound memory while retaining
+        # compatibility with v2 checkpoints written before this replay path existed.
+        before = None
+        while True:
+            page = list(self._graph.get_state_history(config, before=before, limit=64))
+            if not page:
+                raise ActionWorkflowConflict("action workflow identity does not match")
+            for snapshot in page:
+                values = snapshot.values
+                if values.get("workflow_id") != str(workflow_id):
+                    continue
+                self._require_supported(values, namespace)
+                self._require_workflow(values, workflow_id)
+                if snapshot.next or values.get("status") != "RESUMED":
+                    continue
+                self._require_replay(values, action_id, decision, idempotency_key)
+                # Never invoke an old checkpoint: Java only needs the committed
+                # receipt to retry its independently authorized business write.
+                return _view(values, namespace.thread_id)
+            before = page[-1].config
 
     def abort(
         self,
