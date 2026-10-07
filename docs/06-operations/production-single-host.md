@@ -1,5 +1,7 @@
 # 单机生产部署与运维
 
+> 迁移计划（尚未执行）：[简历平台实施蓝图第 11 节](../01-product/resume-platform-implementation-plan.md#11-域名与-agentforge-迁移方案) 说明迁至 agentforge 子域名与共享 edge 的目标。现有 gateway 仍占用 80/443；旧 TLS 脚本会派生 www 子域名，不能直接以本文现行脚本假定多站迁移已经支持。
+
 - 状态：Accepted
 - 适用版本：V1.2 至 V2 stable（含 V3 前置日志界面）
 - 平台：Ubuntu 22.04 x86_64，Docker Compose v2

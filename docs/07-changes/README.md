@@ -1,5 +1,7 @@
 # 变更记录
 
+- [2026-10-07-resume-platform-plan.md](2026-10-07-resume-platform-plan.md)：免费简历模板网站、动态管理后台与 AgentForge 子域名迁移的技术计划（文档交付，功能与迁移均未实施）。
+
 - [2026-10-02-v3-full-impact-audit.md](2026-10-02-v3-full-impact-audit.md)：V3-01 至 V3-09 累计差异的跨功能影响、全量回归与 Pi Milestone 审计（Implemented，PASS）。
 
 - [2026-10-02-v3-09-integration-release.md](2026-10-02-v3-09-integration-release.md)：V3 完整 Release Regression、V3 条件式跨进程契约与公开证据收口（Implemented）。

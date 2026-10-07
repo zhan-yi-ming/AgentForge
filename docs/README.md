@@ -1,5 +1,7 @@
 # AgentForge 文档中心
 
+- 独立新产品计划：[简历模板网站与管理后台实施蓝图](01-product/resume-platform-implementation-plan.md)（Proposed，可单文件交给新项目 AI；包含 AgentForge 子域名迁移，尚未实施）。
+
 这里是项目的长期记忆，也是开发工作的入口。代码回答“现在怎样运行”，文档回答“为什么这样设计、改过什么、下一步在哪里”。
 
 ## 阅读顺序
