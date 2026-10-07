@@ -1,5 +1,7 @@
 # 变更记录
 
+- [2026-10-07-action-replay-main-integration.md](2026-10-07-action-replay-main-integration.md)：审批历史重放修复审核与 main 快进集成（Implemented）。
+
 - [2026-10-06-action-resume-history-replay.md](2026-10-06-action-resume-history-replay.md)：修复新审批轮次阻断旧 APPROVED Action 重试（Implemented）。
 
 - [2026-10-06-r01-r18-main-integration.md](2026-10-06-r01-r18-main-integration.md)：把已审计的 R01–R18 以非 force fast-forward 合并到 main，并执行独立 Release Gate（Implemented）。
